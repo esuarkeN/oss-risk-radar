@@ -1,0 +1,7 @@
+.git
+node_modules
+**/node_modules
+**/.next
+**/.venv
+postgres-data
+coverage.outtmp

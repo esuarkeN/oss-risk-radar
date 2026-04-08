@@ -1,0 +1,47 @@
+{
+  "analysis": {
+    "id": "anl_demo_01",
+    "status": "completed",
+    "createdAt": "2026-04-02T00:00:00Z",
+    "updatedAt": "2026-04-02T00:00:03Z",
+    "jobId": "job_demo_01",
+    "source": {
+      "kind": "demo",
+      "label": "Demo: Node Web Application"
+    },
+    "summary": {
+      "dependencyCount": 4,
+      "highRiskCount": 1,
+      "mappedRepositoryCount": 4,
+      "scoreAvailabilityCount": 4,
+      "riskDistribution": [
+        { "name": "low", "count": 1 },
+        { "name": "elevated", "count": 2 },
+        { "name": "high", "count": 1 },
+        { "name": "critical", "count": 0 }
+      ],
+      "ecosystemBreakdown": [
+        { "name": "npm", "count": 3 },
+        { "name": "pypi", "count": 1 }
+      ],
+      "actionBreakdown": [
+        { "name": "monitor", "count": 2 },
+        { "name": "review", "count": 1 },
+        { "name": "replace_candidate", "count": 1 }
+      ]
+    },
+    "methodology": {
+      "scoreVersion": "heuristic-v1",
+      "scoredAt": "2026-04-02T00:00:03Z",
+      "caveatCount": 2,
+      "missingSignalCount": 3
+    }
+  },
+  "job": {
+    "id": "job_demo_01",
+    "analysisId": "anl_demo_01",
+    "status": "completed",
+    "createdAt": "2026-04-02T00:00:00Z",
+    "updatedAt": "2026-04-02T00:00:03Z"
+  }
+}

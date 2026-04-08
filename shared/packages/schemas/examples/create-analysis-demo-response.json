@@ -1,0 +1,25 @@
+﻿{
+  "analysis": {
+    "id": "analysis_demo_001",
+    "status": "completed",
+    "sourceKind": "demo",
+    "createdAt": "2026-04-02T10:00:00Z",
+    "completedAt": "2026-04-02T10:00:03Z",
+    "summary": {
+      "dependencyCount": 6,
+      "highRiskCount": 2,
+      "mappedRepositoryCount": 6,
+      "scoredDependencyCount": 6,
+      "reviewCount": 3
+    }
+  },
+  "job": {
+    "id": "job_demo_001",
+    "analysisId": "analysis_demo_001",
+    "status": "completed",
+    "stage": "scored",
+    "message": "Mocked demo analysis completed.",
+    "createdAt": "2026-04-02T10:00:00Z",
+    "updatedAt": "2026-04-02T10:00:03Z"
+  }
+}

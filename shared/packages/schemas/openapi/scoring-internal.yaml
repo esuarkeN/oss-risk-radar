@@ -1,0 +1,258 @@
+openapi: 3.1.0
+info:
+  title: OSS Risk Radar Scoring Service API
+  version: 0.1.0
+  description: Internal scoring and feature contracts used by the Go orchestrator.
+servers:
+  - url: http://localhost:8001
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /score/heuristic:
+    post:
+      operationId: scoreHeuristic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeuristicScoreRequest"
+      responses:
+        "200":
+          description: Heuristic score result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeuristicScoreResponse"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+    HeuristicScoreRequest:
+      type: object
+      required: [analysisId, scoringPolicy, dependencies]
+      properties:
+        analysisId:
+          type: string
+        scoringPolicy:
+          type: string
+          example: heuristic-v1
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencyScoreInput"
+    DependencyScoreInput:
+      type: object
+      required: [dependencyId, package, repository, signals, provenance]
+      properties:
+        dependencyId:
+          type: string
+        package:
+          $ref: "#/components/schemas/PackageCoordinate"
+        repository:
+          $ref: "#/components/schemas/RepositoryRef"
+        signals:
+          $ref: "#/components/schemas/SignalSnapshot"
+        provenance:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProvenanceItem"
+    PackageCoordinate:
+      type: object
+      required: [ecosystem, name, version]
+      properties:
+        ecosystem:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        purl:
+          type: string
+    RepositoryRef:
+      type: object
+      properties:
+        provider:
+          type: string
+        owner:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        archived:
+          type: boolean
+        stars:
+          type: integer
+        lastPushAt:
+          type: string
+          format: date-time
+    SignalSnapshot:
+      type: object
+      properties:
+        archived:
+          type: boolean
+        lastCommitAgeDays:
+          type: integer
+        lastReleaseAgeDays:
+          type: integer
+        releaseCadenceDays:
+          type: integer
+        recentContributorCount:
+          type: integer
+        contributorConcentration:
+          type: number
+        openIssueGrowthRatio:
+          type: number
+        prResponseMedianDays:
+          type: number
+        scorecard:
+          $ref: "#/components/schemas/ScorecardSignals"
+        maintenanceMetadataPresent:
+          type: boolean
+        documentationCoverage:
+          type: number
+    ScorecardSignals:
+      type: object
+      properties:
+        overallScore:
+          type: number
+        branchProtection:
+          type: boolean
+        tokenPermissions:
+          type: boolean
+        signedReleases:
+          type: boolean
+        fuzzing:
+          type: boolean
+        ciTests:
+          type: boolean
+    ProvenanceItem:
+      type: object
+      required: [label, source, observedAt]
+      properties:
+        label:
+          type: string
+        source:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+          format: uri
+    HeuristicScoreResponse:
+      type: object
+      required: [analysisId, scoringPolicy, generatedAt, results]
+      properties:
+        analysisId:
+          type: string
+        scoringPolicy:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencyScoreResult"
+    DependencyScoreResult:
+      type: object
+      required:
+        - dependencyId
+        - inactivityRisk
+        - securityPosture
+        - confidence
+        - signalCompleteness
+        - bucket
+        - actionLevel
+        - explanationFactors
+        - evidence
+        - caveats
+        - missingSignals
+      properties:
+        dependencyId:
+          type: string
+        inactivityRisk:
+          type: integer
+        securityPosture:
+          type: integer
+        confidence:
+          type: integer
+        signalCompleteness:
+          type: integer
+        bucket:
+          type: string
+          enum: [low, elevated, high, critical]
+        actionLevel:
+          type: string
+          enum: [monitor, review, replace_candidate]
+        explanationFactors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExplanationFactor"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+        caveats:
+          type: array
+          items:
+            type: string
+        missingSignals:
+          type: array
+          items:
+            type: string
+    ExplanationFactor:
+      type: object
+      required: [title, direction, weight, rationale]
+      properties:
+        title:
+          type: string
+        direction:
+          type: string
+          enum: [risk_up, risk_down, context]
+        weight:
+          type: integer
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        rationale:
+          type: string
+    EvidenceItem:
+      type: object
+      required: [label, value, source, observedAt]
+      properties:
+        label:
+          type: string
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        source:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+          format: uri

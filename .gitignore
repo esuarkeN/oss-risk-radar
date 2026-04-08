@@ -1,0 +1,34 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Node
+node_modules/
+.next/
+dist/
+coverage/
+
+# Python
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Go
+bin/
+coverage.out
+
+# Env / logs
+.env
+.env.local
+*.log
+
+# Docker / database
+postgres-data/
+
+# Local scratch space
+tmp/

@@ -1,0 +1,66 @@
+name: oss-risk-radar
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    container_name: oss-risk-radar-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oss_risk_radar}
+      POSTGRES_USER: ${POSTGRES_USER:-oss_risk_radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oss_risk_radar}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deployment/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oss_risk_radar} -d ${POSTGRES_DB:-oss_risk_radar}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: deployment/docker/api.Dockerfile
+    environment:
+      API_ADDR: ":8080"
+      API_ALLOWED_ORIGIN: ${API_ALLOWED_ORIGIN:-http://localhost:3000}
+      DATABASE_URL: postgres://oss_risk_radar:oss_risk_radar@postgres:5432/oss_risk_radar?sslmode=disable
+      SCORING_BASE_URL: http://scoring:8090
+    volumes:
+      - ./tmp:/app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scoring:
+        condition: service_started
+    ports:
+      - "${API_PORT:-8080}:8080"
+
+  scoring:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: deployment/docker/scoring.Dockerfile
+    ports:
+      - "${SCORING_PORT:-8090}:8090"
+
+  web:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: deployment/docker/web.Dockerfile
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_PORT:-8080}/api/v1
+      WEB_API_BASE_URL: http://api:8080/api/v1
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  postgres_data:
+

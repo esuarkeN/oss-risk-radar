@@ -1,0 +1,553 @@
+openapi: 3.1.0
+info:
+  title: OSS Risk Radar Public API
+  version: 0.1.0
+  description: REST API for dependency risk triage analyses.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: getReady
+      responses:
+        "200":
+          description: Readiness status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyResponse"
+  /api/v1/uploads:
+    post:
+      operationId: createUpload
+      summary: Register an uploaded dependency artifact
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Upload stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateUploadResponse"
+  /api/v1/analyses:
+    post:
+      operationId: createAnalysis
+      summary: Create an analysis from demo input, repo URL, or uploaded artifact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAnalysisRequest"
+            examples:
+              demo:
+                value:
+                  source:
+                    kind: demo
+                    label: Demo: Node Web Application
+                  options:
+                    includeTransitive: true
+                    demoProfile: node-web
+              repo:
+                value:
+                  source:
+                    kind: repository_url
+                    repositoryUrl: https://github.com/vercel/next.js
+                  options:
+                    includeTransitive: true
+              upload:
+                value:
+                  source:
+                    kind: uploaded_artifact
+                    uploadId: upl_demo_01
+                  options:
+                    includeTransitive: true
+      responses:
+        "201":
+          description: Analysis created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateAnalysisResponse"
+  /api/v1/analyses/{analysisId}:
+    get:
+      operationId: getAnalysis
+      parameters:
+        - $ref: "#/components/parameters/AnalysisId"
+      responses:
+        "200":
+          description: Analysis summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResponse"
+        "404":
+          description: Analysis not found
+  /api/v1/analyses/{analysisId}/dependencies:
+    get:
+      operationId: getAnalysisDependencies
+      parameters:
+        - $ref: "#/components/parameters/AnalysisId"
+      responses:
+        "200":
+          description: Analysis dependencies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyListResponse"
+  /api/v1/dependencies/{dependencyId}:
+    get:
+      operationId: getDependency
+      parameters:
+        - $ref: "#/components/parameters/DependencyId"
+      responses:
+        "200":
+          description: Dependency detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyDetailResponse"
+        "404":
+          description: Dependency not found
+  /api/v1/jobs/{jobId}:
+    get:
+      operationId: getJob
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+components:
+  parameters:
+    AnalysisId:
+      name: analysisId
+      in: path
+      required: true
+      schema:
+        type: string
+    DependencyId:
+      name: dependencyId
+      in: path
+      required: true
+      schema:
+        type: string
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        service:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    ReadyResponse:
+      type: object
+      required: [status, service, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+        service:
+          type: string
+        dependencies:
+          type: object
+          additionalProperties:
+            type: string
+    UploadArtifact:
+      type: object
+      required: [id, fileName, contentType, sizeBytes, uploadedAt]
+      properties:
+        id:
+          type: string
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+        uploadedAt:
+          type: string
+          format: date-time
+    CreateUploadResponse:
+      type: object
+      required: [upload]
+      properties:
+        upload:
+          $ref: "#/components/schemas/UploadArtifact"
+    CreateAnalysisRequest:
+      type: object
+      required: [source]
+      properties:
+        source:
+          $ref: "#/components/schemas/AnalysisSourceInput"
+        options:
+          $ref: "#/components/schemas/AnalysisOptions"
+    AnalysisSourceInput:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [demo, repository_url, uploaded_artifact]
+        label:
+          type: string
+        repositoryUrl:
+          type: string
+          format: uri
+        uploadId:
+          type: string
+    AnalysisOptions:
+      type: object
+      properties:
+        includeTransitive:
+          type: boolean
+          default: true
+        demoProfile:
+          type: string
+          enum: [node-web, python-service, mixed-platform]
+    CreateAnalysisResponse:
+      type: object
+      required: [analysis, job]
+      properties:
+        analysis:
+          $ref: "#/components/schemas/Analysis"
+        job:
+          $ref: "#/components/schemas/Job"
+    AnalysisResponse:
+      type: object
+      required: [analysis, job]
+      properties:
+        analysis:
+          $ref: "#/components/schemas/Analysis"
+        job:
+          $ref: "#/components/schemas/Job"
+    Analysis:
+      type: object
+      required:
+        - id
+        - status
+        - createdAt
+        - updatedAt
+        - source
+        - summary
+        - methodology
+        - jobId
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        jobId:
+          type: string
+        source:
+          $ref: "#/components/schemas/AnalysisSource"
+        summary:
+          $ref: "#/components/schemas/AnalysisSummary"
+        methodology:
+          $ref: "#/components/schemas/MethodologyMetadata"
+    AnalysisSource:
+      type: object
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [demo, repository_url, uploaded_artifact]
+        label:
+          type: string
+        repositoryUrl:
+          type: string
+          format: uri
+        uploadId:
+          type: string
+    AnalysisSummary:
+      type: object
+      required:
+        - dependencyCount
+        - highRiskCount
+        - mappedRepositoryCount
+        - scoreAvailabilityCount
+        - riskDistribution
+        - ecosystemBreakdown
+      properties:
+        dependencyCount:
+          type: integer
+        highRiskCount:
+          type: integer
+        mappedRepositoryCount:
+          type: integer
+        scoreAvailabilityCount:
+          type: integer
+        riskDistribution:
+          type: array
+          items:
+            $ref: "#/components/schemas/NamedCount"
+        ecosystemBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/NamedCount"
+        actionBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/NamedCount"
+    MethodologyMetadata:
+      type: object
+      required: [scoreVersion, scoredAt]
+      properties:
+        scoreVersion:
+          type: string
+        scoredAt:
+          type: string
+          format: date-time
+        caveatCount:
+          type: integer
+        missingSignalCount:
+          type: integer
+    NamedCount:
+      type: object
+      required: [name, count]
+      properties:
+        name:
+          type: string
+        count:
+          type: integer
+    DependencyListResponse:
+      type: object
+      required: [analysisId, items]
+      properties:
+        analysisId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dependency"
+    DependencyDetailResponse:
+      type: object
+      required: [dependency]
+      properties:
+        dependency:
+          $ref: "#/components/schemas/Dependency"
+    Dependency:
+      type: object
+      required:
+        - id
+        - analysisId
+        - package
+        - relation
+        - repository
+        - score
+        - explanations
+        - evidence
+        - caveats
+        - missingSignals
+      properties:
+        id:
+          type: string
+        analysisId:
+          type: string
+        package:
+          $ref: "#/components/schemas/PackageCoordinate"
+        relation:
+          $ref: "#/components/schemas/DependencyRelation"
+        repository:
+          $ref: "#/components/schemas/RepositorySummary"
+        score:
+          $ref: "#/components/schemas/RiskScore"
+        explanations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExplanationFactor"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/EvidenceItem"
+        caveats:
+          type: array
+          items:
+            type: string
+        missingSignals:
+          type: array
+          items:
+            type: string
+        dependencyPath:
+          type: array
+          items:
+            type: string
+        rawSignals:
+          type: object
+          additionalProperties: true
+    PackageCoordinate:
+      type: object
+      required: [ecosystem, name, version]
+      properties:
+        ecosystem:
+          type: string
+          enum: [npm, pypi, go, maven, cargo, generic]
+        name:
+          type: string
+        version:
+          type: string
+        purl:
+          type: string
+    DependencyRelation:
+      type: object
+      required: [scope, isDirect]
+      properties:
+        scope:
+          type: string
+          enum: [runtime, development, test, unknown]
+        isDirect:
+          type: boolean
+    RepositorySummary:
+      type: object
+      properties:
+        provider:
+          type: string
+        owner:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        archived:
+          type: boolean
+        stars:
+          type: integer
+        lastPushAt:
+          type: string
+          format: date-time
+    RiskScore:
+      type: object
+      required:
+        - inactivityRisk
+        - securityPosture
+        - confidence
+        - signalCompleteness
+        - bucket
+        - actionLevel
+      properties:
+        inactivityRisk:
+          type: integer
+          minimum: 0
+          maximum: 100
+        securityPosture:
+          type: integer
+          minimum: 0
+          maximum: 100
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+        signalCompleteness:
+          type: integer
+          minimum: 0
+          maximum: 100
+        bucket:
+          type: string
+          enum: [low, elevated, high, critical]
+        actionLevel:
+          type: string
+          enum: [monitor, review, replace_candidate]
+    ExplanationFactor:
+      type: object
+      required: [title, direction, weight, rationale]
+      properties:
+        title:
+          type: string
+        direction:
+          type: string
+          enum: [risk_up, risk_down, context]
+        weight:
+          type: integer
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        rationale:
+          type: string
+    EvidenceItem:
+      type: object
+      required: [label, value, source, observedAt]
+      properties:
+        label:
+          type: string
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+        source:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+          format: uri
+    Job:
+      type: object
+      required: [id, analysisId, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        analysisId:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        errorMessage:
+          type: string
+    JobResponse:
+      type: object
+      required: [job]
+      properties:
+        job:
+          $ref: "#/components/schemas/Job"
