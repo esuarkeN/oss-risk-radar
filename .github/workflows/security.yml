@@ -18,7 +18,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.0.2
 
       - name: Dependency review
         uses: actions/dependency-review-action@v4.3.5
@@ -39,7 +39,7 @@ jobs:
           - python
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.0.2
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3.27.9
