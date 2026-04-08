@@ -1,0 +1,39 @@
+{
+  "analysis": {
+    "id": "analysis_demo_001",
+    "status": "completed",
+    "createdAt": "2026-04-02T00:00:00Z",
+    "updatedAt": "2026-04-02T00:00:12Z",
+    "submission": {
+      "kind": "demo",
+      "repositoryUrl": "https://github.com/example/oss-risk-radar-demo"
+    },
+    "summary": {
+      "dependencyCount": 4,
+      "highRiskCount": 2,
+      "mappedRepositoryCount": 4,
+      "scoreAvailabilityCount": 4,
+      "riskDistribution": {
+        "low": 1,
+        "medium": 1,
+        "high": 1,
+        "critical": 1
+      },
+      "ecosystemBreakdown": {
+        "npm": 2,
+        "pypi": 1,
+        "go": 1
+      }
+    },
+    "dependencies": []
+  },
+  "job": {
+    "id": "job_demo_001",
+    "analysisId": "analysis_demo_001",
+    "type": "analysis",
+    "status": "completed",
+    "createdAt": "2026-04-02T00:00:00Z",
+    "updatedAt": "2026-04-02T00:00:12Z",
+    "message": "Mocked demo analysis completed successfully."
+  }
+}

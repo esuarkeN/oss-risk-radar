@@ -1,0 +1,125 @@
+﻿openapi: 3.1.0
+info:
+  title: OSS Risk Radar Scoring Service API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8090
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      responses:
+        "200":
+          description: Service is alive
+  /score/heuristic:
+    post:
+      summary: Score dependencies using explainable heuristics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HeuristicScoreRequest"
+      responses:
+        "200":
+          description: Scoring results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeuristicScoreResponse"
+components:
+  schemas:
+    HeuristicScoreRequest:
+      type: object
+      required:
+        - analysisContext
+        - dependencies
+      properties:
+        analysisContext:
+          type: object
+          properties:
+            analysisId:
+              type: string
+            sourceKind:
+              type: string
+            scoredAt:
+              type: string
+              format: date-time
+        dependencies:
+          type: array
+          items:
+            type: object
+            required:
+              - dependencyId
+              - packageName
+              - version
+              - ecosystem
+              - dependencyType
+              - signals
+            properties:
+              dependencyId:
+                type: string
+              packageName:
+                type: string
+              version:
+                type: string
+              ecosystem:
+                type: string
+              dependencyType:
+                type: string
+              repositoryUrl:
+                type: string
+              signals:
+                type: object
+                additionalProperties: true
+    HeuristicScoreResponse:
+      type: object
+      required:
+        - scoredAt
+        - results
+      properties:
+        scoredAt:
+          type: string
+          format: date-time
+        model:
+          type: string
+        results:
+          type: array
+          items:
+            type: object
+            required:
+              - dependencyId
+              - inactivityRiskScore
+              - securityPostureScore
+              - confidence
+              - actionLevel
+              - bucket
+            properties:
+              dependencyId:
+                type: string
+              inactivityRiskScore:
+                type: number
+              securityPostureScore:
+                type: number
+              confidence:
+                type: number
+              actionLevel:
+                type: string
+              bucket:
+                type: string
+              explanationFactors:
+                type: array
+                items:
+                  type: object
+              evidence:
+                type: array
+                items:
+                  type: object
+              caveats:
+                type: array
+                items:
+                  type: string
+              missingSignals:
+                type: array
+                items:
+                  type: string

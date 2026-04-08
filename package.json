@@ -1,0 +1,22 @@
+{
+  "name": "oss-risk-radar",
+  "private": true,
+  "packageManager": "npm@11.10.0",
+  "workspaces": [
+    "frontend/web",
+    "shared/packages/schemas"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev/start.mjs",
+    "dev:rebuild": "node scripts/dev/start.mjs --no-cache",
+    "dev:down": "docker compose --profile apps down --remove-orphans",
+    "dev:web": "npm --workspace @oss-risk-radar/web run dev",
+    "build:web": "npm --workspace @oss-risk-radar/web run build",
+    "lint:web": "npm --workspace @oss-risk-radar/web run lint",
+    "ml:train": "node scripts/ml/trigger-run.mjs",
+    "ml:train:force": "node scripts/ml/trigger-run.mjs --force",
+    "test:api": "cd backend/api && go test ./...",
+    "test:scoring": "cd mltraining/scoring && python -m pytest tests",
+    "check:web": "npm run lint:web && npm run build:web"
+  }
+}

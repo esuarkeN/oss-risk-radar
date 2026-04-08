@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 205 44% 97%;
+  --foreground: 217 41% 10%;
+  --card: 0 0% 100%;
+  --panel: 0 0% 100%;
+  --panel-alt: 210 40% 96%;
+  --muted: 215 16% 47%;
+  --border: 210 30% 89%;
+  --accent: 211 92% 56%;
+  --success: 160 84% 39%;
+  --warning: 38 92% 50%;
+  --danger: 0 84% 60%;
+  color-scheme: light;
+}
+
+.dark {
+  --background: 223 47% 8%;
+  --foreground: 210 40% 96%;
+  --card: 223 31% 12%;
+  --panel: 223 31% 12%;
+  --panel-alt: 220 26% 17%;
+  --muted: 215 20% 72%;
+  --border: 217 20% 24%;
+  --accent: 199 95% 63%;
+  --success: 160 84% 44%;
+  --warning: 41 95% 58%;
+  --danger: 0 85% 67%;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: hsl(var(--background));
+  background-image:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 24%),
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(238, 244, 250, 0.98));
+  color: hsl(var(--foreground));
+  transition: background-color 220ms ease, color 220ms ease, background-image 220ms ease;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 24%),
+    radial-gradient(circle at top right, rgba(45, 212, 191, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(9, 13, 24, 0.98), rgba(15, 23, 42, 0.98));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.18);
+}
+
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  color: hsl(var(--foreground));
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-slate-300 {
+  color: hsl(var(--muted));
+}
+
+.dark .text-sky-800,
+.dark .text-sky-700 {
+  color: hsl(var(--accent));
+}
+
+.dark .hover\:text-slate-950:hover,
+.dark .hover\:text-sky-900:hover,
+.dark .hover\:text-sky-800:hover {
+  color: hsl(var(--foreground));
+}
+
+.dark .border-slate-200,
+.dark .border-slate-200\/80,
+.dark .border-slate-300,
+.dark .border-slate-100,
+.dark .border-white\/10,
+.dark .border-white\/20,
+.dark .border-white\/6 {
+  border-color: hsl(var(--border) / 0.9);
+}
+
+.dark .bg-white,
+.dark .bg-white\/90,
+.dark .bg-white\/5,
+.dark .bg-white\/10,
+.dark .bg-slate-50,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-100 {
+  background-color: hsl(var(--panel) / 0.94);
+}
+
+.dark .bg-slate-950,
+.dark .bg-slate-950\/30,
+.dark .bg-slate-950\/40 {
+  background-color: hsl(var(--panel-alt) / 0.96);
+}
+
+.dark .hover\:bg-sky-50:hover,
+.dark .hover\:bg-sky-50\/50:hover,
+.dark .hover\:bg-white\/10:hover {
+  background-color: hsl(var(--panel-alt) / 0.92);
+}
+
+.dark .bg-amber-300\/10,
+.dark .bg-emerald-400\/10,
+.dark .bg-sky-400\/10,
+.dark .bg-rose-400\/10 {
+  backdrop-filter: blur(10px);
+}

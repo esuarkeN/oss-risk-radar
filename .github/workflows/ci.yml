@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-go@v5.3.0
+        with:
+          go-version: "1.25.0"
+      - name: Test Go API
+        run: cd backend/api && go test ./...
+
+  scoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-python@v5.4.0
+        with:
+          python-version: "3.12"
+      - name: Install scoring dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "./mltraining/scoring[dev]"
+      - name: Test scoring service
+        run: cd mltraining/scoring && python -m pytest tests
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.3.0
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Lint frontend
+        run: npm run lint:web
+      - name: Build frontend
+        run: npm run build:web
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.3.0
+        with:
+          node-version: "22"
+      - uses: actions/setup-go@v5.3.0
+        with:
+          go-version: "1.25.0"
+      - uses: actions/setup-python@v5.4.0
+        with:
+          python-version: "3.12"
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Install scoring dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "./mltraining/scoring[dev]"
+      - name: Start full stack
+        run: node scripts/dev/start.mjs --no-wait
+      - name: Smoke test API
+        run: curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost:8080/health
+      - name: Smoke test scoring
+        run: curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost:8090/health
+      - name: Smoke test web
+        run: curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost:3000
+

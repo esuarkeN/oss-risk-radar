@@ -1,0 +1,396 @@
+﻿openapi: 3.1.0
+info:
+  title: OSS Risk Radar API
+  version: 0.1.0
+  description: |
+    Public API for OSS Risk Radar, a decision-support tool for OSS dependency
+    maintenance and supply-chain risk triage.
+servers:
+  - url: http://localhost:8080/api/v1
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      responses:
+        "200":
+          description: Service is alive
+  /ready:
+    get:
+      summary: Readiness probe
+      responses:
+        "200":
+          description: Service is ready
+  /analyses:
+    post:
+      summary: Create a new analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAnalysisRequest"
+      responses:
+        "201":
+          description: Analysis created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateAnalysisResponse"
+  /analyses/{analysisId}:
+    get:
+      summary: Fetch analysis summary
+      parameters:
+        - in: path
+          name: analysisId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Analysis details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisEnvelope"
+  /analyses/{analysisId}/dependencies:
+    get:
+      summary: List dependencies for an analysis
+      parameters:
+        - in: path
+          name: analysisId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dependency list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyListEnvelope"
+  /dependencies/{dependencyId}:
+    get:
+      summary: Fetch one dependency detail
+      parameters:
+        - in: path
+          name: dependencyId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dependency detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DependencyEnvelope"
+  /jobs/{jobId}:
+    get:
+      summary: Fetch analysis job status
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobEnvelope"
+components:
+  schemas:
+    CreateAnalysisRequest:
+      type: object
+      required:
+        - sourceKind
+      properties:
+        sourceKind:
+          type: string
+          enum: [demo, repository]
+        repositoryUrl:
+          type: string
+          format: uri
+        demoScenario:
+          type: string
+          default: react-saas-demo
+    CreateAnalysisResponse:
+      type: object
+      required:
+        - analysis
+        - job
+      properties:
+        analysis:
+          $ref: "#/components/schemas/AnalysisSummary"
+        job:
+          $ref: "#/components/schemas/Job"
+    AnalysisEnvelope:
+      type: object
+      required:
+        - analysis
+      properties:
+        analysis:
+          $ref: "#/components/schemas/AnalysisDetail"
+    DependencyListEnvelope:
+      type: object
+      required:
+        - analysisId
+        - items
+      properties:
+        analysisId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencySummary"
+    DependencyEnvelope:
+      type: object
+      required:
+        - dependency
+      properties:
+        dependency:
+          $ref: "#/components/schemas/DependencyDetail"
+    JobEnvelope:
+      type: object
+      required:
+        - job
+      properties:
+        job:
+          $ref: "#/components/schemas/Job"
+    AnalysisSummary:
+      type: object
+      required:
+        - id
+        - status
+        - sourceKind
+        - createdAt
+        - summary
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        sourceKind:
+          type: string
+        repositoryUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        summary:
+          $ref: "#/components/schemas/AnalysisSummaryMetrics"
+    AnalysisDetail:
+      allOf:
+        - $ref: "#/components/schemas/AnalysisSummary"
+        - type: object
+          properties:
+            methodology:
+              type: string
+            caveats:
+              type: array
+              items:
+                type: string
+            ecosystemBreakdown:
+              type: array
+              items:
+                $ref: "#/components/schemas/NamedCount"
+            riskDistribution:
+              type: array
+              items:
+                $ref: "#/components/schemas/NamedCount"
+    AnalysisSummaryMetrics:
+      type: object
+      required:
+        - dependencyCount
+        - highRiskCount
+        - mappedRepositoryCount
+        - scoredDependencyCount
+      properties:
+        dependencyCount:
+          type: integer
+        highRiskCount:
+          type: integer
+        mappedRepositoryCount:
+          type: integer
+        scoredDependencyCount:
+          type: integer
+        reviewCount:
+          type: integer
+    DependencySummary:
+      type: object
+      required:
+        - id
+        - analysisId
+        - packageName
+        - version
+        - ecosystem
+        - dependencyType
+        - risk
+      properties:
+        id:
+          type: string
+        analysisId:
+          type: string
+        packageName:
+          type: string
+        version:
+          type: string
+        ecosystem:
+          type: string
+        dependencyType:
+          type: string
+        repositoryUrl:
+          type: string
+        repositoryStatus:
+          type: string
+        risk:
+          $ref: "#/components/schemas/RiskProfile"
+    DependencyDetail:
+      allOf:
+        - $ref: "#/components/schemas/DependencySummary"
+        - type: object
+          properties:
+            rawSignals:
+              type: object
+              additionalProperties: true
+            evidence:
+              type: array
+              items:
+                $ref: "#/components/schemas/EvidenceItem"
+            explanationFactors:
+              type: array
+              items:
+                $ref: "#/components/schemas/ExplanationFactor"
+            caveats:
+              type: array
+              items:
+                type: string
+            dependencyPaths:
+              type: array
+              items:
+                type: string
+            providerSnapshots:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProviderSnapshot"
+    RiskProfile:
+      type: object
+      required:
+        - inactivityRiskScore
+        - securityPostureScore
+        - confidence
+        - actionLevel
+        - bucket
+      properties:
+        inactivityRiskScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        securityPostureScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        actionLevel:
+          type: string
+          enum: [monitor, review, replace-candidate]
+        bucket:
+          type: string
+          enum: [low, moderate, elevated, high]
+        missingSignals:
+          type: array
+          items:
+            type: string
+    ExplanationFactor:
+      type: object
+      required:
+        - title
+        - direction
+        - weight
+        - narrative
+      properties:
+        title:
+          type: string
+        direction:
+          type: string
+          enum: [increase, decrease, neutral]
+        weight:
+          type: number
+        narrative:
+          type: string
+    EvidenceItem:
+      type: object
+      required:
+        - label
+        - value
+        - source
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        source:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+    ProviderSnapshot:
+      type: object
+      required:
+        - provider
+        - fetchedAt
+      properties:
+        provider:
+          type: string
+        url:
+          type: string
+        fetchedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+    Job:
+      type: object
+      required:
+        - id
+        - analysisId
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        analysisId:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        stage:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    NamedCount:
+      type: object
+      required:
+        - label
+        - count
+      properties:
+        label:
+          type: string
+        count:
+          type: integer

@@ -1,0 +1,52 @@
+{
+  "analysisId": "anl_demo_01",
+  "scoringPolicy": "heuristic-v1",
+  "dependencies": [
+    {
+      "dependencyId": "dep_react_01",
+      "package": {
+        "ecosystem": "npm",
+        "name": "react",
+        "version": "18.3.1",
+        "purl": "pkg:npm/react@18.3.1"
+      },
+      "repository": {
+        "provider": "github",
+        "owner": "facebook",
+        "name": "react",
+        "url": "https://github.com/facebook/react",
+        "archived": false,
+        "stars": 229000,
+        "lastPushAt": "2026-03-29T14:00:00Z"
+      },
+      "signals": {
+        "archived": false,
+        "lastCommitAgeDays": 4,
+        "lastReleaseAgeDays": 52,
+        "releaseCadenceDays": 39,
+        "recentContributorCount": 11,
+        "contributorConcentration": 0.41,
+        "openIssueGrowthRatio": -0.05,
+        "prResponseMedianDays": 2.8,
+        "maintenanceMetadataPresent": true,
+        "documentationCoverage": 0.9,
+        "scorecard": {
+          "overallScore": 8.6,
+          "branchProtection": true,
+          "tokenPermissions": true,
+          "signedReleases": true,
+          "fuzzing": false,
+          "ciTests": true
+        }
+      },
+      "provenance": [
+        {
+          "label": "Repository metadata snapshot",
+          "source": "github",
+          "observedAt": "2026-04-02T00:00:00Z",
+          "url": "https://github.com/facebook/react"
+        }
+      ]
+    }
+  ]
+}
