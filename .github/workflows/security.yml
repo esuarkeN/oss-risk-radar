@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4.2.2
 
       - name: Dependency review
-        uses: actions/dependency-review-action@v4.3.5
+        uses: actions/dependency-review-action@v4.9.0
 
   codeql:
     name: codeql
