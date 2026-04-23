@@ -188,10 +188,10 @@ func snapshotsFromAnalysis(item AnalysisRecord) []TrainingSnapshotRecord {
 			}
 		}
 
-		if dependency.Scorecard != nil {
-			score := dependency.Scorecard.Score
-			checks := make([]TrainingScorecardCheckSnapshot, 0, len(dependency.Scorecard.Checks))
-			for _, check := range dependency.Scorecard.Checks {
+		if normalizedScorecard := NormalizeScorecardSnapshot(dependency.Scorecard); normalizedScorecard != nil {
+			score := normalizedScorecard.Score
+			checks := make([]TrainingScorecardCheckSnapshot, 0, len(normalizedScorecard.Checks))
+			for _, check := range normalizedScorecard.Checks {
 				checks = append(checks, TrainingScorecardCheckSnapshot{Name: check.Name, Score: check.Score, Reason: check.Reason})
 			}
 			snapshot.Dependency.Scorecard = &TrainingScorecardSnapshot{Score: &score, Checks: checks}

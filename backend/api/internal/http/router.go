@@ -25,6 +25,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, service *analysis.Service
 	mux.HandleFunc("GET /api/v1/dependencies/{dependencyId}", handler.GetDependency)
 	mux.HandleFunc("GET /api/v1/jobs/{jobId}", handler.GetJob)
 	mux.HandleFunc("GET /api/v1/training/dataset", handler.GetTrainingDatasetSummary)
+	mux.HandleFunc("GET /api/v1/training/runs", handler.ListTrainingRuns)
 	mux.HandleFunc("GET /api/v1/training/runs/latest", handler.GetLatestTrainingRun)
 	mux.HandleFunc("POST /api/v1/training/runs", handler.TriggerTrainingRun)
 	mux.HandleFunc("POST /api/v1/uploads", handler.UploadArtifact)

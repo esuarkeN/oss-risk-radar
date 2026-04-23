@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,51 @@ func (m *trainingRunArtifactManager) Latest() (*TrainingRunArtifact, error) {
 	return m.readLatest()
 }
 
+func (m *trainingRunArtifactManager) List() ([]TrainingRunArtifact, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m == nil || m.runsDir == "" {
+		return []TrainingRunArtifact{}, nil
+	}
+
+	entries, err := os.ReadDir(m.runsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []TrainingRunArtifact{}, nil
+		}
+		return nil, err
+	}
+
+	runs := make([]TrainingRunArtifact, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		payload, err := os.ReadFile(filepath.Join(m.runsDir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if len(payload) == 0 {
+			continue
+		}
+
+		var run TrainingRunArtifact
+		if err := json.Unmarshal(payload, &run); err != nil {
+			return nil, err
+		}
+		runs = append(runs, run)
+	}
+
+	sort.Slice(runs, func(i, j int) bool {
+		if runs[i].CachedAt.Equal(runs[j].CachedAt) {
+			return runs[i].ArtifactPath < runs[j].ArtifactPath
+		}
+		return runs[i].CachedAt.Before(runs[j].CachedAt)
+	})
+	return runs, nil
+}
+
 func (m *trainingRunArtifactManager) Save(run TrainingRunArtifact) (TrainingRunArtifact, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -49,7 +95,7 @@ func (m *trainingRunArtifactManager) Save(run TrainingRunArtifact) (TrainingRunA
 		}
 	}
 	if strings.TrimSpace(run.ArtifactPath) == "" {
-		stamp := run.CachedAt.UTC().Format("20060102T150405Z")
+		stamp := run.CachedAt.UTC().Format("20060102T150405.000000000Z")
 		shortHash := "adhoc"
 		switch {
 		case len(run.DatasetHash) >= 12:

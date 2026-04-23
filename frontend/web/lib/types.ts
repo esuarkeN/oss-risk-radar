@@ -17,6 +17,7 @@ export type {
   GetTrainingDatasetSummaryResponse,
   JobRecord,
   ListAnalysesResponse,
+  ListTrainingRunsResponse,
   RawSignalItem,
   RiskBucket,
   SubmissionKind,

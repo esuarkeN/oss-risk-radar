@@ -26,6 +26,15 @@ func (h *Handler) GetLatestTrainingRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, analysis.GetLatestTrainingRunResponse{Run: run})
 }
 
+func (h *Handler) ListTrainingRuns(w http.ResponseWriter, r *http.Request) {
+	runs, err := h.service.ListTrainingRuns(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, analysis.ListTrainingRunsResponse{Runs: runs})
+}
+
 func (h *Handler) TriggerTrainingRun(w http.ResponseWriter, r *http.Request) {
 	var request analysis.TriggerTrainingRunRequest
 	if err := decodeJSON(r, &request); err != nil && !errors.Is(err, io.EOF) {

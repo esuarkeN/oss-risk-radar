@@ -15,6 +15,10 @@
     "lint:web": "npm --workspace @oss-risk-radar/web run lint",
     "ml:train": "node scripts/ml/trigger-run.mjs",
     "ml:train:force": "node scripts/ml/trigger-run.mjs --force",
+    "ml:seed:foundation": "node scripts/ml/generate-foundation-seed.mjs",
+    "ml:dataset": "node scripts/ml/build-dataset.mjs",
+    "ml:bootstrap": "node scripts/ml/bootstrap-training.mjs",
+    "ml:bootstrap:force": "node scripts/ml/bootstrap-training.mjs --force",
     "test:api": "cd backend/api && go test ./...",
     "test:scoring": "cd mltraining/scoring && python -m pytest tests",
     "check:web": "npm run lint:web && npm run build:web"

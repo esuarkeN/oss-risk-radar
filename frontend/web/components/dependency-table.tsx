@@ -9,13 +9,16 @@ import { RiskBadge } from "@/components/risk-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { formatConfidence, formatPath, formatRiskScore, titleCase } from "@/lib/format";
+import { formatConfidence, formatOutlookScore, formatPath, formatRiskScore, titleCase } from "@/lib/format";
+import { dependencyDisplayName, dependencyDisplayVersion, isRepositoryProfile } from "@/lib/repository-profile";
 
 interface DependencyTableProps {
   dependencies: DependencyRecord[];
   selectedDependencyId?: string;
   onSelectDependency?: (dependencyId: string) => void;
 }
+
+type OutlookSortDirection = "asc" | "desc";
 
 export function DependencyTable({ dependencies, selectedDependencyId, onSelectDependency }: DependencyTableProps) {
   const [filters, setFilters] = useState<DependencyFilterState>({
@@ -25,31 +28,45 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
     directOnly: false
   });
   const [mappedOnly, setMappedOnly] = useState(false);
+  const [outlookSortDirection, setOutlookSortDirection] = useState<OutlookSortDirection>("asc");
   const deferredSearch = useDeferredValue(filters.search);
 
   const ecosystems = useMemo(() => {
     return Array.from(new Set(dependencies.map((dependency) => dependency.ecosystem as Ecosystem))).sort();
   }, [dependencies]);
 
-  const filteredDependencies = dependencies.filter((dependency) => {
-    const haystack = [
-      dependency.packageName,
-      dependency.packageVersion,
-      dependency.ecosystem,
-      dependency.repository?.fullName ?? "",
-      dependency.dependencyPath.join(" ")
-    ]
-      .join(" ")
-      .toLowerCase();
+  const filteredDependencies = useMemo(() => {
+    return dependencies.filter((dependency) => {
+      const haystack = [
+        dependency.packageName,
+        dependency.packageVersion,
+        dependency.ecosystem,
+        dependency.repository?.fullName ?? "",
+        dependency.dependencyPath.join(" ")
+      ]
+        .join(" ")
+        .toLowerCase();
 
-    const matchesSearch = haystack.includes(deferredSearch.toLowerCase());
-    const matchesBucket = filters.bucket === "all" || dependency.riskProfile?.riskBucket === filters.bucket;
-    const matchesEcosystem = filters.ecosystem === "all" || dependency.ecosystem === filters.ecosystem;
-    const matchesDirect = !filters.directOnly || dependency.direct;
-    const matchesMapped = !mappedOnly || Boolean(dependency.repository?.fullName);
+      const matchesSearch = haystack.includes(deferredSearch.toLowerCase());
+      const matchesBucket = filters.bucket === "all" || dependency.riskProfile?.riskBucket === filters.bucket;
+      const matchesEcosystem = filters.ecosystem === "all" || dependency.ecosystem === filters.ecosystem;
+      const matchesDirect = !filters.directOnly || dependency.direct;
+      const matchesMapped = !mappedOnly || Boolean(dependency.repository?.fullName);
 
-    return matchesSearch && matchesBucket && matchesEcosystem && matchesDirect && matchesMapped;
-  });
+      return matchesSearch && matchesBucket && matchesEcosystem && matchesDirect && matchesMapped;
+    });
+  }, [deferredSearch, dependencies, filters, mappedOnly]);
+
+  const sortedDependencies = useMemo(() => {
+    return [...filteredDependencies].sort((left, right) => {
+      const leftValue = left.riskProfile?.maintenanceOutlook12mScore ?? 0;
+      const rightValue = right.riskProfile?.maintenanceOutlook12mScore ?? 0;
+      if (leftValue !== rightValue) {
+        return outlookSortDirection === "asc" ? leftValue - rightValue : rightValue - leftValue;
+      }
+      return left.packageName.localeCompare(right.packageName);
+    });
+  }, [filteredDependencies, outlookSortDirection]);
 
   const bucketCounts = dependencies.reduce<Record<string, number>>((counts, dependency) => {
     const bucket = dependency.riskProfile?.riskBucket ?? "unscored";
@@ -71,9 +88,9 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
     <Card className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-950">Dependency Inventory</h3>
+          <h3 className="text-lg font-semibold text-slate-950">Repository and Dependency Inventory</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Filter by risk, ecosystem, dependency depth, and repository coverage before opening graph-aware detail views.
+            Filter the repository target and resolved packages by risk, ecosystem, dependency depth, and repository coverage before opening detail views.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -93,7 +110,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.8fr))]">
         <input
           className="h-11 rounded-full border border-slate-200 px-4 text-sm outline-none focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-          placeholder="Search package, repository, path"
+          placeholder="Search repository, package, path"
           value={filters.search}
           onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
         />
@@ -142,7 +159,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
         <p>
-          Showing <span className="font-semibold text-slate-950">{filteredDependencies.length}</span> of {dependencies.length} dependencies.
+          Showing <span className="font-semibold text-slate-950">{filteredDependencies.length}</span> of {dependencies.length} entries.
         </p>
         <div className="flex flex-wrap gap-2">
           {filters.directOnly ? <Badge tone="neutral">Direct only</Badge> : null}
@@ -162,6 +179,16 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
             <tr className="text-slate-500">
               <th className="pb-2">Package</th>
               <th className="pb-2">Path</th>
+              <th className="pb-2">
+                <button
+                  type="button"
+                  onClick={() => setOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
+                  className="inline-flex items-center gap-2 font-semibold text-slate-500 transition hover:text-slate-800"
+                >
+                  12M Outlook
+                  <span className="text-[10px] uppercase">{outlookSortDirection === "asc" ? "low" : "high"}</span>
+                </button>
+              </th>
               <th className="pb-2">Risk</th>
               <th className="pb-2">Security</th>
               <th className="pb-2">Confidence</th>
@@ -170,8 +197,9 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
             </tr>
           </thead>
           <tbody>
-            {filteredDependencies.map((dependency) => {
+            {sortedDependencies.map((dependency) => {
               const selected = dependency.id === selectedDependencyId;
+              const repositoryProfile = isRepositoryProfile(dependency);
 
               return (
                 <tr key={dependency.id} className={`rounded-2xl ${selected ? "bg-sky-50" : "bg-slate-50"} text-slate-700`}>
@@ -180,18 +208,23 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
                       href={`/analyses/${dependency.analysisId}/dependencies/${dependency.id}`}
                       className="font-semibold text-slate-950 transition hover:text-sky-700"
                     >
-                      {dependency.packageName}
+                      {dependencyDisplayName(dependency)}
                     </Link>
-                    <p className="mt-1 text-xs text-slate-500">{dependency.packageVersion}</p>
+                    <p className="mt-1 text-xs text-slate-500">{dependencyDisplayVersion(dependency)}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge tone={dependency.direct ? "medium" : "neutral"}>{dependency.direct ? "Direct" : "Transitive"}</Badge>
-                      <Badge tone="neutral">{dependency.ecosystem}</Badge>
+                      <Badge tone={repositoryProfile ? "neutral" : dependency.direct ? "medium" : "neutral"}>
+                        {repositoryProfile ? "Repository target" : dependency.direct ? "Direct" : "Transitive"}
+                      </Badge>
+                      <Badge tone="neutral">{repositoryProfile ? "repository" : dependency.ecosystem}</Badge>
                       {dependency.parsedFromUploadId ? <Badge tone="neutral">Upload-backed</Badge> : null}
                     </div>
                   </td>
                   <td className="px-4 py-4 align-top text-slate-500">
-                    <p className="font-medium text-slate-700">Depth {Math.max(dependency.dependencyPath.length - 1, 0)}</p>
-                    <p className="mt-1 max-w-xs text-xs leading-6">{formatPath(dependency.dependencyPath)}</p>
+                    <p className="font-medium text-slate-700">{repositoryProfile ? "Repository scope" : `Depth ${Math.max(dependency.dependencyPath.length - 1, 0)}`}</p>
+                    <p className="mt-1 max-w-xs text-xs leading-6">{repositoryProfile ? dependency.repository?.url ?? formatPath(dependency.dependencyPath) : formatPath(dependency.dependencyPath)}</p>
+                  </td>
+                  <td className="px-4 py-4 align-top font-medium text-slate-900">
+                    {formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}
                   </td>
                   <td className="px-4 py-4 align-top">
                     <div className="flex items-center gap-3">
@@ -218,7 +251,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
                           onClick={() => onSelectDependency(dependency.id)}
                           className={selected ? "border-sky-300 bg-sky-100 text-sky-900" : undefined}
                         >
-                          {selected ? "Viewing path" : "Explore path"}
+                          {selected ? (repositoryProfile ? "Viewing profile" : "Viewing path") : (repositoryProfile ? "View profile" : "Explore path")}
                         </Button>
                       ) : null}
                       <Link
@@ -238,7 +271,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
 
       {!filteredDependencies.length ? (
         <div className="rounded-[1.5rem] border border-dashed border-slate-300 px-5 py-8 text-sm text-slate-500">
-          No dependencies matched the current filter set. Loosen the search or bucket filters to widen the analysis slice.
+          No repository or dependency entries matched the current filter set. Loosen the search or bucket filters to widen the analysis slice.
         </div>
       ) : null}
     </Card>

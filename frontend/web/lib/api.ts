@@ -10,6 +10,7 @@ import type {
   GetDependencyResponse,
   GetLatestTrainingRunResponse,
   GetTrainingDatasetSummaryResponse,
+  ListTrainingRunsResponse,
   ListAnalysesResponse,
   TrainingDatasetSummary,
   TrainingRunArtifact,
@@ -71,7 +72,8 @@ export async function getDependency(dependencyId: string): Promise<DependencyRec
 
 export async function getDependencyGraph(analysisId: string): Promise<DependencyGraphResponse | null> {
   try {
-    return await request<DependencyGraphResponse>(`/analyses/${analysisId}/graph`);
+    const response = await request<{ graph: DependencyGraphResponse }>(`/analyses/${analysisId}/graph`);
+    return response.graph;
   } catch {
     return null;
   }
@@ -85,6 +87,11 @@ export async function getTrainingDatasetSummary(): Promise<TrainingDatasetSummar
 export async function getLatestTrainingRun(): Promise<TrainingRunArtifact | null> {
   const response = await request<GetLatestTrainingRunResponse>("/training/runs/latest");
   return response.run ?? null;
+}
+
+export async function listTrainingRuns(): Promise<TrainingRunArtifact[]> {
+  const response = await request<ListTrainingRunsResponse>("/training/runs");
+  return response.runs;
 }
 
 export function triggerTrainingRun(force = false) {

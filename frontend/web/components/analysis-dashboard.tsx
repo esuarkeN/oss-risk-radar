@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, DatabaseZap, ShieldCheck, TriangleAlert } from "lucide-react";
 
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getAnalysis, getDependencies, getDependencyGraph } from "@/lib/api";
 import { formatDate, titleCase } from "@/lib/format";
+import { isRepositoryProfile } from "@/lib/repository-profile";
 import type { AnalysisRecord, DependencyGraphResponse, DependencyRecord } from "@/lib/types";
 
 interface AnalysisDashboardProps {
@@ -22,6 +24,7 @@ interface AnalysisDashboardProps {
 const ACTIVE_STATUSES = new Set(["pending", "running"]);
 
 export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
+  const searchParams = useSearchParams();
   const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
   const [dependencies, setDependencies] = useState<DependencyRecord[]>([]);
   const [graph, setGraph] = useState<DependencyGraphResponse | null>(null);
@@ -49,10 +52,13 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
         setGraph(graphResponse);
         setError(null);
 
+        const repositoryTarget = analysisRecord.submission.kind === "repository_url"
+          ? dependencyRecords.find((dependency) => isRepositoryProfile(dependency))
+          : null;
         const highestRiskDependency = [...dependencyRecords].sort(
           (left, right) => (right.riskProfile?.inactivityRiskScore ?? 0) - (left.riskProfile?.inactivityRiskScore ?? 0)
         )[0];
-        setSelectedDependencyId((current) => current ?? highestRiskDependency?.id ?? dependencyRecords[0]?.id ?? null);
+        setSelectedDependencyId((current) => current ?? repositoryTarget?.id ?? highestRiskDependency?.id ?? dependencyRecords[0]?.id ?? null);
 
         if (ACTIVE_STATUSES.has(analysisRecord.status)) {
           timeoutId = setTimeout(() => {
@@ -92,9 +98,30 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   }
 
   const analysisStatusActive = ACTIVE_STATUSES.has(analysis.status);
+  const reusedFromCache = searchParams.get("cached") === "1";
+  const selectedIsRepositoryProfile = isRepositoryProfile(selectedDependency);
+  const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
+  const dependencySummaryLabel = analysis.submission.kind === "repository_url" ? "Profiles" : "Dependencies";
+  const dependencySummaryCaption = analysis.submission.kind === "repository_url"
+    ? "Repository target plus any resolved packages in the current analysis."
+    : "Direct and transitive packages in the current analysis.";
+  const highRiskCaption = analysis.submission.kind === "repository_url"
+    ? "Profiles currently in high or critical inactivity buckets."
+    : "Packages currently in high or critical inactivity buckets.";
+  const mappedCaption = analysis.submission.kind === "repository_url"
+    ? "Profiles with linked repository metadata."
+    : "Dependencies with linked repository metadata.";
+  const scoredCaption = analysis.submission.kind === "repository_url"
+    ? "Profiles with current scoring and explanation evidence."
+    : "Dependencies with current scoring and explanation evidence.";
 
   return (
     <div className="space-y-6">
+      {reusedFromCache ? (
+        <Card className="border-emerald-200 bg-emerald-50 text-sm text-emerald-900">
+          Existing repository analysis reused from cache. This repo was already analyzed, so the app opened the saved result immediately.
+        </Card>
+      ) : null}
       <Card className="space-y-5 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,#0f172a_0%,#102541_45%,#f8fafc_46%,#f8fafc_100%)] text-white">
         <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
           <div className="space-y-4">
@@ -108,7 +135,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
               </Badge>
             </div>
             <p className="max-w-2xl text-sm text-slate-300">
-              Explainable dependency risk profiles generated from repository activity, provider-backed metadata, scorecard-style security signals, and visible missing-data caveats.
+              Explainable repository and dependency risk profiles with 12-month maintenance outlooks generated from repository activity, provider-backed metadata, scorecard-style security signals, and visible missing-data caveats.
             </p>
             <div className="flex flex-wrap gap-3 text-sm text-slate-200">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2">
@@ -141,10 +168,10 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Dependencies" value={analysis.summary.dependencyCount} caption="Direct and transitive packages in the current analysis." />
-        <SummaryCard label="High Risk" value={analysis.summary.highRiskCount} caption="Packages currently in high or critical inactivity buckets." />
-        <SummaryCard label="Mapped Repos" value={analysis.summary.mappedRepositoryCount} caption="Dependencies with linked repository metadata." />
-        <SummaryCard label="Scored" value={analysis.summary.scoreAvailabilityCount} caption="Dependencies with current scoring and explanation evidence." />
+        <SummaryCard label={dependencySummaryLabel} value={analysis.summary.dependencyCount} caption={dependencySummaryCaption} />
+        <SummaryCard label="High Risk" value={analysis.summary.highRiskCount} caption={highRiskCaption} />
+        <SummaryCard label="Mapped Repos" value={analysis.summary.mappedRepositoryCount} caption={mappedCaption} />
+        <SummaryCard label="Scored" value={analysis.summary.scoreAvailabilityCount} caption={scoredCaption} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
@@ -162,10 +189,16 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Focused review</p>
             <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
-              {selectedDependency ? `${selectedDependency.packageName}@${selectedDependency.packageVersion}` : "Select a dependency"}
+              {selectedDependency
+                ? selectedIsRepositoryProfile
+                  ? (selectedDependency.repository?.fullName ?? selectedDependency.packageName)
+                  : `${selectedDependency.packageName}@${selectedDependency.packageVersion}`
+                : "Select a profile"}
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Use the inventory to focus the path panel on one package. The detail page keeps the full evidence trail, raw signals, and repository context.
+              {selectedIsRepositoryProfile
+                ? "Use the inventory to focus the repository-level rating for the submitted project. The detail page keeps the full evidence trail and repository context."
+                : "Use the inventory to focus the path panel on one package. The detail page keeps the full evidence trail, raw signals, and repository context."}
             </p>
           </div>
           {selectedDependency ? (
@@ -174,8 +207,8 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
                 <Badge tone={selectedDependency.riskProfile?.riskBucket ?? "neutral"}>
                   {selectedDependency.riskProfile?.riskBucket ?? "unscored"}
                 </Badge>
-                <Badge tone={selectedDependency.direct ? "medium" : "neutral"}>
-                  {selectedDependency.direct ? "Direct dependency" : "Transitive dependency"}
+                <Badge tone={selectedIsRepositoryProfile ? "neutral" : selectedDependency.direct ? "medium" : "neutral"}>
+                  {selectedIsRepositoryProfile ? "Repository target" : selectedDependency.direct ? "Direct dependency" : "Transitive dependency"}
                 </Badge>
                 {selectedDependency.parsedFromUploadId ? <Badge tone="neutral">Upload provenance attached</Badge> : null}
               </div>
@@ -186,8 +219,8 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
                 <p className="mt-2">
                   Latest action cue: <span className="font-semibold text-slate-950">{titleCase(selectedDependency.riskProfile?.actionLevel ?? "monitor")}</span>
                 </p>
-                <p className="mt-2">Path length: {selectedDependency.dependencyPath.length} nodes</p>
-                <p className="mt-2">Graph nodes available: {graph?.nodes.length ?? dependencies.length}</p>
+                <p className="mt-2">{selectedIsRepositoryProfile ? "Scope: repository-level profile" : `Path length: ${selectedDependency.dependencyPath.length} nodes`}</p>
+                <p className="mt-2">Graph nodes available: {graphNodeCount}</p>
               </div>
               <Link
                 href={`/analyses/${selectedDependency.analysisId}/dependencies/${selectedDependency.id}`}
@@ -204,7 +237,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
         </Card>
       </div>
 
-      {selectedDependency ? (
+      {selectedDependency && !selectedIsRepositoryProfile ? (
         <DependencyPathExplorer dependency={selectedDependency} dependencies={dependencies} graph={graph} />
       ) : null}
 

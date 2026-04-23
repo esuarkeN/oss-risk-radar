@@ -41,6 +41,7 @@ class DependencySignalPayload(BaseModel):
     direct: bool = True
     repository: RepositorySnapshotInput | None = None
     scorecard: ScorecardSnapshotInput | None = None
+    historical_features: dict[str, float] = Field(default_factory=dict)
 
 
 class ScoreHeuristicRequest(BaseModel):
@@ -66,6 +67,7 @@ class EvidenceItem(BaseModel):
 
 class RiskProfileResponse(BaseModel):
     inactivity_risk_score: float = Field(ge=0, le=100)
+    maintenance_outlook_12m_score: float = Field(ge=0, le=100)
     security_posture_score: float = Field(ge=0, le=100)
     confidence_score: float = Field(ge=0, le=1)
     risk_bucket: Literal["low", "medium", "high", "critical"]
@@ -152,6 +154,41 @@ class CalibrationBin(BaseModel):
     empirical_rate: float = Field(ge=0, le=1)
 
 
+class StandardizationProfileArtifact(BaseModel):
+    means: list[float] = Field(default_factory=list)
+    scales: list[float] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_lengths(self) -> "StandardizationProfileArtifact":
+        if len(self.means) != len(self.scales):
+            raise ValueError("standardization means and scales must have the same length")
+        return self
+
+
+class LogisticRegressionModelArtifact(BaseModel):
+    model_name: str
+    model_version: str
+    feature_version: str
+    trained_at: str
+    threshold: float = Field(ge=0, le=1)
+    feature_names: list[str] = Field(default_factory=list)
+    coefficients: list[float] = Field(default_factory=list)
+    intercept: float
+    standardization: StandardizationProfileArtifact
+    calibration_bins: list[CalibrationBin] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_dimensions(self) -> "LogisticRegressionModelArtifact":
+        feature_count = len(self.feature_names)
+        if feature_count == 0:
+            raise ValueError("model artifact must include feature names")
+        if feature_count != len(self.coefficients):
+            raise ValueError("feature_names and coefficients must have the same length")
+        if feature_count != len(self.standardization.means):
+            raise ValueError("standardization profile must match the feature count")
+        return self
+
+
 class ModelTrainRequest(BaseModel):
     model_name: str = "logistic-regression-baseline"
     dataset_uri: str | None = None
@@ -170,6 +207,13 @@ class ModelTrainRequest(BaseModel):
         return self
 
 
+class ScoreModelRequest(BaseModel):
+    analysis_id: str
+    scoring_version: str = "model-v1"
+    dependencies: list[DependencySignalPayload]
+    model_artifact: LogisticRegressionModelArtifact
+
+
 class ModelTrainResponse(BaseModel):
     status: str
     model_name: str
@@ -179,4 +223,5 @@ class ModelTrainResponse(BaseModel):
     split_summary: DatasetSplitSummary | None = None
     metrics: EvaluationMetrics | None = None
     calibration_bins: list[CalibrationBin] = Field(default_factory=list)
+    artifact: LogisticRegressionModelArtifact | None = None
     message: str

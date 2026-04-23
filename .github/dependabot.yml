@@ -2,21 +2,60 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: "/"
+    labels:
+      - dependencies
+    open-pull-requests-limit: 2
     schedule:
       interval: weekly
+    groups:
+      frontend-and-shared:
+        patterns:
+          - "*"
   - package-ecosystem: docker
     directory: "/deployment/docker"
+    labels:
+      - dependencies
+      - docker
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
+    groups:
+      base-images:
+        patterns:
+          - "*"
   - package-ecosystem: gomod
     directory: "/backend/api"
+    labels:
+      - dependencies
+      - go
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
+    groups:
+      backend-go:
+        patterns:
+          - "*"
   - package-ecosystem: pip
     directory: "/mltraining/scoring"
+    labels:
+      - dependencies
+      - python
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
+    groups:
+      scoring-python:
+        patterns:
+          - "*"
   - package-ecosystem: github-actions
     directory: "/"
+    labels:
+      - dependencies
+      - ci
+    open-pull-requests-limit: 1
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"

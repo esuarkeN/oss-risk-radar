@@ -24,12 +24,25 @@ func (h *Handler) CreateAnalysis(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	analysisRecord, jobRecord, err := h.service.CreateAnalysis(r.Context(), request.Submission)
+	analysisRecord, jobRecord, reusedExisting, err := h.service.CreateOrReuseAnalysis(r.Context(), request.Submission)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, analysis.CreateAnalysisResponse{Analysis: analysisRecord, Job: jobRecord})
+
+	statusCode := http.StatusCreated
+	if reusedExisting {
+		statusCode = http.StatusOK
+	}
+	response := analysis.CreateAnalysisResponse{
+		Analysis:               analysisRecord,
+		Job:                    jobRecord,
+		ReusedExistingAnalysis: reusedExisting,
+	}
+	if reusedExisting {
+		response.ReusedFromAnalysisID = analysisRecord.ID
+	}
+	writeJSON(w, statusCode, response)
 }
 
 func (h *Handler) GetAnalysis(w http.ResponseWriter, r *http.Request) {
@@ -105,4 +118,3 @@ func (h *Handler) UploadArtifact(w http.ResponseWriter, r *http.Request) {
 func readMultipartFile(file multipart.File) ([]byte, error) {
 	return io.ReadAll(file)
 }
-

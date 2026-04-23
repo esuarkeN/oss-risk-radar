@@ -4,7 +4,7 @@ import type { DependencyRecord } from "@oss-risk-radar/schemas";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { formatDate, formatScore, titleCase } from "@/lib/format";
+import { formatDate, formatOutlookScore, formatScore, titleCase } from "@/lib/format";
 
 function toneForBucket(bucket?: string) {
   if (bucket === "low" || bucket === "medium" || bucket === "high" || bucket === "critical") {
@@ -21,6 +21,9 @@ export function RiskScorePill({ dependency }: { dependency: DependencyRecord }) 
       </Badge>
       <div className="text-sm text-slate-500">
         <span className="font-semibold text-slate-950">{formatScore(dependency.riskProfile?.inactivityRiskScore ?? 0)}</span> inactivity risk
+      </div>
+      <div className="text-sm text-slate-500">
+        <span className="font-semibold text-slate-950">{formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}</span> 12m outlook
       </div>
     </div>
   );

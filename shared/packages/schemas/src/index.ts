@@ -49,6 +49,7 @@ export interface RawSignalItem {
 
 export interface RiskProfile {
   inactivityRiskScore: number;
+  maintenanceOutlook12mScore: number;
   securityPostureScore: number;
   confidenceScore: number;
   riskBucket: RiskBucket;
@@ -148,6 +149,8 @@ export interface CreateAnalysisRequest {
 export interface CreateAnalysisResponse {
   analysis: AnalysisRecord;
   job: JobRecord;
+  reusedExistingAnalysis: boolean;
+  reusedFromAnalysisId?: string;
 }
 
 export interface CreateUploadResponse {
@@ -236,6 +239,24 @@ export interface TrainingCalibrationBin {
   empiricalRate: number;
 }
 
+export interface TrainingRunStandardizationProfile {
+  means: number[];
+  scales: number[];
+}
+
+export interface TrainingRunModelArtifact {
+  modelName: string;
+  modelVersion: string;
+  featureVersion: string;
+  trainedAt: string;
+  threshold: number;
+  featureNames: string[];
+  coefficients: number[];
+  intercept: number;
+  standardization: TrainingRunStandardizationProfile;
+  calibrationBins: TrainingCalibrationBin[];
+}
+
 export interface TrainingRunArtifact {
   datasetPath: string;
   datasetHash: string;
@@ -249,11 +270,16 @@ export interface TrainingRunArtifact {
   splitSummary?: TrainingRunSplitSummary;
   metrics?: TrainingRunMetrics;
   calibrationBins: TrainingCalibrationBin[];
+  modelArtifact?: TrainingRunModelArtifact;
   message: string;
 }
 
 export interface GetLatestTrainingRunResponse {
   run?: TrainingRunArtifact;
+}
+
+export interface ListTrainingRunsResponse {
+  runs: TrainingRunArtifact[];
 }
 
 export interface TriggerTrainingRunRequest {

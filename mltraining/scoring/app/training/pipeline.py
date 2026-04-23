@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from app.modeling import FEATURE_VERSION, fit_logistic_regression, predict_probabilities
-from app.schemas.score import CalibrationBin, DatasetSplitSummary, EvaluationMetrics, TrainingSnapshotInput
+from app.modeling import FEATURE_VERSION, fit_logistic_regression, predict_probabilities, serialize_logistic_regression_model
+from app.schemas.score import CalibrationBin, DatasetSplitSummary, EvaluationMetrics, LogisticRegressionModelArtifact, TrainingSnapshotInput
 from app.training.calibration import fit_histogram_calibrator
 from app.training.datasets import build_dataset, labeled_rows, load_snapshots_from_uri, rows_to_matrix, summarize_dataset, time_aware_split
 from app.training.evaluation import compute_binary_classification_metrics
@@ -33,6 +33,7 @@ class TrainingRunResult:
     split_summary: object | None
     metrics: object | None
     calibration_bins: list[CalibrationBin]
+    artifact: LogisticRegressionModelArtifact | None
     note: str
 
 
@@ -64,6 +65,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
             split_summary=None,
             metrics=None,
             calibration_bins=[],
+            artifact=None,
             note="At least three labeled snapshots are required for time-aware experimentation scaffolding.",
         )
 
@@ -92,6 +94,16 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         test_labels,
         threshold=config.threshold,
     )
+    calibration_bins = [
+        CalibrationBin(
+            lower_bound=bin_summary.lower_bound,
+            upper_bound=bin_summary.upper_bound,
+            count=bin_summary.count,
+            average_prediction=bin_summary.average_prediction,
+            empirical_rate=bin_summary.empirical_rate,
+        )
+        for bin_summary in calibrator.bins
+    ]
 
     return TrainingRunResult(
         status="completed",
@@ -116,19 +128,16 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
             log_loss=round(metrics.log_loss, 6),
             roc_auc=round(metrics.roc_auc, 6),
         ),
-        calibration_bins=[
-            CalibrationBin(
-                lower_bound=bin_summary.lower_bound,
-                upper_bound=bin_summary.upper_bound,
-                count=bin_summary.count,
-                average_prediction=bin_summary.average_prediction,
-                empirical_rate=bin_summary.empirical_rate,
-            )
-            for bin_summary in calibrator.bins
-        ],
+        calibration_bins=calibration_bins,
+        artifact=serialize_logistic_regression_model(
+            model,
+            trained_at=trained_at,
+            threshold=config.threshold,
+            calibration_bins=calibration_bins,
+        ),
         note=(
             f"Trained {model.model_name} using {FEATURE_VERSION} on a time-aware split. "
-            "This path is experimentation scaffolding and should be validated before operational use."
+            "The latest model artifact is now available for runtime scoring, but it still needs historical-label validation before thesis claims."
         ),
     )
 

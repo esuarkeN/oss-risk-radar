@@ -22,11 +22,12 @@ func (fakeRouterScorer) Score(_ context.Context, _ string, dependencies []analys
 	results := make(map[string]analysis.RiskProfile, len(dependencies))
 	for _, dependency := range dependencies {
 		results[dependency.ID] = analysis.RiskProfile{
-			InactivityRiskScore:  65,
-			SecurityPostureScore: 52,
-			ConfidenceScore:      0.73,
-			RiskBucket:           "high",
-			ActionLevel:          "review",
+			InactivityRiskScore:        65,
+			MaintenanceOutlook12MScore: 35,
+			SecurityPostureScore:       52,
+			ConfidenceScore:            0.73,
+			RiskBucket:                 "high",
+			ActionLevel:                "review",
 		}
 	}
 	return results, nil
@@ -47,7 +48,22 @@ func (fakeRouterScorer) TrainModel(_ context.Context, snapshots []analysis.Train
 			FeatureNames:  []string{"repository_archived"},
 		},
 		CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.2, EmpiricalRate: 0.1}},
-		Message:         "fixture",
+		ModelArtifact: &analysis.TrainingRunModelArtifact{
+			ModelName:      "logistic-regression-baseline",
+			ModelVersion:   "0.2.0",
+			FeatureVersion: "feature-set-v1",
+			TrainedAt:      time.Now().UTC().Format(time.RFC3339Nano),
+			Threshold:      0.5,
+			FeatureNames:   []string{"repository_archived"},
+			Coefficients:   []float64{0.7},
+			Intercept:      0,
+			Standardization: analysis.TrainingRunStandardizationProfile{
+				Means:  []float64{0},
+				Scales: []float64{1},
+			},
+			CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.2, EmpiricalRate: 0.1}},
+		},
+		Message: "fixture",
 	}, nil
 }
 
@@ -122,6 +138,65 @@ func TestCreateAnalysisEndpoint(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("analysis did not complete in time")
+}
+
+func TestCreateAnalysisEndpointReusesExistingRepositoryAnalysis(t *testing.T) {
+	ctx := context.Background()
+	store := storage.NewMemoryStore()
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion: "heuristic-v1",
+		Store:              store,
+		Scorer:             fakeRouterScorer{},
+		UploadDir:          t.TempDir(),
+	})
+
+	now := time.Now().UTC()
+	existing := analysis.AnalysisRecord{
+		ID:         "analysis_existing",
+		Status:     analysis.AnalysisStatusCompleted,
+		CreatedAt:  now.Add(-time.Hour),
+		UpdatedAt:  now,
+		Submission: analysis.AnalysisSubmission{Kind: analysis.SubmissionRepositoryURL, RepositoryURL: "https://github.com/vercel/next.js"},
+		Dependencies: []analysis.DependencyRecord{
+			{ID: "dep_existing", AnalysisID: "analysis_existing", PackageName: "next", PackageVersion: "15.5.14", Ecosystem: "npm", Direct: true, DependencyPath: []string{"next"}},
+		},
+		LatestJobID: "job_existing",
+	}
+	job := analysis.JobRecord{
+		ID:         "job_existing",
+		AnalysisID: existing.ID,
+		Type:       "analysis",
+		Status:     analysis.JobStatusCompleted,
+		CreatedAt:  existing.CreatedAt,
+		UpdatedAt:  existing.UpdatedAt,
+		Message:    "completed",
+	}
+	if err := store.CreateAnalysisJob(ctx, existing, job); err != nil {
+		t.Fatalf("CreateAnalysisJob returned error: %v", err)
+	}
+	if err := store.SaveAnalysisResult(ctx, existing, job); err != nil {
+		t.Fatalf("SaveAnalysisResult returned error: %v", err)
+	}
+
+	router := NewRouter(config.Config{ServiceName: "oss-risk-radar-api", AllowedOrigin: "http://localhost:3000"}, slog.Default(), service)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/analyses", strings.NewReader(`{"submission":{"kind":"repository_url","repositoryUrl":"https://github.com/vercel/next.js/"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("expected 200, got %d: %s", response.Code, string(body))
+	}
+
+	var payload analysis.CreateAnalysisResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if !payload.ReusedExistingAnalysis || payload.Analysis.ID != existing.ID {
+		t.Fatalf("expected reused existing analysis, got %#v", payload)
+	}
 }
 
 func TestTriggerTrainingRunEndpoint(t *testing.T) {

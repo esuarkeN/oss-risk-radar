@@ -37,3 +37,6 @@ def test_training_pipeline_returns_completed_result(training_snapshots: list[dic
     assert result.split_summary is not None
     assert result.metrics is not None
     assert len(result.calibration_bins) == 5
+    assert result.artifact is not None
+    assert result.artifact.feature_version == "feature-set-v1"
+    assert len(result.artifact.feature_names) == len(result.artifact.coefficients)

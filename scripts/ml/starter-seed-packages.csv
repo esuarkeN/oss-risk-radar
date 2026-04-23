@@ -1,0 +1,17 @@
+ecosystem,package_name,popularity_tier,source
+npm,react,high,starter
+npm,express,high,starter
+npm,axios,high,starter
+npm,vite,medium,starter
+npm,commander,medium,starter
+npm,debug,medium,starter
+npm,marked,low,starter
+npm,minimist,low,starter
+pypi,requests,high,starter
+pypi,flask,high,starter
+pypi,fastapi,high,starter
+pypi,pydantic,high,starter
+pypi,click,medium,starter
+pypi,rich,medium,starter
+pypi,tenacity,low,starter
+pypi,webob,low,starter

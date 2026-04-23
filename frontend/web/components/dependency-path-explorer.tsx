@@ -20,7 +20,7 @@ function resolveNodeLabel(
   dependencies: DependencyRecord[],
   graph?: DependencyGraphResponse | null
 ) {
-  const graphNode = graph?.nodes.find((node) => node.id === value);
+  const graphNode = graph?.nodes?.find((node) => node.id === value);
   if (graphNode) {
     return `${graphNode.packageName}@${graphNode.packageVersion}`;
   }

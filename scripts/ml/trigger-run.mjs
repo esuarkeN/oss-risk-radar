@@ -30,6 +30,7 @@ if (payload.reusedCachedRun) {
 if (run.metrics) {
   console.log(`auroc: ${run.metrics.rocAuc}`);
   console.log(`brier: ${run.metrics.brierScore}`);
+  console.log(`inactive 12m rate: ${run.metrics.positiveRate}`);
   console.log(`f1: ${run.metrics.f1Score}`);
 } else {
   console.log(`message: ${run.message}`);

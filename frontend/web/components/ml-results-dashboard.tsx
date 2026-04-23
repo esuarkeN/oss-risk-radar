@@ -3,10 +3,11 @@
 import { startTransition, useEffect, useMemo, useState } from "react";
 
 import { CalibrationCurveChart } from "@/components/charts/calibration-curve-chart";
+import { TrainingMetricHistoryChart } from "@/components/charts/training-metric-history-chart";
 import { InfoChipGroup } from "@/components/info-chip-group";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getLatestTrainingRun, getTrainingDatasetSummary, triggerTrainingRun } from "@/lib/api";
+import { getLatestTrainingRun, getTrainingDatasetSummary, listTrainingRuns, triggerTrainingRun } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { modelMetricGlossary } from "@/lib/metric-glossary";
 import type { TrainingDatasetSummary, TrainingRunArtifact } from "@/lib/types";
@@ -35,9 +36,20 @@ function calibrationDataFromRun(run: TrainingRunArtifact | null) {
   }));
 }
 
+function metricHistoryFromRuns(runs: TrainingRunArtifact[]) {
+  return runs
+    .filter((run) => run.metrics)
+    .map((run, index) => ({
+      label: `Run ${index + 1}`,
+      auroc: run.metrics?.rocAuc ?? 0,
+      brier: run.metrics?.brierScore ?? 0
+    }));
+}
+
 export function MlResultsDashboard() {
   const [dataset, setDataset] = useState<TrainingDatasetSummary | null>(null);
   const [run, setRun] = useState<TrainingRunArtifact | null>(null);
+  const [runs, setRuns] = useState<TrainingRunArtifact[]>([]);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -48,9 +60,10 @@ export function MlResultsDashboard() {
 
     async function load() {
       try {
-        const [datasetSummary, latestRun] = await Promise.all([
+        const [datasetSummary, latestRun, runHistory] = await Promise.all([
           getTrainingDatasetSummary().catch(() => null),
-          getLatestTrainingRun().catch(() => null)
+          getLatestTrainingRun().catch(() => null),
+          listTrainingRuns().catch(() => [])
         ]);
 
         if (cancelled) {
@@ -60,6 +73,7 @@ export function MlResultsDashboard() {
         startTransition(() => {
           setDataset(datasetSummary);
           setRun(latestRun);
+          setRuns(runHistory);
           setError(null);
           setLoading(false);
         });
@@ -79,6 +93,7 @@ export function MlResultsDashboard() {
   }, []);
 
   const calibrationData = useMemo(() => calibrationDataFromRun(run), [run]);
+  const metricHistory = useMemo(() => metricHistoryFromRuns(runs), [runs]);
   const hasMetrics = Boolean(run?.metrics);
   const canTrigger = (dataset?.totalSnapshots ?? 0) > 0 && !loading && !running;
 
@@ -89,8 +104,10 @@ export function MlResultsDashboard() {
 
     try {
       const response = await triggerTrainingRun(force);
+      const history = await listTrainingRuns().catch(() => []);
       startTransition(() => {
         setRun(response.run);
+        setRuns(history);
         setNotice(
           response.reusedCachedRun
             ? "Latest cached run reused because the training dataset did not change."
@@ -172,31 +189,39 @@ export function MlResultsDashboard() {
       </section>
 
       {hasMetrics ? (
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <Card className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">AUROC</p>
-            <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.rocAuc)}</p>
-          </Card>
-          <Card className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">Brier</p>
-            <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.brierScore)}</p>
-          </Card>
-          <Card className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">F1</p>
-            <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.f1Score)}</p>
-          </Card>
-          <Card className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">Precision</p>
-            <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.precision)}</p>
-          </Card>
-          <Card className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">Recall</p>
-            <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.recall)}</p>
-          </Card>
-          <Card className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">Log loss</p>
-            <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.logLoss)}</p>
-          </Card>
+        <section className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">AUROC</p>
+              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.rocAuc)}</p>
+            </Card>
+            <Card className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Brier</p>
+              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.brierScore)}</p>
+            </Card>
+            <Card className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Inactive 12m rate</p>
+              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.positiveRate)}</p>
+            </Card>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Card className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">F1</p>
+              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.f1Score)}</p>
+            </Card>
+            <Card className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Precision</p>
+              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.precision)}</p>
+            </Card>
+            <Card className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Recall</p>
+              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.recall)}</p>
+            </Card>
+            <Card className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Log loss</p>
+              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.logLoss)}</p>
+            </Card>
+          </div>
         </section>
       ) : null}
 
@@ -243,6 +268,18 @@ export function MlResultsDashboard() {
           ) : null}
         </Card>
       </section>
+
+      {metricHistory.length ? (
+        <TrainingMetricHistoryChart data={metricHistory} />
+      ) : (
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Metric history</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No cached run history yet</h2>
+          </div>
+          <p className="text-sm text-muted">Once you have more than one cached training run with metrics, an AUROC-over-time chart will appear here.</p>
+        </Card>
+      )}
     </div>
   );
 }

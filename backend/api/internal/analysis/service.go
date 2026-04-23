@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -151,9 +152,31 @@ func (s *Service) ListAnalyses(ctx context.Context) ([]AnalysisRecord, error) {
 	return s.store.ListAnalyses(ctx)
 }
 
+func (s *Service) CreateOrReuseAnalysis(ctx context.Context, submission AnalysisSubmission) (AnalysisRecord, JobRecord, bool, error) {
+	if submission.Kind == SubmissionRepositoryURL {
+		submission.RepositoryURL = NormalizeRepositoryURL(submission.RepositoryURL)
+		reusedAnalysis, reusedJob, reused, err := s.findReusableAnalysis(ctx, submission)
+		if err != nil {
+			return AnalysisRecord{}, JobRecord{}, false, err
+		}
+		if reused {
+			return reusedAnalysis, reusedJob, true, nil
+		}
+	}
+
+	analysisRecord, jobRecord, err := s.CreateAnalysis(ctx, submission)
+	if err != nil {
+		return AnalysisRecord{}, JobRecord{}, false, err
+	}
+	return analysisRecord, jobRecord, false, nil
+}
+
 func (s *Service) CreateAnalysis(ctx context.Context, submission AnalysisSubmission) (AnalysisRecord, JobRecord, error) {
 	if err := validateSubmission(submission); err != nil {
 		return AnalysisRecord{}, JobRecord{}, err
+	}
+	if submission.Kind == SubmissionRepositoryURL {
+		submission.RepositoryURL = NormalizeRepositoryURL(submission.RepositoryURL)
 	}
 	if submission.Kind == SubmissionUpload {
 		if _, err := s.store.GetUpload(ctx, submission.UploadID); err != nil {
@@ -190,6 +213,71 @@ func (s *Service) CreateAnalysis(ctx context.Context, submission AnalysisSubmiss
 		return AnalysisRecord{}, JobRecord{}, err
 	}
 	return analysisRecord, jobRecord, nil
+}
+
+func (s *Service) findReusableAnalysis(ctx context.Context, submission AnalysisSubmission) (AnalysisRecord, JobRecord, bool, error) {
+	if submission.Kind != SubmissionRepositoryURL {
+		return AnalysisRecord{}, JobRecord{}, false, nil
+	}
+
+	normalizedURL := NormalizeRepositoryURL(submission.RepositoryURL)
+	if normalizedURL == "" {
+		return AnalysisRecord{}, JobRecord{}, false, nil
+	}
+
+	analyses, err := s.store.ListAnalyses(ctx)
+	if err != nil {
+		return AnalysisRecord{}, JobRecord{}, false, err
+	}
+
+	for _, existing := range analyses {
+		if existing.Submission.Kind != SubmissionRepositoryURL {
+			continue
+		}
+		if existing.Status != AnalysisStatusCompleted {
+			continue
+		}
+		if NormalizeRepositoryURL(existing.Submission.RepositoryURL) != normalizedURL {
+			continue
+		}
+		if len(existing.Dependencies) == 0 {
+			continue
+		}
+
+		job, err := s.reusedJobForAnalysis(ctx, existing)
+		if err != nil {
+			return AnalysisRecord{}, JobRecord{}, false, err
+		}
+		return existing, job, true, nil
+	}
+
+	return AnalysisRecord{}, JobRecord{}, false, nil
+}
+
+func (s *Service) reusedJobForAnalysis(ctx context.Context, existing AnalysisRecord) (JobRecord, error) {
+	if strings.TrimSpace(existing.LatestJobID) != "" {
+		job, err := s.store.GetJob(ctx, existing.LatestJobID)
+		if err == nil {
+			return job, nil
+		}
+		if !errors.Is(err, ErrNotFound) {
+			return JobRecord{}, err
+		}
+	}
+
+	reusedAt := existing.UpdatedAt
+	if reusedAt.IsZero() {
+		reusedAt = time.Now().UTC()
+	}
+	return JobRecord{
+		ID:         existing.LatestJobID,
+		AnalysisID: existing.ID,
+		Type:       "analysis",
+		Status:     JobStatusCompleted,
+		CreatedAt:  reusedAt,
+		UpdatedAt:  reusedAt,
+		Message:    "Existing completed analysis reused from cache.",
+	}, nil
 }
 
 func (s *Service) GetAnalysis(ctx context.Context, id string) (AnalysisRecord, error) {
@@ -271,7 +359,7 @@ func (s *Service) processNextJob(ctx context.Context) {
 	job.UpdatedAt = completedAt
 	job.LastError = ""
 	job.NextRunAt = nil
-	job.Message = "Analysis completed with parsed dependency metadata, provider enrichment, and heuristic scoring."
+	job.Message = "Analysis completed with parsed dependency metadata, provider enrichment, and runtime scoring."
 
 	if err := s.store.SaveAnalysisResult(ctx, result, job); err != nil {
 		s.logger.Error("failed to persist completed analysis", "analysis_id", result.ID, "job_id", job.ID, "error", err)
@@ -332,7 +420,7 @@ func (s *Service) executeAnalysis(ctx context.Context, queued AnalysisRecord) (A
 		dependencies = s.enrichDependencies(ctx, dependencies)
 	}
 
-	scores, err := s.scorer.Score(ctx, queued.ID, dependencies)
+	scores, err := s.scoreDependencies(ctx, queued.ID, dependencies)
 	if err != nil {
 		return analysisRecord, err
 	}
@@ -354,6 +442,32 @@ func (s *Service) executeAnalysis(ctx context.Context, queued AnalysisRecord) (A
 	return analysisRecord, nil
 }
 
+func (s *Service) scoreDependencies(ctx context.Context, analysisID string, dependencies []DependencyRecord) (map[string]RiskProfile, error) {
+	if s.trainingRuns != nil {
+		latestRun, err := s.trainingRuns.Latest()
+		if err != nil {
+			s.logger.Warn("failed to read latest training artifact", "analysis_id", analysisID, "error", err)
+		} else if latestRun != nil && latestRun.Status == "completed" && latestRun.ModelArtifact != nil {
+			modelScorer, ok := s.scorer.(modelCapableScorer)
+			if ok {
+				scores, scoreErr := modelScorer.ScoreModel(ctx, analysisID, dependencies, *latestRun.ModelArtifact)
+				if scoreErr == nil {
+					return scores, nil
+				}
+				s.logger.Warn(
+					"model scoring failed, falling back to heuristic scoring",
+					"analysis_id", analysisID,
+					"model_name", latestRun.ModelArtifact.ModelName,
+					"model_version", latestRun.ModelArtifact.ModelVersion,
+					"error", scoreErr,
+				)
+			}
+		}
+	}
+
+	return s.scorer.Score(ctx, analysisID, dependencies)
+}
+
 func (s *Service) parseUpload(upload UploadArtifact) ([]DependencyRecord, error) {
 	content, err := os.ReadFile(upload.StorageHint)
 	if err != nil {
@@ -367,50 +481,53 @@ func (s *Service) parseUpload(upload UploadArtifact) ([]DependencyRecord, error)
 }
 
 func (s *Service) parseRepositorySubmission(ctx context.Context, submission AnalysisSubmission) ([]DependencyRecord, error) {
-	if s.manifestFetcher == nil {
+	if s.manifestFetcher == nil && s.repositoryClient == nil && s.scorecardClient == nil {
 		return nil, errors.New("repository analysis is unavailable without a GitHub client")
 	}
 
+	repositoryProfile := repositoryProfileDependency(submission)
 	candidates := manifestCandidates(submission.ArtifactName)
 	merged := map[string]DependencyRecord{}
 	parsedAny := false
 
-	for _, candidate := range candidates {
-		content, err := s.manifestFetcher.FetchManifest(ctx, submission.RepositoryURL, candidate)
-		if err != nil {
-			continue
-		}
-		packages, err := manifest.ParseArtifact(candidate, content)
-		if err != nil {
-			continue
-		}
-		parsedAny = true
-		for _, dependency := range packageRefsToDependencies("", "", packages.Dependencies) {
-			key := dependency.Ecosystem + "|" + dependency.PackageName + "|" + dependency.PackageVersion
-			existing, ok := merged[key]
-			if ok {
-				if dependency.Direct {
-					existing.Direct = true
-				}
-				if len(existing.DependencyPath) == 0 || len(dependency.DependencyPath) < len(existing.DependencyPath) {
-					existing.DependencyPath = dependency.DependencyPath
-				}
-				merged[key] = existing
+	if s.manifestFetcher != nil {
+		for _, candidate := range candidates {
+			content, err := s.manifestFetcher.FetchManifest(ctx, submission.RepositoryURL, candidate)
+			if err != nil {
 				continue
 			}
-			merged[key] = dependency
+			packages, err := manifest.ParseArtifact(candidate, content)
+			if err != nil {
+				continue
+			}
+			parsedAny = true
+			for _, dependency := range packageRefsToDependencies("", "", packages.Dependencies) {
+				key := dependency.Ecosystem + "|" + dependency.PackageName + "|" + dependency.PackageVersion
+				existing, ok := merged[key]
+				if ok {
+					if dependency.Direct {
+						existing.Direct = true
+					}
+					if len(existing.DependencyPath) == 0 || len(dependency.DependencyPath) < len(existing.DependencyPath) {
+						existing.DependencyPath = dependency.DependencyPath
+					}
+					merged[key] = existing
+					continue
+				}
+				merged[key] = dependency
+			}
 		}
 	}
 
-	if !parsedAny {
-		return nil, fmt.Errorf("no supported manifest files found in %s", submission.RepositoryURL)
-	}
-
-	dependencies := make([]DependencyRecord, 0, len(merged))
+	dependencies := make([]DependencyRecord, 0, len(merged)+1)
+	dependencies = append(dependencies, repositoryProfile)
 	for _, dependency := range merged {
 		dependencies = append(dependencies, dependency)
 	}
 	sort.Slice(dependencies, func(i, j int) bool {
+		if dependencies[i].PackageVersion == "repository profile" || dependencies[j].PackageVersion == "repository profile" {
+			return dependencies[i].PackageVersion == "repository profile"
+		}
 		if dependencies[i].Direct != dependencies[j].Direct {
 			return dependencies[i].Direct && !dependencies[j].Direct
 		}
@@ -419,6 +536,10 @@ func (s *Service) parseRepositorySubmission(ctx context.Context, submission Anal
 		}
 		return dependencies[i].PackageName < dependencies[j].PackageName
 	})
+
+	if !parsedAny {
+		s.logger.Info("repository submission produced repository profile without supported manifests", "repository_url", submission.RepositoryURL)
+	}
 	return dependencies, nil
 }
 
@@ -523,6 +644,42 @@ func packageRefsToDependencies(analysisID string, uploadID string, packages []ma
 	return dependencies
 }
 
+func repositoryProfileDependency(submission AnalysisSubmission) DependencyRecord {
+	repositoryURL := NormalizeRepositoryURL(submission.RepositoryURL)
+	fullName := repositoryDisplayNameFromURL(repositoryURL)
+	if fullName == "" {
+		fullName = repositoryURL
+	}
+
+	return DependencyRecord{
+		ID:                  newID("dep"),
+		PackageName:         fullName,
+		PackageVersion:      "repository profile",
+		Ecosystem:           "unknown",
+		Direct:              true,
+		DependencyPath:      []string{fullName},
+		RawSignalsAvailable: false,
+		Repository: &RepositorySnapshot{
+			FullName:      fullName,
+			URL:           repositoryURL,
+			DefaultBranch: "main",
+		},
+	}
+}
+
+func repositoryDisplayNameFromURL(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return strings.Trim(strings.TrimSuffix(strings.TrimPrefix(raw, "https://github.com/"), ".git"), "/")
+	}
+
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) >= 2 {
+		return parts[0] + "/" + parts[1]
+	}
+	return strings.Trim(parsed.Path, "/")
+}
+
 func providerRepositoryToAnalysis(snapshot providers.RepositorySnapshot) *RepositorySnapshot {
 	return &RepositorySnapshot{
 		FullName:                      snapshot.FullName,
@@ -549,7 +706,7 @@ func providerScorecardToAnalysis(snapshot providers.ScorecardSnapshot) *Scorecar
 	for _, check := range snapshot.Checks {
 		checks = append(checks, ScorecardCheck{Name: check.Name, Score: check.Score, Reason: check.Reason})
 	}
-	return &ScorecardSnapshot{Score: snapshot.Score, Checks: checks}
+	return NormalizeScorecardSnapshot(&ScorecardSnapshot{Score: snapshot.Score, Checks: checks})
 }
 
 func buildRawSignals(dependency DependencyRecord) []RawSignalItem {

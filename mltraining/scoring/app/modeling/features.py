@@ -5,9 +5,10 @@ from datetime import UTC, datetime
 
 from app.schemas.score import DependencySignalPayload, ExtractedFeatureRow
 from app.scoring.heuristic import EXPECTED_SIGNALS, score_dependency, scoring_timestamp
+from app.training.maintenance_dataset.features import HISTORICAL_FEATURE_NAMES
 
 FEATURE_VERSION = "feature-set-v1"
-FEATURE_NAMES = [
+BASE_FEATURE_NAMES = [
     "has_repository_mapping",
     "is_direct_dependency",
     "repo_archived",
@@ -32,6 +33,7 @@ FEATURE_NAMES = [
     "ecosystem_maven",
     "ecosystem_other",
 ]
+FEATURE_NAMES = BASE_FEATURE_NAMES + HISTORICAL_FEATURE_NAMES
 
 
 def _normalize_ecosystem(ecosystem: str) -> str:
@@ -100,6 +102,8 @@ def extract_feature_values(payload: DependencySignalPayload) -> tuple[dict[str, 
         "signal_completeness": round((len(EXPECTED_SIGNALS) - len(missing)) / len(EXPECTED_SIGNALS), 4),
     }
     values.update(_ecosystem_flags(payload.ecosystem))
+    for name in HISTORICAL_FEATURE_NAMES:
+        values[name] = float(payload.historical_features.get(name, 0.0))
 
     ordered_values = {name: float(values[name]) for name in FEATURE_NAMES}
     return ordered_values, missing

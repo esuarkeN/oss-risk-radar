@@ -9,11 +9,22 @@ type trainingCapableScorer interface {
 	TrainModel(ctx context.Context, snapshots []TrainingSnapshotRecord) (TrainingRunArtifact, error)
 }
 
+type modelCapableScorer interface {
+	ScoreModel(ctx context.Context, analysisID string, dependencies []DependencyRecord, artifact TrainingRunModelArtifact) (map[string]RiskProfile, error)
+}
+
 func (s *Service) GetLatestTrainingRun(_ context.Context) (*TrainingRunArtifact, error) {
 	if s.trainingRuns == nil {
 		return nil, nil
 	}
 	return s.trainingRuns.Latest()
+}
+
+func (s *Service) ListTrainingRuns(_ context.Context) ([]TrainingRunArtifact, error) {
+	if s.trainingRuns == nil {
+		return []TrainingRunArtifact{}, nil
+	}
+	return s.trainingRuns.List()
 }
 
 func (s *Service) TriggerTrainingRun(ctx context.Context, force bool) (TrainingRunArtifact, bool, error) {

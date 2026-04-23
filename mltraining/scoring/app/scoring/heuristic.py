@@ -23,6 +23,10 @@ def clamp(value: float, lower: float = 0, upper: float = 100) -> float:
     return max(lower, min(upper, value))
 
 
+def derive_maintenance_outlook_12m_score(inactivity_risk_score: float) -> float:
+    return round(clamp(100 - inactivity_risk_score), 2)
+
+
 def determine_bucket(score: float) -> str:
     if score >= 80:
         return "critical"
@@ -225,6 +229,7 @@ def score_dependency(payload: DependencySignalPayload) -> ScoreResult:
         ecosystem=payload.ecosystem,
         risk_profile=RiskProfileResponse(
             inactivity_risk_score=inactivity_risk_score,
+            maintenance_outlook_12m_score=derive_maintenance_outlook_12m_score(inactivity_risk_score),
             security_posture_score=round(security_posture_score, 2),
             confidence_score=round(clamp(confidence, 0, 1), 2),
             risk_bucket=determine_bucket(inactivity_risk_score),

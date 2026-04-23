@@ -29,8 +29,9 @@ func NewClient(baseURL string, logger *slog.Logger) *Client {
 }
 
 type scoreRequest struct {
-	AnalysisID   string                  `json:"analysis_id"`
-	Dependencies []dependencySignalInput `json:"dependencies"`
+	AnalysisID    string                  `json:"analysis_id"`
+	Dependencies  []dependencySignalInput `json:"dependencies"`
+	ModelArtifact *modelArtifactInput     `json:"model_artifact,omitempty"`
 }
 
 type trainModelRequest struct {
@@ -80,17 +81,44 @@ type scoreResponse struct {
 	Results []scoreResult `json:"results"`
 }
 
+type standardizationInput struct {
+	Means  []float64 `json:"means"`
+	Scales []float64 `json:"scales"`
+}
+
+type modelArtifactInput struct {
+	ModelName       string                 `json:"model_name"`
+	ModelVersion    string                 `json:"model_version"`
+	FeatureVersion  string                 `json:"feature_version"`
+	TrainedAt       string                 `json:"trained_at"`
+	Threshold       float64                `json:"threshold"`
+	FeatureNames    []string               `json:"feature_names"`
+	Coefficients    []float64              `json:"coefficients"`
+	Intercept       float64                `json:"intercept"`
+	Standardization standardizationInput   `json:"standardization"`
+	CalibrationBins []calibrationBinOutput `json:"calibration_bins"`
+}
+
+type calibrationBinOutput struct {
+	LowerBound        float64 `json:"lower_bound"`
+	UpperBound        float64 `json:"upper_bound"`
+	Count             int     `json:"count"`
+	AveragePrediction float64 `json:"average_prediction"`
+	EmpiricalRate     float64 `json:"empirical_rate"`
+}
+
 type scoreResult struct {
 	DependencyID string `json:"dependency_id"`
 	RiskProfile  struct {
-		InactivityRiskScore  float64  `json:"inactivity_risk_score"`
-		SecurityPostureScore float64  `json:"security_posture_score"`
-		ConfidenceScore      float64  `json:"confidence_score"`
-		RiskBucket           string   `json:"risk_bucket"`
-		ActionLevel          string   `json:"action_level"`
-		Caveats              []string `json:"caveats"`
-		MissingSignals       []string `json:"missing_signals"`
-		ExplanationFactors   []struct {
+		InactivityRiskScore        float64  `json:"inactivity_risk_score"`
+		MaintenanceOutlook12MScore float64  `json:"maintenance_outlook_12m_score"`
+		SecurityPostureScore       float64  `json:"security_posture_score"`
+		ConfidenceScore            float64  `json:"confidence_score"`
+		RiskBucket                 string   `json:"risk_bucket"`
+		ActionLevel                string   `json:"action_level"`
+		Caveats                    []string `json:"caveats"`
+		MissingSignals             []string `json:"missing_signals"`
+		ExplanationFactors         []struct {
 			Label     string  `json:"label"`
 			Direction string  `json:"direction"`
 			Weight    float64 `json:"weight"`
@@ -136,13 +164,19 @@ type trainModelResponse struct {
 		LogLoss      float64 `json:"log_loss"`
 		RocAuc       float64 `json:"roc_auc"`
 	} `json:"metrics"`
-	CalibrationBins []struct {
-		LowerBound        float64 `json:"lower_bound"`
-		UpperBound        float64 `json:"upper_bound"`
-		Count             int     `json:"count"`
-		AveragePrediction float64 `json:"average_prediction"`
-		EmpiricalRate     float64 `json:"empirical_rate"`
-	} `json:"calibration_bins"`
+	CalibrationBins []calibrationBinOutput `json:"calibration_bins"`
+	Artifact        *struct {
+		ModelName       string                 `json:"model_name"`
+		ModelVersion    string                 `json:"model_version"`
+		FeatureVersion  string                 `json:"feature_version"`
+		TrainedAt       string                 `json:"trained_at"`
+		Threshold       float64                `json:"threshold"`
+		FeatureNames    []string               `json:"feature_names"`
+		Coefficients    []float64              `json:"coefficients"`
+		Intercept       float64                `json:"intercept"`
+		Standardization standardizationInput   `json:"standardization"`
+		CalibrationBins []calibrationBinOutput `json:"calibration_bins"`
+	} `json:"artifact"`
 	Message string `json:"message"`
 }
 
@@ -168,13 +202,136 @@ func (c *Client) Score(ctx context.Context, analysisID string, dependencies []an
 	for _, dependency := range dependencies {
 		payload.Dependencies = append(payload.Dependencies, toDependencySignal(dependency))
 	}
+	return c.score(ctx, "/score/heuristic", payload)
+}
 
+func (c *Client) ScoreModel(
+	ctx context.Context,
+	analysisID string,
+	dependencies []analysis.DependencyRecord,
+	artifact analysis.TrainingRunModelArtifact,
+) (map[string]analysis.RiskProfile, error) {
+	payload := scoreRequest{
+		AnalysisID:   analysisID,
+		Dependencies: make([]dependencySignalInput, 0, len(dependencies)),
+		ModelArtifact: &modelArtifactInput{
+			ModelName:      artifact.ModelName,
+			ModelVersion:   artifact.ModelVersion,
+			FeatureVersion: artifact.FeatureVersion,
+			TrainedAt:      artifact.TrainedAt,
+			Threshold:      artifact.Threshold,
+			FeatureNames:   append([]string(nil), artifact.FeatureNames...),
+			Coefficients:   append([]float64(nil), artifact.Coefficients...),
+			Intercept:      artifact.Intercept,
+			Standardization: standardizationInput{
+				Means:  append([]float64(nil), artifact.Standardization.Means...),
+				Scales: append([]float64(nil), artifact.Standardization.Scales...),
+			},
+			CalibrationBins: toCalibrationBinOutputs(artifact.CalibrationBins),
+		},
+	}
+	for _, dependency := range dependencies {
+		payload.Dependencies = append(payload.Dependencies, toDependencySignal(dependency))
+	}
+	return c.score(ctx, "/score/model", payload)
+}
+
+func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
+	payload := trainModelRequest{ModelName: "logistic-regression-baseline", Snapshots: snapshots}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return analysis.TrainingRunArtifact{}, err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/models/train", bytes.NewReader(body))
+	if err != nil {
+		return analysis.TrainingRunArtifact{}, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := c.httpClient.Do(request)
+	if err != nil {
+		return analysis.TrainingRunArtifact{}, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode >= http.StatusBadRequest {
+		body, _ := io.ReadAll(response.Body)
+		return analysis.TrainingRunArtifact{}, fmt.Errorf("training request failed: %s", strings.TrimSpace(string(body)))
+	}
+
+	var decoded trainModelResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return analysis.TrainingRunArtifact{}, err
+	}
+
+	run := analysis.TrainingRunArtifact{
+		Status:          decoded.Status,
+		ModelName:       decoded.ModelName,
+		ModelVersion:    decoded.ModelVersion,
+		TrainedAt:       decoded.TrainedAt,
+		CalibrationBins: toTrainingCalibrationBins(decoded.CalibrationBins),
+		Message:         decoded.Message,
+	}
+	if decoded.DatasetSummary != nil {
+		run.DatasetSummary = &analysis.TrainingRunDatasetSummary{
+			TotalRows:          decoded.DatasetSummary.TotalRows,
+			LabeledRows:        decoded.DatasetSummary.LabeledRows,
+			UnlabeledRows:      decoded.DatasetSummary.UnlabeledRows,
+			EarliestObservedAt: decoded.DatasetSummary.EarliestObservedAt,
+			LatestObservedAt:   decoded.DatasetSummary.LatestObservedAt,
+			FeatureNames:       decoded.DatasetSummary.FeatureNames,
+		}
+	}
+	if decoded.SplitSummary != nil {
+		run.SplitSummary = &analysis.TrainingRunSplitSummary{
+			TrainRows:      decoded.SplitSummary.TrainRows,
+			ValidationRows: decoded.SplitSummary.ValidationRows,
+			TestRows:       decoded.SplitSummary.TestRows,
+		}
+	}
+	if decoded.Metrics != nil {
+		run.Metrics = &analysis.TrainingRunMetrics{
+			Threshold:    decoded.Metrics.Threshold,
+			SampleCount:  decoded.Metrics.SampleCount,
+			PositiveRate: decoded.Metrics.PositiveRate,
+			Accuracy:     decoded.Metrics.Accuracy,
+			Precision:    decoded.Metrics.Precision,
+			Recall:       decoded.Metrics.Recall,
+			F1Score:      decoded.Metrics.F1Score,
+			BrierScore:   decoded.Metrics.BrierScore,
+			LogLoss:      decoded.Metrics.LogLoss,
+			RocAuc:       decoded.Metrics.RocAuc,
+		}
+	}
+	if decoded.Artifact != nil {
+		run.ModelArtifact = &analysis.TrainingRunModelArtifact{
+			ModelName:      decoded.Artifact.ModelName,
+			ModelVersion:   decoded.Artifact.ModelVersion,
+			FeatureVersion: decoded.Artifact.FeatureVersion,
+			TrainedAt:      decoded.Artifact.TrainedAt,
+			Threshold:      decoded.Artifact.Threshold,
+			FeatureNames:   append([]string(nil), decoded.Artifact.FeatureNames...),
+			Coefficients:   append([]float64(nil), decoded.Artifact.Coefficients...),
+			Intercept:      decoded.Artifact.Intercept,
+			Standardization: analysis.TrainingRunStandardizationProfile{
+				Means:  append([]float64(nil), decoded.Artifact.Standardization.Means...),
+				Scales: append([]float64(nil), decoded.Artifact.Standardization.Scales...),
+			},
+			CalibrationBins: toTrainingCalibrationBins(decoded.Artifact.CalibrationBins),
+		}
+	}
+
+	return run, nil
+}
+
+func (c *Client) score(ctx context.Context, path string, payload scoreRequest) (map[string]analysis.RiskProfile, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/score/heuristic", bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -221,91 +378,26 @@ func (c *Client) Score(ctx context.Context, analysisID string, dependencies []an
 		}
 
 		results[result.DependencyID] = analysis.RiskProfile{
-			InactivityRiskScore:  result.RiskProfile.InactivityRiskScore,
-			SecurityPostureScore: result.RiskProfile.SecurityPostureScore,
-			ConfidenceScore:      result.RiskProfile.ConfidenceScore,
-			RiskBucket:           analysis.RiskBucket(result.RiskProfile.RiskBucket),
-			ActionLevel:          analysis.ActionLevel(result.RiskProfile.ActionLevel),
-			Caveats:              result.RiskProfile.Caveats,
-			MissingSignals:       result.RiskProfile.MissingSignals,
-			ExplanationFactors:   factors,
-			Evidence:             evidence,
+			InactivityRiskScore:        result.RiskProfile.InactivityRiskScore,
+			MaintenanceOutlook12MScore: result.RiskProfile.MaintenanceOutlook12MScore,
+			SecurityPostureScore:       result.RiskProfile.SecurityPostureScore,
+			ConfidenceScore:            result.RiskProfile.ConfidenceScore,
+			RiskBucket:                 analysis.RiskBucket(result.RiskProfile.RiskBucket),
+			ActionLevel:                analysis.ActionLevel(result.RiskProfile.ActionLevel),
+			Caveats:                    result.RiskProfile.Caveats,
+			MissingSignals:             result.RiskProfile.MissingSignals,
+			ExplanationFactors:         factors,
+			Evidence:                   evidence,
 		}
 	}
 
 	return results, nil
 }
 
-func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
-	payload := trainModelRequest{ModelName: "logistic-regression-baseline", Snapshots: snapshots}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return analysis.TrainingRunArtifact{}, err
-	}
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/models/train", bytes.NewReader(body))
-	if err != nil {
-		return analysis.TrainingRunArtifact{}, err
-	}
-	request.Header.Set("Content-Type", "application/json")
-
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return analysis.TrainingRunArtifact{}, err
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode >= http.StatusBadRequest {
-		body, _ := io.ReadAll(response.Body)
-		return analysis.TrainingRunArtifact{}, fmt.Errorf("training request failed: %s", strings.TrimSpace(string(body)))
-	}
-
-	var decoded trainModelResponse
-	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
-		return analysis.TrainingRunArtifact{}, err
-	}
-
-	run := analysis.TrainingRunArtifact{
-		Status:          decoded.Status,
-		ModelName:       decoded.ModelName,
-		ModelVersion:    decoded.ModelVersion,
-		TrainedAt:       decoded.TrainedAt,
-		CalibrationBins: make([]analysis.TrainingCalibrationBin, 0, len(decoded.CalibrationBins)),
-		Message:         decoded.Message,
-	}
-	if decoded.DatasetSummary != nil {
-		run.DatasetSummary = &analysis.TrainingRunDatasetSummary{
-			TotalRows:          decoded.DatasetSummary.TotalRows,
-			LabeledRows:        decoded.DatasetSummary.LabeledRows,
-			UnlabeledRows:      decoded.DatasetSummary.UnlabeledRows,
-			EarliestObservedAt: decoded.DatasetSummary.EarliestObservedAt,
-			LatestObservedAt:   decoded.DatasetSummary.LatestObservedAt,
-			FeatureNames:       decoded.DatasetSummary.FeatureNames,
-		}
-	}
-	if decoded.SplitSummary != nil {
-		run.SplitSummary = &analysis.TrainingRunSplitSummary{
-			TrainRows:      decoded.SplitSummary.TrainRows,
-			ValidationRows: decoded.SplitSummary.ValidationRows,
-			TestRows:       decoded.SplitSummary.TestRows,
-		}
-	}
-	if decoded.Metrics != nil {
-		run.Metrics = &analysis.TrainingRunMetrics{
-			Threshold:    decoded.Metrics.Threshold,
-			SampleCount:  decoded.Metrics.SampleCount,
-			PositiveRate: decoded.Metrics.PositiveRate,
-			Accuracy:     decoded.Metrics.Accuracy,
-			Precision:    decoded.Metrics.Precision,
-			Recall:       decoded.Metrics.Recall,
-			F1Score:      decoded.Metrics.F1Score,
-			BrierScore:   decoded.Metrics.BrierScore,
-			LogLoss:      decoded.Metrics.LogLoss,
-			RocAuc:       decoded.Metrics.RocAuc,
-		}
-	}
-	for _, bin := range decoded.CalibrationBins {
-		run.CalibrationBins = append(run.CalibrationBins, analysis.TrainingCalibrationBin{
+func toCalibrationBinOutputs(bins []analysis.TrainingCalibrationBin) []calibrationBinOutput {
+	outputs := make([]calibrationBinOutput, 0, len(bins))
+	for _, bin := range bins {
+		outputs = append(outputs, calibrationBinOutput{
 			LowerBound:        bin.LowerBound,
 			UpperBound:        bin.UpperBound,
 			Count:             bin.Count,
@@ -313,8 +405,21 @@ func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSn
 			EmpiricalRate:     bin.EmpiricalRate,
 		})
 	}
+	return outputs
+}
 
-	return run, nil
+func toTrainingCalibrationBins(bins []calibrationBinOutput) []analysis.TrainingCalibrationBin {
+	outputs := make([]analysis.TrainingCalibrationBin, 0, len(bins))
+	for _, bin := range bins {
+		outputs = append(outputs, analysis.TrainingCalibrationBin{
+			LowerBound:        bin.LowerBound,
+			UpperBound:        bin.UpperBound,
+			Count:             bin.Count,
+			AveragePrediction: bin.AveragePrediction,
+			EmpiricalRate:     bin.EmpiricalRate,
+		})
+	}
+	return outputs
 }
 
 func toDependencySignal(dependency analysis.DependencyRecord) dependencySignalInput {
@@ -346,11 +451,12 @@ func toDependencySignal(dependency analysis.DependencyRecord) dependencySignalIn
 	}
 
 	if dependency.Scorecard != nil {
-		checks := make([]scorecardCheckInput, 0, len(dependency.Scorecard.Checks))
-		for _, check := range dependency.Scorecard.Checks {
+		normalizedScorecard := analysis.NormalizeScorecardSnapshot(dependency.Scorecard)
+		checks := make([]scorecardCheckInput, 0, len(normalizedScorecard.Checks))
+		for _, check := range normalizedScorecard.Checks {
 			checks = append(checks, scorecardCheckInput{Name: check.Name, Score: check.Score, Reason: check.Reason})
 		}
-		input.Scorecard = &scorecardSnapshotInput{Score: dependency.Scorecard.Score, Checks: checks}
+		input.Scorecard = &scorecardSnapshotInput{Score: normalizedScorecard.Score, Checks: checks}
 	}
 
 	return input
