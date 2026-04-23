@@ -64,6 +64,10 @@ export const modelMetricGlossary: InfoChipItem[] = [
     description: "A calibration-sensitive probability error metric. Lower is better, which is why it matters for thesis-style reliability claims."
   },
   {
+    label: "Inactive 12m rate",
+    description: "The share of positive labels in the evaluation slice. It tells you how much true inactivity pressure is present in the held-out set."
+  },
+  {
     label: "F1",
     description: "The balance between precision and recall once a classification threshold is chosen."
   },

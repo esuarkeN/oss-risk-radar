@@ -18,6 +18,7 @@ This repository now contains a working phase-2 vertical slice with:
 - durable analysis jobs with retryable lifecycle state in PostgreSQL
 - dependency enrichment through pluggable deps.dev, GitHub, and OpenSSF Scorecard adapters
 - explainable heuristic scoring plus ML-ready feature extraction and training utilities
+- a historical dataset builder that exports quarter-based OSS maintenance training snapshots for the existing ML pipeline
 - dependency overview, richer filtering, raw signal display, path exploration, and graph context in the frontend
 
 ## Monorepo structure
@@ -87,6 +88,9 @@ OSS Risk Radar is not framed as a vulnerability scanner or a definitive trust sc
 - `npm run dev` to start the full stack
 - `npm run test:api` to run Go tests
 - `npm run test:scoring` to run Python tests
+- `npm run ml:dataset -- build-all --seed-file <path> --gharchive-source <path> --output-dir tmp/training/oss-maintenance` to build a historical maintenance dataset
+- `npm run ml:seed:foundation -- --target-repositories 2000 --github-token <token>` to generate a repository foundation seed directly from the GitHub Search API
+- `npm run ml:bootstrap -- --gharchive-source <path>` to build `tmp/training/snapshots.json`, trigger training, and verify cached run artifacts under `tmp/training/runs`
 - `npm run check:web` to lint and build the frontend
 - `powershell -ExecutionPolicy Bypass -File scripts/dev/validate-scaffold.ps1` to validate the repo scaffold
 

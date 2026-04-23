@@ -7,10 +7,12 @@ from app.schemas.score import (
     FeaturesExtractResponse,
     ModelTrainRequest,
     ModelTrainResponse,
+    ScoreModelRequest,
     ScoreHeuristicRequest,
     ScoreHeuristicResponse,
 )
 from app.scoring.heuristic import score_dependency, scoring_timestamp
+from app.scoring.model import score_dependency_with_model
 from app.training.pipeline import TrainingRunConfig, run_training_pipeline
 
 router = APIRouter()
@@ -37,6 +39,17 @@ def ready() -> dict[str, str]:
 @router.post("/score/heuristic", response_model=ScoreHeuristicResponse)
 def score_heuristic(request: ScoreHeuristicRequest) -> ScoreHeuristicResponse:
     results = [score_dependency(dependency) for dependency in request.dependencies]
+    return ScoreHeuristicResponse(
+        analysis_id=request.analysis_id,
+        scoring_version=request.scoring_version,
+        generated_at=scoring_timestamp(),
+        results=results,
+    )
+
+
+@router.post("/score/model", response_model=ScoreHeuristicResponse)
+def score_model(request: ScoreModelRequest) -> ScoreHeuristicResponse:
+    results = [score_dependency_with_model(dependency, request.model_artifact) for dependency in request.dependencies]
     return ScoreHeuristicResponse(
         analysis_id=request.analysis_id,
         scoring_version=request.scoring_version,
@@ -83,5 +96,6 @@ def train_model(request: ModelTrainRequest) -> ModelTrainResponse:
         split_summary=result.split_summary,
         metrics=result.metrics,
         calibration_bins=result.calibration_bins,
+        artifact=result.artifact,
         message=result.note,
     )

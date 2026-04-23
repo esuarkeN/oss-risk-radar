@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { InfoChipGroup } from "@/components/info-chip-group";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getTrainingDatasetSummary, listAnalyses } from "@/lib/api";
-import { formatConfidence, formatDate, formatRiskScore } from "@/lib/format";
+import { formatConfidence, formatDate, formatOutlookScore, formatRiskScore } from "@/lib/format";
 import { heuristicSignalGlossary } from "@/lib/metric-glossary";
 import type { AnalysisRecord, DependencyRecord, TrainingDatasetSummary } from "@/lib/types";
 
@@ -19,6 +20,7 @@ interface RepositoryRollup {
   packageCount: number;
   analysisCount: number;
   lastPushAt?: string;
+  avgOutlook12m: number;
   avgRisk: number;
   avgSecurity: number;
   avgConfidence: number;
@@ -32,6 +34,7 @@ interface PackageRollup {
   ecosystem: string;
   analysisCount: number;
   versionCount: number;
+  avgOutlook12m: number;
   avgRisk: number;
   avgSecurity: number;
   maxRisk: number;
@@ -39,7 +42,21 @@ interface PackageRollup {
   lastSeenAt?: string;
 }
 
+interface DependencyRankingRow {
+  key: string;
+  analysisId: string;
+  dependencyId: string;
+  packageName: string;
+  packageVersion: string;
+  ecosystem: string;
+  repositoryName?: string;
+  outlook12m: number;
+  risk: number;
+  confidence: number;
+}
+
 const timeframeOptions = [90, 180, 365] as const;
+type OutlookSortDirection = "asc" | "desc";
 
 function daysSince(date?: string) {
   if (!date) {
@@ -68,6 +85,8 @@ export function RepositoryRadar() {
   const [dataset, setDataset] = useState<TrainingDatasetSummary | null>(null);
   const [timeframeDays, setTimeframeDays] = useState<(typeof timeframeOptions)[number]>(180);
   const [search, setSearch] = useState("");
+  const [repositoryOutlookSortDirection, setRepositoryOutlookSortDirection] = useState<OutlookSortDirection>("asc");
+  const [packageOutlookSortDirection, setPackageOutlookSortDirection] = useState<OutlookSortDirection>("asc");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -119,6 +138,7 @@ export function RepositoryRadar() {
     return Array.from(buckets.entries())
       .map(([key, items]) => {
         const repository = items[0]?.repository;
+        const outlookValues = items.map((item) => item.riskProfile?.maintenanceOutlook12mScore ?? 0);
         const riskValues = items.map((item) => item.riskProfile?.inactivityRiskScore ?? 0);
         const securityValues = items.map((item) => item.riskProfile?.securityPostureScore ?? 0);
         const confidenceValues = items.map((item) => item.riskProfile?.confidenceScore ?? 0);
@@ -136,6 +156,7 @@ export function RepositoryRadar() {
           packageCount,
           analysisCount,
           lastPushAt: repository?.lastPushAt,
+          avgOutlook12m: average(outlookValues),
           avgRisk: average(riskValues),
           avgSecurity: average(securityValues),
           avgConfidence: average(confidenceValues),
@@ -143,7 +164,7 @@ export function RepositoryRadar() {
           recentContributors90d: repository?.recentContributors90d
         } satisfies RepositoryRollup;
       })
-      .sort((left, right) => right.avgRisk - left.avgRisk);
+      .sort((left, right) => left.avgOutlook12m - right.avgOutlook12m);
   }, [dependencies]);
 
   const packageRows = useMemo<PackageRollup[]>(() => {
@@ -157,6 +178,7 @@ export function RepositoryRadar() {
 
     return Array.from(buckets.entries())
       .map(([key, items]) => {
+        const outlookValues = items.map((item) => item.riskProfile?.maintenanceOutlook12mScore ?? 0);
         const riskValues = items.map((item) => item.riskProfile?.inactivityRiskScore ?? 0);
         const securityValues = items.map((item) => item.riskProfile?.securityPostureScore ?? 0);
         const analysisCount = new Set(items.map((item) => item.analysisId)).size;
@@ -174,6 +196,7 @@ export function RepositoryRadar() {
           ecosystem: items[0]?.ecosystem ?? "unknown",
           analysisCount,
           versionCount: versions,
+          avgOutlook12m: average(outlookValues),
           avgRisk: average(riskValues),
           avgSecurity: average(securityValues),
           maxRisk: Math.max(...riskValues, 0),
@@ -181,7 +204,29 @@ export function RepositoryRadar() {
           lastSeenAt: latest
         } satisfies PackageRollup;
       })
-      .sort((left, right) => right.maxRisk - left.maxRisk);
+      .sort((left, right) => left.avgOutlook12m - right.avgOutlook12m);
+  }, [dependencies]);
+
+  const dependencyRows = useMemo<DependencyRankingRow[]>(() => {
+    return dependencies
+      .map((dependency) => ({
+        key: dependency.id,
+        analysisId: dependency.analysisId,
+        dependencyId: dependency.id,
+        packageName: dependency.packageName,
+        packageVersion: dependency.packageVersion,
+        ecosystem: dependency.ecosystem,
+        repositoryName: dependency.repository?.fullName,
+        outlook12m: dependency.riskProfile?.maintenanceOutlook12mScore ?? 0,
+        risk: dependency.riskProfile?.inactivityRiskScore ?? 0,
+        confidence: dependency.riskProfile?.confidenceScore ?? 0
+      }))
+      .sort((left, right) => {
+        if (left.outlook12m !== right.outlook12m) {
+          return left.outlook12m - right.outlook12m;
+        }
+        return right.risk - left.risk;
+      });
   }, [dependencies]);
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -201,6 +246,39 @@ export function RepositoryRadar() {
 
     return [pkg.packageName, pkg.ecosystem].join(" ").toLowerCase().includes(normalizedSearch);
   });
+
+  const filteredDependencyRows = dependencyRows.filter((dependency) => {
+    if (!normalizedSearch) {
+      return true;
+    }
+
+    return [dependency.packageName, dependency.packageVersion, dependency.ecosystem, dependency.repositoryName ?? ""]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedSearch);
+  });
+
+  const sortedRepositories = useMemo(() => {
+    return [...filteredRepositories].sort((left, right) => {
+      if (left.avgOutlook12m !== right.avgOutlook12m) {
+        return repositoryOutlookSortDirection === "asc"
+          ? left.avgOutlook12m - right.avgOutlook12m
+          : right.avgOutlook12m - left.avgOutlook12m;
+      }
+      return left.label.localeCompare(right.label);
+    });
+  }, [filteredRepositories, repositoryOutlookSortDirection]);
+
+  const sortedPackages = useMemo(() => {
+    return [...filteredPackages].sort((left, right) => {
+      if (left.avgOutlook12m !== right.avgOutlook12m) {
+        return packageOutlookSortDirection === "asc"
+          ? left.avgOutlook12m - right.avgOutlook12m
+          : right.avgOutlook12m - left.avgOutlook12m;
+      }
+      return left.packageName.localeCompare(right.packageName);
+    });
+  }, [filteredPackages, packageOutlookSortDirection]);
 
   const inactiveRepositories = useMemo(
     () =>
@@ -222,7 +300,7 @@ export function RepositoryRadar() {
           <div className="space-y-2">
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Repository radar</p>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">Every tracked repo and OSS package in one compact view.</h1>
-            <p className="text-sm text-muted">Filter by inactivity window, scan the riskiest repos first, and watch the training base expand when completed analyses land.</p>
+            <p className="text-sm text-muted">Filter by inactivity window, sort by 12-month outlook, and watch the training base expand when completed analyses land.</p>
           </div>
           <InfoChipGroup items={heuristicSignalGlossary} />
         </div>
@@ -280,6 +358,16 @@ export function RepositoryRadar() {
                 <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
                   <th className="pb-3 pr-4">Repo</th>
                   <th className="pb-3 pr-4">Window</th>
+                  <th className="pb-3 pr-4">
+                    <button
+                      type="button"
+                      onClick={() => setRepositoryOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
+                      className="inline-flex items-center gap-2 font-semibold text-muted transition hover:text-foreground"
+                    >
+                      12M outlook
+                      <span className="text-[10px] uppercase">{repositoryOutlookSortDirection === "asc" ? "low" : "high"}</span>
+                    </button>
+                  </th>
                   <th className="pb-3 pr-4">Risk</th>
                   <th className="pb-3 pr-4">Security</th>
                   <th className="pb-3 pr-4">Scorecard</th>
@@ -288,7 +376,7 @@ export function RepositoryRadar() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRepositories.map((repository) => {
+                {sortedRepositories.map((repository) => {
                   const ageDays = daysSince(repository.lastPushAt);
                   const inactive = repository.archived || ageDays === null || ageDays > timeframeDays;
 
@@ -302,6 +390,7 @@ export function RepositoryRadar() {
                         <Badge tone={inactive ? "high" : "low"}>{inactive ? "Inactive" : "Active"}</Badge>
                         <p className="mt-2 text-xs text-muted">{repository.archived ? "Archived" : ageDays !== null ? `${ageDays} days since push` : "No push date"}</p>
                       </td>
+                      <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(repository.avgOutlook12m)}</td>
                       <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(repository.avgRisk)}</td>
                       <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(repository.avgSecurity)}</td>
                       <td className="py-4 pr-4 text-foreground">{repository.scorecardScore ? repository.scorecardScore.toFixed(1) : "-"}</td>
@@ -346,6 +435,54 @@ export function RepositoryRadar() {
 
       <Card className="space-y-4">
         <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-muted">Dependency ranking</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Individual dependency outlook table</h2>
+          <p className="mt-2 text-sm text-muted">Every analyzed dependency stays clickable from the overview page so you can jump straight into the evidence trail.</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
+                <th className="pb-3 pr-4">Dependency</th>
+                <th className="pb-3 pr-4">Repo</th>
+                <th className="pb-3 pr-4">12M outlook</th>
+                <th className="pb-3 pr-4">Risk</th>
+                <th className="pb-3 pr-4">Confidence</th>
+                <th className="pb-3 pr-4">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDependencyRows.slice(0, 50).map((dependency) => (
+                <tr key={dependency.key} className="border-b border-line/70 align-top">
+                  <td className="py-4 pr-4">
+                    <p className="font-semibold text-foreground">{dependency.packageName}</p>
+                    <p className="mt-1 text-xs text-muted">{dependency.packageVersion} - {dependency.ecosystem}</p>
+                  </td>
+                  <td className="py-4 pr-4 text-muted">{dependency.repositoryName ?? "Unmapped"}</td>
+                  <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(dependency.outlook12m)}</td>
+                  <td className="py-4 pr-4 text-foreground">{formatRiskScore(dependency.risk)}</td>
+                  <td className="py-4 pr-4 text-foreground">{formatConfidence(dependency.confidence)}</td>
+                  <td className="py-4 pr-4">
+                    <Link
+                      href={`/analyses/${dependency.analysisId}/dependencies/${dependency.dependencyId}`}
+                      className="text-xs font-semibold uppercase tracking-[0.18em] text-accent"
+                    >
+                      Open detail
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!filteredDependencyRows.length ? <p className="text-sm text-muted">No dependency rows match the current search.</p> : null}
+        {filteredDependencyRows.length > 50 ? (
+          <p className="text-xs text-muted">Showing the first 50 ranked dependencies in the current filtered view.</p>
+        ) : null}
+      </Card>
+
+      <Card className="space-y-4">
+        <div>
           <p className="text-xs uppercase tracking-[0.24em] text-muted">OSS tools</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Package-level performance snapshot</h2>
         </div>
@@ -355,6 +492,16 @@ export function RepositoryRadar() {
               <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
                 <th className="pb-3 pr-4">Package</th>
                 <th className="pb-3 pr-4">Ecosystem</th>
+                <th className="pb-3 pr-4">
+                  <button
+                    type="button"
+                    onClick={() => setPackageOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
+                    className="inline-flex items-center gap-2 font-semibold text-muted transition hover:text-foreground"
+                  >
+                    12M outlook
+                    <span className="text-[10px] uppercase">{packageOutlookSortDirection === "asc" ? "low" : "high"}</span>
+                  </button>
+                </th>
                 <th className="pb-3 pr-4">Worst risk</th>
                 <th className="pb-3 pr-4">Avg risk</th>
                 <th className="pb-3 pr-4">Security</th>
@@ -363,13 +510,14 @@ export function RepositoryRadar() {
               </tr>
             </thead>
             <tbody>
-              {filteredPackages.map((pkg) => (
+              {sortedPackages.map((pkg) => (
                 <tr key={pkg.key} className="border-b border-line/70 align-top">
                   <td className="py-4 pr-4">
                     <p className="font-semibold text-foreground">{pkg.packageName}</p>
                     <p className="mt-1 text-xs text-muted">{pkg.versionCount} versions across analyses</p>
                   </td>
                   <td className="py-4 pr-4 text-foreground">{pkg.ecosystem}</td>
+                  <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(pkg.avgOutlook12m)}</td>
                   <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(pkg.maxRisk)}</td>
                   <td className="py-4 pr-4 text-foreground">{formatRiskScore(pkg.avgRisk)}</td>
                   <td className="py-4 pr-4 text-foreground">{formatRiskScore(pkg.avgSecurity)}</td>

@@ -10,6 +10,10 @@ export function formatRiskScore(value: number) {
   return Math.round(value).toString();
 }
 
+export function formatOutlookScore(value: number) {
+  return `${Math.round(value)}%`;
+}
+
 export function formatConfidence(value: number) {
   return `${Math.round(value * 100)}%`;
 }

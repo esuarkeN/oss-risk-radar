@@ -52,6 +52,24 @@ type TrainingCalibrationBin struct {
 	EmpiricalRate     float64 `json:"empiricalRate"`
 }
 
+type TrainingRunStandardizationProfile struct {
+	Means  []float64 `json:"means"`
+	Scales []float64 `json:"scales"`
+}
+
+type TrainingRunModelArtifact struct {
+	ModelName       string                            `json:"modelName"`
+	ModelVersion    string                            `json:"modelVersion"`
+	FeatureVersion  string                            `json:"featureVersion"`
+	TrainedAt       string                            `json:"trainedAt"`
+	Threshold       float64                           `json:"threshold"`
+	FeatureNames    []string                          `json:"featureNames"`
+	Coefficients    []float64                         `json:"coefficients"`
+	Intercept       float64                           `json:"intercept"`
+	Standardization TrainingRunStandardizationProfile `json:"standardization"`
+	CalibrationBins []TrainingCalibrationBin          `json:"calibrationBins"`
+}
+
 type TrainingRunArtifact struct {
 	DatasetPath     string                     `json:"datasetPath"`
 	DatasetHash     string                     `json:"datasetHash"`
@@ -65,11 +83,16 @@ type TrainingRunArtifact struct {
 	SplitSummary    *TrainingRunSplitSummary   `json:"splitSummary,omitempty"`
 	Metrics         *TrainingRunMetrics        `json:"metrics,omitempty"`
 	CalibrationBins []TrainingCalibrationBin   `json:"calibrationBins"`
+	ModelArtifact   *TrainingRunModelArtifact  `json:"modelArtifact,omitempty"`
 	Message         string                     `json:"message"`
 }
 
 type GetLatestTrainingRunResponse struct {
 	Run *TrainingRunArtifact `json:"run,omitempty"`
+}
+
+type ListTrainingRunsResponse struct {
+	Runs []TrainingRunArtifact `json:"runs"`
 }
 
 type TriggerTrainingRunRequest struct {
@@ -110,13 +133,14 @@ type TrainingRepositorySignalSnapshot struct {
 }
 
 type TrainingDependencySignalSnapshot struct {
-	DependencyID   string                            `json:"dependency_id"`
-	PackageName    string                            `json:"package_name"`
-	PackageVersion string                            `json:"package_version"`
-	Ecosystem      string                            `json:"ecosystem"`
-	Direct         bool                              `json:"direct"`
-	Repository     *TrainingRepositorySignalSnapshot `json:"repository,omitempty"`
-	Scorecard      *TrainingScorecardSnapshot        `json:"scorecard,omitempty"`
+	DependencyID       string                            `json:"dependency_id"`
+	PackageName        string                            `json:"package_name"`
+	PackageVersion     string                            `json:"package_version"`
+	Ecosystem          string                            `json:"ecosystem"`
+	Direct             bool                              `json:"direct"`
+	Repository         *TrainingRepositorySignalSnapshot `json:"repository,omitempty"`
+	Scorecard          *TrainingScorecardSnapshot        `json:"scorecard,omitempty"`
+	HistoricalFeatures map[string]float64                `json:"historical_features,omitempty"`
 }
 
 type TrainingSnapshotRecord struct {

@@ -18,10 +18,10 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.0.2
 
       - name: Dependency review
-        uses: actions/dependency-review-action@v4.3.5
+        uses: actions/dependency-review-action@v4.9.0
 
   codeql:
     name: codeql
@@ -39,15 +39,43 @@ jobs:
           - python
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6.0.2
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3.27.9
+        uses: github/codeql-action/init@v4.35.1
         with:
           languages: ${{ matrix.language }}
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3.27.9
+        uses: github/codeql-action/autobuild@v4.35.1
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3.27.9
+        uses: github/codeql-action/analyze@v4.35.1
+
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          hide-progress: true
+          scanners: vuln,misconfig,secret
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4.35.1
+        with:
+          sarif_file: trivy-results.sarif

@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 import { RiskBadge } from "@/components/risk-badge";
 import { Card } from "@/components/ui/card";
 import { getDependency } from "@/lib/api";
+import { dependencyDisplayName, dependencyDisplayVersion, isRepositoryProfile } from "@/lib/repository-profile";
 import type { DependencyRecord } from "@/lib/types";
-import { formatConfidence, formatRiskScore } from "@/lib/utils";
+import { formatConfidence, formatOutlookScore, formatRiskScore } from "@/lib/utils";
 
 interface DependencyDetailCardProps {
   dependencyId: string;
@@ -47,24 +48,34 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
     return <Card className="text-sm text-slate-500">Loading dependency detail...</Card>;
   }
 
+  const repositoryProfile = isRepositoryProfile(dependency);
+
   return (
     <div className="space-y-6">
       <Card className="space-y-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Dependency Detail</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{dependency.packageName}</h1>
-            <p className="mt-2 text-sm text-slate-500">Version {dependency.packageVersion} · {dependency.ecosystem.toUpperCase()} ecosystem</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{repositoryProfile ? "Repository Rating" : "Dependency Detail"}</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{dependencyDisplayName(dependency)}</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              {repositoryProfile
+                ? "Repository profile derived directly from the submitted GitHub URL and live public maintenance signals."
+                : `Version ${dependencyDisplayVersion(dependency)} · ${dependency.ecosystem.toUpperCase()} ecosystem`}
+            </p>
           </div>
           <div className="space-y-2 text-right">
             <RiskBadge bucket={dependency.riskProfile?.riskBucket ?? "medium"} />
             <p className="text-sm text-slate-600">Action: {dependency.riskProfile?.actionLevel ?? "pending"}</p>
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card className="bg-slate-50 p-5 shadow-none">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Inactivity Risk</p>
             <p className="mt-3 text-3xl font-semibold text-slate-950">{formatRiskScore(dependency.riskProfile?.inactivityRiskScore ?? 0)}</p>
+          </Card>
+          <Card className="bg-slate-50 p-5 shadow-none">
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">12m Outlook</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}</p>
           </Card>
           <Card className="bg-slate-50 p-5 shadow-none">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Security Posture</p>

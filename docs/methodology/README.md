@@ -31,3 +31,7 @@ OSS Risk Radar is not a vulnerability scanner and it does not claim that a packa
 ## Research path
 
 The first release should ship explainable heuristics. A future model can be layered on top once the snapshot store, labels, and evaluation pipeline are stable enough for time-aware training and calibration.
+
+## Historical dataset builder
+
+For the thesis dataset pipeline, see `docs/methodology/historical-dataset-builder.md`. It documents the new historical ingestion flow, intermediate tables, label definition, and leakage controls.

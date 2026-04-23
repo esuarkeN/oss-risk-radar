@@ -17,7 +17,7 @@ const submissionModes: Array<{
   {
     kind: "repository_url",
     label: "Repository URL",
-    description: "Analyze a GitHub repository and let the backend resolve dependency manifests and provider lookups."
+    description: "Rate a GitHub repository directly. If supported manifests are present, the analysis also adds dependency-level findings."
   },
   {
     kind: "upload",
@@ -88,7 +88,7 @@ export function CreateAnalysisForm() {
 
       const response = await createAnalysis({ submission });
       startTransition(() => {
-        router.push(`/analyses/${response.analysis.id}`);
+        router.push(response.reusedExistingAnalysis ? `/analyses/${response.analysis.id}?cached=1` : `/analyses/${response.analysis.id}`);
       });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Failed to create analysis.");
@@ -102,10 +102,10 @@ export function CreateAnalysisForm() {
       <form onSubmit={handleSubmit} className="rounded-[2rem] border border-white/10 bg-panel/85 p-7 shadow-soft backdrop-blur">
         <p className="text-sm uppercase tracking-[0.28em] text-accent">Decision Support for OSS Triage</p>
         <h1 className="mt-4 max-w-3xl text-4xl font-bold leading-tight tracking-tight md:text-5xl">
-          Submit repository or artifact evidence and review maintenance risk in a transparent workflow.
+          Run a repository rating or artifact-based analysis and review maintenance risk in a transparent workflow.
         </h1>
         <p className="mt-5 max-w-2xl text-base leading-8 text-muted md:text-lg">
-          The frontend keeps analysis intake explicit: repository URLs, uploaded dependency files, and a seeded demo each produce a traceable analysis record with visible caveats.
+          Repository URLs always create a scoreable repository profile. If the backend finds a supported manifest, it expands the same run with dependency-level evidence.
         </p>
 
         <div className="mt-8 grid gap-3 md:grid-cols-3">
@@ -133,7 +133,7 @@ export function CreateAnalysisForm() {
           {mode === "repository_url" ? (
             <div className="space-y-4">
               <div>
-                <label htmlFor="repositoryUrl" className="text-xs uppercase tracking-[0.2em] text-slate-300">
+              <label htmlFor="repositoryUrl" className="text-xs uppercase tracking-[0.2em] text-slate-300">
                   GitHub repository URL
                 </label>
                 <Input
@@ -145,6 +145,9 @@ export function CreateAnalysisForm() {
                   placeholder="https://github.com/org/repository"
                   className="mt-2 border-white/10 bg-white text-slate-950"
                 />
+                <p className="mt-3 text-sm text-slate-300">
+                  Paste a GitHub URL and run the rating. The analysis will always score the repository itself, even when no supported lockfile is found.
+                </p>
               </div>
               <label className="flex items-center gap-3 text-sm text-slate-300">
                 <input
@@ -223,7 +226,7 @@ export function CreateAnalysisForm() {
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={submitting} className="bg-accent/20 text-accent hover:bg-accent/30">
-            {submitting ? "Creating analysis..." : mode === "upload" ? "Upload and analyze" : mode === "demo" ? "Run demo analysis" : "Analyze repository"}
+            {submitting ? "Creating analysis..." : mode === "upload" ? "Upload and analyze" : mode === "demo" ? "Run demo analysis" : "Run repository rating"}
           </Button>
           <p className="text-sm text-slate-300">
             Analyses support triage and monitoring. They do not certify packages as safe or unsafe.

@@ -2,6 +2,8 @@ package analysis
 
 import (
 	"encoding/json"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -136,15 +138,16 @@ func NewRawSignal(key string, value any, source string, observedAt *time.Time) R
 }
 
 type RiskProfile struct {
-	InactivityRiskScore  float64             `json:"inactivityRiskScore"`
-	SecurityPostureScore float64             `json:"securityPostureScore"`
-	ConfidenceScore      float64             `json:"confidenceScore"`
-	RiskBucket           RiskBucket          `json:"riskBucket"`
-	ActionLevel          ActionLevel         `json:"actionLevel"`
-	Caveats              []string            `json:"caveats"`
-	MissingSignals       []string            `json:"missingSignals"`
-	ExplanationFactors   []ExplanationFactor `json:"explanationFactors"`
-	Evidence             []EvidenceItem      `json:"evidence"`
+	InactivityRiskScore        float64             `json:"inactivityRiskScore"`
+	MaintenanceOutlook12MScore float64             `json:"maintenanceOutlook12mScore"`
+	SecurityPostureScore       float64             `json:"securityPostureScore"`
+	ConfidenceScore            float64             `json:"confidenceScore"`
+	RiskBucket                 RiskBucket          `json:"riskBucket"`
+	ActionLevel                ActionLevel         `json:"actionLevel"`
+	Caveats                    []string            `json:"caveats"`
+	MissingSignals             []string            `json:"missingSignals"`
+	ExplanationFactors         []ExplanationFactor `json:"explanationFactors"`
+	Evidence                   []EvidenceItem      `json:"evidence"`
 }
 
 type DependencyEdge struct {
@@ -198,8 +201,10 @@ type JobRecord struct {
 }
 
 type CreateAnalysisResponse struct {
-	Analysis AnalysisRecord `json:"analysis"`
-	Job      JobRecord      `json:"job"`
+	Analysis               AnalysisRecord `json:"analysis"`
+	Job                    JobRecord      `json:"job"`
+	ReusedExistingAnalysis bool           `json:"reusedExistingAnalysis"`
+	ReusedFromAnalysisID   string         `json:"reusedFromAnalysisId,omitempty"`
 }
 
 type ListAnalysesResponse struct {
@@ -234,4 +239,30 @@ type GetDependencyGraphResponse struct {
 
 type ErrorResponse struct {
 	Error string `json:"error"`
+}
+
+func NormalizeRepositoryURL(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return strings.TrimSuffix(strings.TrimRight(trimmed, "/"), ".git")
+	}
+
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	parsed.Host = strings.ToLower(parsed.Host)
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+
+	normalizedPath := strings.TrimRight(parsed.EscapedPath(), "/")
+	normalizedPath = strings.TrimSuffix(normalizedPath, ".git")
+	if normalizedPath == "" {
+		normalizedPath = "/"
+	}
+	parsed.Path = normalizedPath
+
+	return parsed.String()
 }

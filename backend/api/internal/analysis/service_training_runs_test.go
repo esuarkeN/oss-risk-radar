@@ -17,7 +17,7 @@ type fakeTrainingScorer struct {
 func (f *fakeTrainingScorer) Score(_ context.Context, _ string, dependencies []analysis.DependencyRecord) (map[string]analysis.RiskProfile, error) {
 	result := make(map[string]analysis.RiskProfile, len(dependencies))
 	for _, dependency := range dependencies {
-		result[dependency.ID] = analysis.RiskProfile{InactivityRiskScore: 42, SecurityPostureScore: 71, ConfidenceScore: 0.82, RiskBucket: analysis.RiskBucket("medium"), ActionLevel: analysis.ActionLevel("monitor")}
+		result[dependency.ID] = analysis.RiskProfile{InactivityRiskScore: 42, MaintenanceOutlook12MScore: 58, SecurityPostureScore: 71, ConfidenceScore: 0.82, RiskBucket: analysis.RiskBucket("medium"), ActionLevel: analysis.ActionLevel("monitor")}
 	}
 	return result, nil
 }
@@ -51,7 +51,22 @@ func (f *fakeTrainingScorer) TrainModel(_ context.Context, snapshots []analysis.
 			RocAuc:       0.801,
 		},
 		CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.21, EmpiricalRate: 0.1}},
-		Message:         "fixture training run",
+		ModelArtifact: &analysis.TrainingRunModelArtifact{
+			ModelName:      "logistic-regression-baseline",
+			ModelVersion:   "0.2.0",
+			FeatureVersion: "feature-set-v1",
+			TrainedAt:      time.Now().UTC().Format(time.RFC3339Nano),
+			Threshold:      0.5,
+			FeatureNames:   []string{"repository_archived", "release_cadence_days"},
+			Coefficients:   []float64{0.8, -0.3},
+			Intercept:      -0.1,
+			Standardization: analysis.TrainingRunStandardizationProfile{
+				Means:  []float64{0.2, 120},
+				Scales: []float64{0.4, 25},
+			},
+			CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.21, EmpiricalRate: 0.1}},
+		},
+		Message: "fixture training run",
 	}, nil
 }
 
@@ -92,6 +107,9 @@ func TestTriggerTrainingRunCachesLatestArtifact(t *testing.T) {
 	if firstRun.ArtifactPath == "" || firstRun.DatasetHash == "" {
 		t.Fatalf("expected cached artifact metadata, got %#v", firstRun)
 	}
+	if firstRun.ModelArtifact == nil {
+		t.Fatalf("expected cached model artifact, got %#v", firstRun)
+	}
 
 	secondRun, reused, err := service.TriggerTrainingRun(ctx, false)
 	if err != nil {
@@ -113,5 +131,24 @@ func TestTriggerTrainingRunCachesLatestArtifact(t *testing.T) {
 	}
 	if latestRun == nil || latestRun.DatasetHash != firstRun.DatasetHash {
 		t.Fatalf("expected latest cached run, got %#v", latestRun)
+	}
+
+	forcedRun, reused, err := service.TriggerTrainingRun(ctx, true)
+	if err != nil {
+		t.Fatalf("TriggerTrainingRun forced call returned error: %v", err)
+	}
+	if reused {
+		t.Fatal("expected forced training run not to reuse cache")
+	}
+	if forcedRun.ArtifactPath == firstRun.ArtifactPath {
+		t.Fatalf("expected a new cached artifact path on force rerun, got %s", forcedRun.ArtifactPath)
+	}
+
+	history, err := service.ListTrainingRuns(ctx)
+	if err != nil {
+		t.Fatalf("ListTrainingRuns returned error: %v", err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("expected two cached training artifacts, got %d", len(history))
 	}
 }

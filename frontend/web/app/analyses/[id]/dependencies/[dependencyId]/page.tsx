@@ -6,7 +6,7 @@ import { EvidenceList, FactorList, RiskScorePill } from "@/components/analysis/d
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getDependencies, getDependency, getDependencyGraph } from "@/lib/api";
-import { formatConfidence, formatDate, formatScore, titleCase } from "@/lib/format";
+import { formatConfidence, formatDate, formatOutlookScore, formatScore, titleCase } from "@/lib/format";
 
 export default async function DependencyDetailPage({
   params
@@ -21,6 +21,9 @@ export default async function DependencyDetailPage({
       getDependencies(id),
       getDependencyGraph(id)
     ]);
+    const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
+    const graphEdgeCount = graph?.edges?.length ?? 0;
+    const missingSignals = dependency.riskProfile?.missingSignals ?? [];
 
     return (
       <div className="space-y-6">
@@ -44,7 +47,11 @@ export default async function DependencyDetailPage({
               <Badge tone="neutral">{titleCase(dependency.riskProfile?.actionLevel ?? "monitor")}</Badge>
               {dependency.parsedFromUploadId ? <Badge tone="neutral">Upload provenance attached</Badge> : null}
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">12m outlook</p>
+                <p className="mt-2 text-3xl font-bold text-slate-950">{formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}</p>
+              </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Security posture</p>
                 <p className="mt-2 text-3xl font-bold text-slate-950">{formatScore(dependency.riskProfile?.securityPostureScore ?? 0)}</p>
@@ -86,8 +93,8 @@ export default async function DependencyDetailPage({
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Coverage and caveats</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {dependency.riskProfile?.missingSignals.length ? (
-                  dependency.riskProfile.missingSignals.map((signal) => (
+                {missingSignals.length ? (
+                  missingSignals.map((signal) => (
                     <Badge key={signal} tone="neutral">
                       {signal}
                     </Badge>
@@ -109,7 +116,7 @@ export default async function DependencyDetailPage({
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Graph availability</p>
               <p className="mt-3 text-sm text-slate-600">
-                {graph?.nodes.length ?? dependencies.length} nodes and {graph?.edges.length ?? 0} edges are currently available for this analysis context.
+                {graphNodeCount} nodes and {graphEdgeCount} edges are currently available for this analysis context.
               </p>
             </div>
           </Card>

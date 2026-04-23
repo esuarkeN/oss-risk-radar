@@ -112,6 +112,14 @@ function runCompose(argsList, options = {}) {
   return result;
 }
 
+function runCommand(command, argsList) {
+  return spawnSync(command, argsList, {
+    cwd: rootDir,
+    shell: false,
+    encoding: "utf8"
+  });
+}
+
 async function canBindPort(port) {
   return await new Promise((resolvePort) => {
     const server = createServer();
@@ -128,6 +136,124 @@ async function canBindPort(port) {
   });
 }
 
+async function inspectPort(port) {
+  const owners = describePortOwners(port);
+  if (owners.length > 0) {
+    return { available: false, owners };
+  }
+
+  return { available: await canBindPort(port), owners: [] };
+}
+
+function findDockerOwners(port) {
+  const result = runCommand("docker", ["ps", "--format", "{{.Names}}\t{{.Ports}}"]);
+  if (result.error || result.status !== 0) {
+    return [];
+  }
+
+  const hostPortPattern = new RegExp(`:${port}(?:->|\\b)`);
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [name, ports = ""] = line.split("\t");
+      if (!name || !hostPortPattern.test(ports)) {
+        return [];
+      }
+      return [`docker container ${name} (${ports})`];
+    });
+}
+
+function findWindowsProcessOwners(port) {
+  const result = runCommand("netstat", ["-ano", "-p", "tcp"]);
+  if (result.error || result.status !== 0) {
+    return [];
+  }
+
+  const pids = new Set();
+  for (const rawLine of result.stdout.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    const columns = line.split(/\s+/);
+    if (columns.length < 5 || columns[0].toUpperCase() !== "TCP") {
+      continue;
+    }
+
+    const localAddress = columns[1];
+    const state = columns[3].toUpperCase();
+    const pid = columns[4];
+    if (state === "LISTENING" && localAddress.endsWith(`:${port}`)) {
+      pids.add(pid);
+    }
+  }
+
+  const owners = [];
+  for (const pid of pids) {
+    const task = runCommand("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"]);
+    const taskLine = task.stdout.trim().split(/\r?\n/)[0] ?? "";
+    const match = taskLine.match(/^"([^"]+)"/);
+    if (match) {
+      owners.push(`process ${match[1]} (pid ${pid})`);
+      continue;
+    }
+    owners.push(`pid ${pid}`);
+  }
+  return owners;
+}
+
+function findUnixProcessOwners(port) {
+  const lsof = runCommand("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN"]);
+  if (!lsof.error && lsof.status === 0) {
+    return lsof.stdout
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.split(/\s+/))
+      .filter((columns) => columns.length >= 2)
+      .map((columns) => `process ${columns[0]} (pid ${columns[1]})`);
+  }
+
+  const ss = runCommand("ss", ["-ltnp"]);
+  if (ss.error || ss.status !== 0) {
+    return [];
+  }
+
+  const hostPortPattern = new RegExp(`:${port}\\b`);
+  return ss.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("State") && hostPortPattern.test(line))
+    .map((line) => `socket ${line}`);
+}
+
+function describePortOwners(port) {
+  const owners = new Set(findDockerOwners(port));
+  const processOwners = process.platform === "win32"
+    ? findWindowsProcessOwners(port)
+    : findUnixProcessOwners(port);
+
+  for (const owner of processOwners) {
+    owners.add(owner);
+  }
+
+  return [...owners];
+}
+
+async function findAvailablePort(port, searchWindow = 25) {
+  for (let candidate = port + 1; candidate <= port + searchWindow; candidate += 1) {
+    const inspection = await inspectPort(candidate);
+    if (inspection.available) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 async function verifyPortsAreAvailable() {
   const env = readEnvConfig();
   const ports = [
@@ -140,9 +266,14 @@ async function verifyPortsAreAvailable() {
   const conflicts = [];
   for (const item of ports) {
     const port = parsePort(env.get(item.envKey), item.fallback);
-    const free = await canBindPort(port);
-    if (!free) {
-      conflicts.push({ ...item, port });
+    const inspection = await inspectPort(port);
+    if (!inspection.available) {
+      conflicts.push({
+        ...item,
+        port,
+        owners: inspection.owners,
+        suggestedPort: await findAvailablePort(port)
+      });
     }
   }
 
@@ -153,6 +284,12 @@ async function verifyPortsAreAvailable() {
   console.error("One or more required host ports are already in use:");
   for (const conflict of conflicts) {
     console.error(`- ${conflict.service}: ${conflict.port} (configure ${conflict.envKey} in .env to change it)`);
+    for (const owner of conflict.owners.slice(0, 4)) {
+      console.error(`  occupied by ${owner}`);
+    }
+    if (conflict.suggestedPort !== null) {
+      console.error(`  next free port: ${conflict.suggestedPort} (set ${conflict.envKey}=${conflict.suggestedPort})`);
+    }
   }
   console.error("If these ports belong to another OSS Risk Radar run, `npm run dev` already tried to stop that stack first.");
   console.error("If they belong to another app on your machine, stop that app or change the port values in .env and rerun `npm run dev`.");
