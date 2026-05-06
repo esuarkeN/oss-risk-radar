@@ -198,6 +198,20 @@ export interface TrainingDatasetSummary {
   uniquePackages: number;
   lastUpdatedAt?: string;
   autoCaptureEnabled: boolean;
+  repositories: TrainingDatasetRepositorySummary[];
+}
+
+export interface TrainingDatasetRepositorySummary {
+  rank: number;
+  fullName: string;
+  url: string;
+  snapshotCount: number;
+  packageCount: number;
+  analysisCount: number;
+  archived: boolean;
+  stars: number;
+  forks: number;
+  lastObservedAt?: string;
 }
 
 export interface GetTrainingDatasetSummaryResponse {

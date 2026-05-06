@@ -386,6 +386,7 @@ func TestRepositorySubmissionCreatesRepositoryProfileWithoutManifest(t *testing.
 	defer cancel()
 
 	now := time.Now().UTC()
+	tempDir := t.TempDir()
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
 		MethodologyVersion: "heuristic-v1",
 		Store:              storage.NewMemoryStore(),
@@ -433,9 +434,10 @@ func TestRepositorySubmissionCreatesRepositoryProfileWithoutManifest(t *testing.
 				},
 			},
 		},
-		UploadDir:          t.TempDir(),
-		WorkerPollInterval: 10 * time.Millisecond,
-		RetryDelay:         10 * time.Millisecond,
+		UploadDir:           tempDir,
+		TrainingDatasetPath: tempDir + "/snapshots.json",
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
 	})
 	service.Start(ctx)
 
@@ -464,6 +466,18 @@ func TestRepositorySubmissionCreatesRepositoryProfileWithoutManifest(t *testing.
 	}
 	if dependency.RiskProfile == nil {
 		t.Fatalf("expected repository profile to be scored, got %#v", dependency)
+	}
+
+	summary, err := service.GetTrainingDatasetSummary(ctx)
+	if err != nil {
+		t.Fatalf("GetTrainingDatasetSummary returned error: %v", err)
+	}
+	if len(summary.Repositories) != 1 {
+		t.Fatalf("expected one ranked training repository, got %#v", summary.Repositories)
+	}
+	repository := summary.Repositories[0]
+	if repository.Rank != 1 || repository.FullName != "facebook/react" || repository.SnapshotCount != 1 || repository.PackageCount != 1 || repository.AnalysisCount != 1 {
+		t.Fatalf("unexpected ranked training repository: %#v", repository)
 	}
 }
 

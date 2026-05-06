@@ -90,7 +90,9 @@ OSS Risk Radar is not framed as a vulnerability scanner or a definitive trust sc
 - `npm run test:scoring` to run Python tests
 - `npm run ml:dataset -- build-all --seed-file <path> --gharchive-source <path> --output-dir tmp/training/oss-maintenance` to build a historical maintenance dataset
 - `npm run ml:seed:foundation -- --target-repositories 2000 --github-token <token>` to generate a repository foundation seed directly from the GitHub Search API
-- `npm run ml:bootstrap -- --gharchive-source <path>` to build `tmp/training/snapshots.json`, trigger training, and verify cached run artifacts under `tmp/training/runs`
+- `npm run ml:dataset:foundation -- --github-token <token> --gharchive-source <path>` to build the larger repository-first dataset from the generated foundation seed
+- `npm run ml:bootstrap -- --gharchive-source <path>` to build from the small starter seed, trigger training, and verify cached run artifacts under `tmp/training/runs`
+- `npm run ml:bootstrap:foundation -- --github-token <token> --gharchive-source <path>` to build and train from the larger GitHub repository foundation seed
 - `npm run check:web` to lint and build the frontend
 - `powershell -ExecutionPolicy Bypass -File scripts/dev/validate-scaffold.ps1` to validate the repo scaffold
 

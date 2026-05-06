@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { ToastProvider } from "@/components/toast-provider";
+
 import "./globals.css";
 
 const themeBootScript = `
@@ -34,9 +36,11 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
       <body className="bg-background font-sans text-foreground antialiased transition-colors duration-200">
-        <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-4 py-6 lg:px-8 lg:py-8">
-          {children}
-        </main>
+        <ToastProvider>
+          <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-4 py-6 lg:px-8 lg:py-8">
+            {children}
+          </main>
+        </ToastProvider>
       </body>
     </html>
   );

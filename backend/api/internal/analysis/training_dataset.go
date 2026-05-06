@@ -11,6 +11,18 @@ import (
 	"time"
 )
 
+type trainingRepositoryAggregate struct {
+	fullName       string
+	url            string
+	snapshotCount  int
+	packageKeys    map[string]struct{}
+	analysisIDs    map[string]struct{}
+	archived       bool
+	stars          int
+	forks          int
+	lastObservedAt string
+}
+
 type trainingDatasetEnvelope struct {
 	UpdatedAt time.Time                `json:"updatedAt"`
 	Snapshots []TrainingSnapshotRecord `json:"snapshots"`
@@ -37,12 +49,42 @@ func (m *trainingDatasetManager) Summary() (TrainingDatasetSummary, error) {
 	uniqueAnalyses := map[string]struct{}{}
 	uniqueRepositories := map[string]struct{}{}
 	uniquePackages := map[string]struct{}{}
+	repositoryAggregates := map[string]*trainingRepositoryAggregate{}
 	for _, snapshot := range dataset.Snapshots {
 		uniqueAnalyses[snapshot.AnalysisID] = struct{}{}
 		packageKey := snapshot.Dependency.Ecosystem + "|" + snapshot.Dependency.PackageName
 		uniquePackages[packageKey] = struct{}{}
 		if snapshot.Dependency.Repository != nil && snapshot.Dependency.Repository.URL != "" {
-			uniqueRepositories[snapshot.Dependency.Repository.URL] = struct{}{}
+			repository := snapshot.Dependency.Repository
+			repositoryKey := repository.URL
+			uniqueRepositories[repositoryKey] = struct{}{}
+			aggregate := repositoryAggregates[repositoryKey]
+			if aggregate == nil {
+				aggregate = &trainingRepositoryAggregate{
+					fullName:    repository.FullName,
+					url:         repository.URL,
+					packageKeys: map[string]struct{}{},
+					analysisIDs: map[string]struct{}{},
+				}
+				repositoryAggregates[repositoryKey] = aggregate
+			}
+
+			if aggregate.fullName == "" {
+				aggregate.fullName = repository.FullName
+			}
+			aggregate.snapshotCount++
+			aggregate.packageKeys[packageKey] = struct{}{}
+			aggregate.analysisIDs[snapshot.AnalysisID] = struct{}{}
+			aggregate.archived = aggregate.archived || repository.Archived
+			if repository.Stars > aggregate.stars {
+				aggregate.stars = repository.Stars
+			}
+			if repository.Forks > aggregate.forks {
+				aggregate.forks = repository.Forks
+			}
+			if snapshot.ObservedAt > aggregate.lastObservedAt {
+				aggregate.lastObservedAt = snapshot.ObservedAt
+			}
 		}
 	}
 
@@ -60,7 +102,40 @@ func (m *trainingDatasetManager) Summary() (TrainingDatasetSummary, error) {
 		UniquePackages:     len(uniquePackages),
 		LastUpdatedAt:      lastUpdatedAt,
 		AutoCaptureEnabled: true,
+		Repositories:       rankedTrainingRepositories(repositoryAggregates),
 	}, nil
+}
+
+func rankedTrainingRepositories(aggregates map[string]*trainingRepositoryAggregate) []TrainingDatasetRepositorySummary {
+	rows := make([]TrainingDatasetRepositorySummary, 0, len(aggregates))
+	for _, aggregate := range aggregates {
+		rows = append(rows, TrainingDatasetRepositorySummary{
+			FullName:       aggregate.fullName,
+			URL:            aggregate.url,
+			SnapshotCount:  aggregate.snapshotCount,
+			PackageCount:   len(aggregate.packageKeys),
+			AnalysisCount:  len(aggregate.analysisIDs),
+			Archived:       aggregate.archived,
+			Stars:          aggregate.stars,
+			Forks:          aggregate.forks,
+			LastObservedAt: aggregate.lastObservedAt,
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].SnapshotCount != rows[j].SnapshotCount {
+			return rows[i].SnapshotCount > rows[j].SnapshotCount
+		}
+		if rows[i].PackageCount != rows[j].PackageCount {
+			return rows[i].PackageCount > rows[j].PackageCount
+		}
+		return rows[i].FullName < rows[j].FullName
+	})
+
+	for i := range rows {
+		rows[i].Rank = i + 1
+	}
+	return rows
 }
 
 func (m *trainingDatasetManager) LoadSnapshots() ([]TrainingSnapshotRecord, string, error) {

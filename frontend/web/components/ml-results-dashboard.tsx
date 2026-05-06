@@ -1,121 +1,112 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 
 import { CalibrationCurveChart } from "@/components/charts/calibration-curve-chart";
 import { TrainingMetricHistoryChart } from "@/components/charts/training-metric-history-chart";
 import { InfoChipGroup } from "@/components/info-chip-group";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getLatestTrainingRun, getTrainingDatasetSummary, listTrainingRuns, triggerTrainingRun } from "@/lib/api";
+import { useToast } from "@/components/toast-provider";
+import { triggerTrainingRun } from "@/lib/api";
 import { formatDate } from "@/lib/format";
+import {
+  calibrationDataFromRun,
+  formatTrainingMetric,
+  formatTrainingRate,
+  formatTrainingSplit,
+  metricHistoryFromRuns,
+  shortTrainingHash,
+} from "@/lib/ml-evaluation";
 import { modelMetricGlossary } from "@/lib/metric-glossary";
-import type { TrainingDatasetSummary, TrainingRunArtifact } from "@/lib/types";
+import { useMlEvaluationState } from "@/lib/use-ml-evaluation-state";
+import { cn } from "@/lib/utils";
 
-function formatMetric(value: number) {
-  return value.toFixed(3);
+function StatusPill({ status }: { status?: string }) {
+  const label = status ?? "No cached run";
+  const styles =
+    status === "completed"
+      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+      : status === "insufficient_data"
+        ? "border-amber-300/30 bg-amber-300/10 text-amber-100"
+        : "border-white/15 bg-white/10 text-white";
+
+  return <span className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]", styles)}>{label.replace(/_/g, " ")}</span>;
 }
 
-function shortHash(value?: string) {
-  if (!value) {
-    return "Pending";
-  }
-  return value.slice(0, 12);
+function MetricCard({
+  label,
+  value,
+  detail,
+  accent,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  accent?: "primary" | "secondary" | "neutral";
+}) {
+  const accentClass =
+    accent === "primary"
+      ? "border-accent/20 bg-[linear-gradient(180deg,hsl(var(--panel))_0%,hsl(var(--panel-alt))_100%)]"
+      : accent === "secondary"
+        ? "border-emerald-400/20 bg-[linear-gradient(180deg,hsl(var(--panel))_0%,hsl(var(--panel-alt))_100%)]"
+        : "";
+
+  return (
+    <Card className={cn("space-y-2", accentClass)}>
+      <p className="text-xs uppercase tracking-[0.24em] text-muted">{label}</p>
+      <p className="text-4xl font-semibold tracking-tight text-foreground">{value}</p>
+      <p className="text-sm text-muted">{detail}</p>
+    </Card>
+  );
 }
 
-function calibrationDataFromRun(run: TrainingRunArtifact | null) {
-  if (!run?.calibrationBins?.length) {
-    return [];
-  }
-
-  return run.calibrationBins.map((bin) => ({
-    label: `${bin.lowerBound.toFixed(2)}-${bin.upperBound.toFixed(2)}`,
-    predicted: bin.averagePrediction,
-    observed: bin.empiricalRate,
-    ideal: bin.averagePrediction,
-  }));
-}
-
-function metricHistoryFromRuns(runs: TrainingRunArtifact[]) {
-  return runs
-    .filter((run) => run.metrics)
-    .map((run, index) => ({
-      label: `Run ${index + 1}`,
-      auroc: run.metrics?.rocAuc ?? 0,
-      brier: run.metrics?.brierScore ?? 0
-    }));
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+      <p className="text-xs uppercase tracking-[0.18em] text-muted">{label}</p>
+      <p className="mt-2 text-sm font-semibold text-foreground">{value}</p>
+    </div>
+  );
 }
 
 export function MlResultsDashboard() {
-  const [dataset, setDataset] = useState<TrainingDatasetSummary | null>(null);
-  const [run, setRun] = useState<TrainingRunArtifact | null>(null);
-  const [runs, setRuns] = useState<TrainingRunArtifact[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { dataset, latestRun: run, runs, loading, error, refresh } = useMlEvaluationState();
+  const { toast } = useToast();
   const [running, setRunning] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [datasetSummary, latestRun, runHistory] = await Promise.all([
-          getTrainingDatasetSummary().catch(() => null),
-          getLatestTrainingRun().catch(() => null),
-          listTrainingRuns().catch(() => [])
-        ]);
-
-        if (cancelled) {
-          return;
-        }
-
-        startTransition(() => {
-          setDataset(datasetSummary);
-          setRun(latestRun);
-          setRuns(runHistory);
-          setError(null);
-          setLoading(false);
-        });
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Failed to load ML evaluation state.");
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const calibrationData = useMemo(() => calibrationDataFromRun(run), [run]);
   const metricHistory = useMemo(() => metricHistoryFromRuns(runs), [runs]);
-  const hasMetrics = Boolean(run?.metrics);
-  const canTrigger = (dataset?.totalSnapshots ?? 0) > 0 && !loading && !running;
+
+  const datasetReady = (dataset?.totalSnapshots ?? 0) > 0;
+  const canTrigger = datasetReady && !running;
+  const featureCount = run?.datasetSummary?.featureNames.length ?? 0;
+  const observedWindow =
+    run?.datasetSummary?.earliestObservedAt && run?.datasetSummary?.latestObservedAt
+      ? `${formatDate(run.datasetSummary.earliestObservedAt)} to ${formatDate(run.datasetSummary.latestObservedAt)}`
+      : "Waiting for first completed artifact";
 
   async function handleTrigger(force = false) {
     setRunning(true);
-    setNotice(null);
-    setError(null);
 
     try {
       const response = await triggerTrainingRun(force);
-      const history = await listTrainingRuns().catch(() => []);
-      startTransition(() => {
-        setRun(response.run);
-        setRuns(history);
-        setNotice(
-          response.reusedCachedRun
-            ? "Latest cached run reused because the training dataset did not change."
-            : "Training run finished and the result was cached as the new latest artifact."
-        );
+      await refresh({ background: true });
+      toast({
+        tone: "success",
+        title: response.reusedCachedRun ? "Latest cached run reused" : "Training run finished",
+        description: response.reusedCachedRun
+          ? "The dataset hash did not change, so the most recent cached artifact stayed active."
+          : "A fresh training artifact was cached and is now visible across the ML pages.",
       });
     } catch (triggerError) {
-      setError(triggerError instanceof Error ? triggerError.message : "Failed to trigger a training run.");
+      toast({
+        tone: "error",
+        title: "Training trigger failed",
+        description: triggerError instanceof Error ? triggerError.message : "The ML training endpoint did not return a usable artifact.",
+      });
     } finally {
       setRunning(false);
     }
@@ -123,109 +114,127 @@ export function MlResultsDashboard() {
 
   return (
     <div className="space-y-6">
-      <Card className="space-y-4 overflow-hidden border-line bg-[linear-gradient(135deg,#07111f_0%,#12334f_45%,#133f57_100%)] text-white">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      {error ? (
+        <Card className="flex flex-col gap-4 border-rose-400/25 bg-rose-400/10 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">ML state failed to load</p>
+            <p className="mt-1 text-sm text-muted">{error}</p>
+          </div>
+          <Button onClick={() => void refresh()}>Retry</Button>
+        </Card>
+      ) : null}
+
+      <section className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
+        <Card className="space-y-5 overflow-hidden border-line bg-[linear-gradient(135deg,#081120_0%,#12314a_58%,#164a55_100%)] text-white">
           <div className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-300">ML Results</p>
-            <h1 className="max-w-4xl text-3xl font-semibold tracking-tight lg:text-4xl">Live training artifacts with cache-aware reruns.</h1>
-            <p className="max-w-3xl text-sm text-slate-200">
-              Trigger a run from the current training snapshot base, reuse the last artifact when the dataset hash is unchanged, and keep the latest evaluation visible in the app.
-            </p>
+            <StatusPill status={run?.status} />
+            <div>
+              <h2 className="text-3xl font-semibold tracking-tight">Latest training result without the dashboard sprawl.</h2>
+              <p className="mt-2 max-w-3xl text-sm text-slate-200">
+                Trigger training here, keep the key metrics above the fold, and push data inspection and artifact history into their own pages.
+              </p>
+            </div>
           </div>
-          <InfoChipGroup items={modelMetricGlossary} />
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Current status</p>
-            <p className="mt-3 text-xl font-semibold text-white">{run?.status ?? "No cached run"}</p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Training base</p>
+              <p className="mt-2 text-lg font-semibold text-white">{dataset?.totalSnapshots ?? 0} snapshots</p>
+              <p className="text-sm text-slate-200">{dataset?.uniqueRepositories ?? 0} repositories in the current base</p>
+            </div>
+            <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Dataset hash</p>
+              <p className="mt-2 text-lg font-semibold text-white">{shortTrainingHash(run?.datasetHash)}</p>
+              <p className="text-sm text-slate-200">{run?.cachedAt ? `Cached ${formatDate(run.cachedAt)}` : "No cached artifact yet"}</p>
+            </div>
+            <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Time-aware split</p>
+              <p className="mt-2 text-lg font-semibold text-white">{formatTrainingSplit(run)}</p>
+              <p className="text-sm text-slate-200">{run?.metrics ? `${run.metrics.sampleCount} held-out samples evaluated` : "Split appears after the first completed run"}</p>
+            </div>
           </div>
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Training base</p>
-            <p className="mt-3 text-sm font-semibold text-white">{dataset?.totalSnapshots ?? 0} snapshots / {dataset?.uniqueAnalyses ?? 0} analyses</p>
+
+          <div className="flex flex-wrap gap-3">
+            <Button className="border-white/20 bg-white/10 text-white hover:border-white/40 hover:bg-white/15" onClick={() => void handleTrigger(false)} disabled={!canTrigger}>
+              {running ? "Running..." : run ? "Reuse latest or run" : "Run training"}
+            </Button>
+            <Button className="border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/10" onClick={() => void handleTrigger(true)} disabled={!canTrigger}>
+              Force rerun
+            </Button>
+            <Link
+              href="/ml-evaluation/dataset"
+              className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
+            >
+              Inspect dataset
+            </Link>
+            <Link
+              href="/ml-evaluation/runs"
+              className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
+            >
+              Inspect runs
+            </Link>
           </div>
-          <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Dataset hash</p>
-            <p className="mt-3 text-sm font-semibold text-white">{shortHash(run?.datasetHash)}</p>
-          </div>
-        </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Button className="border-white/20 bg-white/10 text-white hover:border-white/40 hover:bg-white/15" onClick={() => void handleTrigger(false)} disabled={!canTrigger}>
-            {running ? "Running..." : run ? "Reuse latest or run" : "Run training"}
-          </Button>
-          <Button className="border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/10" onClick={() => void handleTrigger(true)} disabled={!canTrigger}>
-            Force rerun
-          </Button>
-        </div>
-
-        {notice ? <p className="text-sm text-emerald-200">{notice}</p> : null}
-        {error ? <p className="text-sm text-rose-200">{error}</p> : null}
-        {!canTrigger && (dataset?.totalSnapshots ?? 0) === 0 && !loading ? (
-          <p className="text-sm text-slate-200">Run repository analyses first so the training snapshot base has data to work with.</p>
-        ) : null}
-      </Card>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">Model</p>
-          <p className="text-xl font-semibold tracking-tight text-foreground">{run?.modelName ?? "Pending"}</p>
-          <p className="text-sm text-muted">{run?.modelVersion ?? "No artifact yet"}</p>
+          {!datasetReady && !loading ? (
+            <p className="text-sm text-slate-200">Run repository analyses first so the training snapshot base has enough data to build from.</p>
+          ) : null}
         </Card>
-        <Card className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">Labeled rows</p>
-          <p className="text-4xl font-semibold tracking-tight text-foreground">{run?.datasetSummary?.labeledRows ?? 0}</p>
-          <p className="text-sm text-muted">Unlabeled: {run?.datasetSummary?.unlabeledRows ?? 0}</p>
-        </Card>
-        <Card className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">Cached at</p>
-          <p className="text-xl font-semibold tracking-tight text-foreground">{run?.cachedAt ? formatDate(run.cachedAt) : "Not cached"}</p>
-          <p className="text-sm text-muted">{run?.trainedAt ? `Trained ${formatDate(run.trainedAt)}` : "No completed run yet"}</p>
-        </Card>
-        <Card className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">Artifact</p>
-          <p className="text-sm font-semibold tracking-tight text-foreground break-all">{run?.artifactPath ?? "Waiting for first run"}</p>
+
+        <Card className="space-y-5">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Latest Artifact</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">What changed in the current training picture</h2>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DetailBlock label="Model" value={run?.modelName ? `${run.modelName} ${run.modelVersion}` : "Waiting for first run"} />
+            <DetailBlock label="Observed window" value={observedWindow} />
+            <DetailBlock label="Labeled rows" value={`${run?.datasetSummary?.labeledRows ?? 0} labeled / ${run?.datasetSummary?.totalRows ?? 0} total`} />
+            <DetailBlock label="Feature count" value={`${featureCount} features in the latest artifact`} />
+          </div>
+
+          <p className="text-sm text-muted">
+            {run?.message ?? "Trigger the first run to cache a live evaluation artifact and populate the dataset and run-history pages."}
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <Badge tone="neutral">Subpages reduce clutter</Badge>
+            <Badge tone="neutral">Toasts handle action feedback</Badge>
+            <Badge tone="neutral">Overview stays metric-first</Badge>
+          </div>
         </Card>
       </section>
 
-      {hasMetrics ? (
-        <section className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <Card className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">AUROC</p>
-              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.rocAuc)}</p>
-            </Card>
-            <Card className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">Brier</p>
-              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.brierScore)}</p>
-            </Card>
-            <Card className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">Inactive 12m rate</p>
-              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.positiveRate)}</p>
-            </Card>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Card className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">F1</p>
-              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.f1Score)}</p>
-            </Card>
-            <Card className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">Precision</p>
-              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.precision)}</p>
-            </Card>
-            <Card className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">Recall</p>
-              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.recall)}</p>
-            </Card>
-            <Card className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">Log loss</p>
-              <p className="text-4xl font-semibold tracking-tight text-foreground">{formatMetric(run!.metrics!.logLoss)}</p>
-            </Card>
-          </div>
-        </section>
-      ) : null}
+      <section className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          <MetricCard
+            label="AUROC"
+            value={formatTrainingMetric(run?.metrics?.rocAuc)}
+            detail="Ranking quality on the held-out evaluation slice."
+            accent="primary"
+          />
+          <MetricCard
+            label="Brier"
+            value={formatTrainingMetric(run?.metrics?.brierScore)}
+            detail="Calibration-sensitive probability error. Lower is better."
+            accent="primary"
+          />
+          <MetricCard
+            label="Inactive 12m rate"
+            value={formatTrainingRate(run?.metrics?.positiveRate)}
+            detail="Positive-label pressure in the current held-out slice."
+            accent="secondary"
+          />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="F1" value={formatTrainingMetric(run?.metrics?.f1Score)} detail="Thresholded balance of precision and recall." />
+          <MetricCard label="Precision" value={formatTrainingMetric(run?.metrics?.precision)} detail="How often predicted inactivity is correct." />
+          <MetricCard label="Recall" value={formatTrainingMetric(run?.metrics?.recall)} detail="How much true inactivity the model is catching." />
+          <MetricCard label="Log loss" value={formatTrainingMetric(run?.metrics?.logLoss)} detail="Penalty for overconfident wrong probabilities." />
+        </div>
+      </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-6 xl:grid-cols-[1.16fr_0.84fr]">
         {calibrationData.length ? (
           <CalibrationCurveChart data={calibrationData} />
         ) : (
@@ -235,37 +244,17 @@ export function MlResultsDashboard() {
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No calibration artifact yet</h2>
             </div>
             <p className="text-sm text-muted">
-              Once a completed training run produces evaluation bins, the reliability curve will render here from the cached artifact.
+              Once a completed run produces evaluation bins, the reliability curve will render here from the cached artifact.
             </p>
           </Card>
         )}
 
-        <Card className="space-y-4">
+        <Card className="space-y-5">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">Run details</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Latest cached training artifact</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Metric Guide</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Read the top-line metrics without leaving the page</h2>
           </div>
-          <div className="space-y-3 text-sm text-muted">
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
-              <span className="font-semibold text-foreground">Dataset file:</span> {run?.datasetPath ?? dataset?.datasetPath ?? "tmp/training/snapshots.json"}
-            </div>
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
-              <span className="font-semibold text-foreground">Rows in artifact:</span> {run?.datasetSummary?.totalRows ?? 0}
-            </div>
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
-              <span className="font-semibold text-foreground">Time-aware split:</span>{" "}
-              {run?.splitSummary ? `${run.splitSummary.trainRows}/${run.splitSummary.validationRows}/${run.splitSummary.testRows}` : "Pending or insufficient data"}
-            </div>
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
-              <span className="font-semibold text-foreground">Feature count:</span> {run?.datasetSummary?.featureNames.length ?? 0}
-            </div>
-          </div>
-          <p className="text-sm text-muted">{run?.message ?? "Trigger the first run to generate and cache a live evaluation artifact."}</p>
-          {run?.status === "insufficient_data" ? (
-            <p className="text-sm text-muted">
-              The trigger path works, but the current dataset still needs labeled snapshots before the logistic regression training path can produce full metrics.
-            </p>
-          ) : null}
+          <InfoChipGroup items={modelMetricGlossary} />
         </Card>
       </section>
 
@@ -277,7 +266,7 @@ export function MlResultsDashboard() {
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Metric history</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No cached run history yet</h2>
           </div>
-          <p className="text-sm text-muted">Once you have more than one cached training run with metrics, an AUROC-over-time chart will appear here.</p>
+          <p className="text-sm text-muted">Once you have more than one cached training run with metrics, the run-history trend chart will appear here.</p>
         </Card>
       )}
     </div>

@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, DatabaseZap, ShieldCheck, TriangleAlert } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, DatabaseZap, ShieldCheck } from "lucide-react";
 
 import { EcosystemBreakdownChart } from "@/components/charts/ecosystem-breakdown-chart";
 import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart";
 import { DependencyPathExplorer } from "@/components/dependency-path-explorer";
 import { DependencyTable } from "@/components/dependency-table";
 import { SummaryCard } from "@/components/summary-card";
+import { useToast } from "@/components/toast-provider";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getAnalysis, getDependencies, getDependencyGraph } from "@/lib/api";
@@ -25,11 +26,14 @@ const ACTIVE_STATUSES = new Set(["pending", "running"]);
 
 export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   const searchParams = useSearchParams();
+  const { toast } = useToast();
   const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
   const [dependencies, setDependencies] = useState<DependencyRecord[]>([]);
   const [graph, setGraph] = useState<DependencyGraphResponse | null>(null);
   const [selectedDependencyId, setSelectedDependencyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const previousStatusRef = useRef<string | null>(null);
+  const cacheToastShownRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +85,46 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
     };
   }, [analysisId]);
 
+  const reusedFromCache = searchParams.get("cached") === "1";
+
+  useEffect(() => {
+    if (!reusedFromCache || cacheToastShownRef.current) {
+      return;
+    }
+    cacheToastShownRef.current = true;
+    toast({
+      tone: "success",
+      title: "Saved analysis reopened",
+      description: "A matching repository analysis already existed, so the cached result opened immediately.",
+    });
+  }, [reusedFromCache, toast]);
+
+  useEffect(() => {
+    if (!analysis) {
+      return;
+    }
+
+    const previousStatus = previousStatusRef.current;
+    if (previousStatus && previousStatus !== analysis.status) {
+      if (analysis.status === "completed") {
+        toast({
+          tone: "success",
+          title: "Analysis completed",
+          description: "Repository enrichment, scoring, and evidence capture finished.",
+        });
+      }
+      if (analysis.status === "failed") {
+        toast({
+          tone: "error",
+          title: "Analysis failed",
+          description: "The run stopped before scoring completed. Review the current analysis state for details.",
+        });
+      }
+    }
+
+    previousStatusRef.current = analysis.status;
+  }, [analysis, toast]);
+
   const selectedDependency = useMemo(() => {
     if (!dependencies.length) {
       return null;
@@ -98,7 +142,6 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   }
 
   const analysisStatusActive = ACTIVE_STATUSES.has(analysis.status);
-  const reusedFromCache = searchParams.get("cached") === "1";
   const selectedIsRepositoryProfile = isRepositoryProfile(selectedDependency);
   const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
   const dependencySummaryLabel = analysis.submission.kind === "repository_url" ? "Profiles" : "Dependencies";
@@ -117,12 +160,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
 
   return (
     <div className="space-y-6">
-      {reusedFromCache ? (
-        <Card className="border-emerald-200 bg-emerald-50 text-sm text-emerald-900">
-          Existing repository analysis reused from cache. This repo was already analyzed, so the app opened the saved result immediately.
-        </Card>
-      ) : null}
-      <Card className="space-y-5 overflow-hidden border-slate-200/80 bg-[linear-gradient(135deg,#0f172a_0%,#102541_45%,#f8fafc_46%,#f8fafc_100%)] text-white">
+      <Card className="space-y-5 overflow-hidden border-line bg-[linear-gradient(135deg,#081120_0%,#12314a_56%,#164a55_100%)] text-white">
         <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
           <div className="space-y-4">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Analysis Overview</p>
@@ -134,8 +172,8 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
                 {titleCase(analysis.status)}
               </Badge>
             </div>
-            <p className="max-w-2xl text-sm text-slate-300">
-              Explainable repository and dependency risk profiles with 12-month maintenance outlooks generated from repository activity, provider-backed metadata, scorecard-style security signals, and visible missing-data caveats.
+            <p className="max-w-2xl text-sm text-slate-200">
+              One repository, one dependency inventory, one evidence trail. The page keeps the triage signal visible without over-explaining every panel.
             </p>
             <div className="flex flex-wrap gap-3 text-sm text-slate-200">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2">
@@ -144,22 +182,31 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2">
                 <DatabaseZap className="h-4 w-4" /> Provider and upload provenance visible
               </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2">
-                <TriangleAlert className="h-4 w-4" /> Uncertainty remains explicit
-              </span>
             </div>
             {analysisStatusActive ? (
-              <div className="rounded-[1.25rem] border border-amber-200/20 bg-amber-200/10 px-4 py-3 text-sm text-amber-100">
+              <p className="text-sm text-amber-100">
                 This analysis is still processing. The dashboard refreshes automatically while parsing, enrichment, and scoring complete.
-              </div>
+              </p>
             ) : null}
           </div>
           <div className="rounded-[1.5rem] border border-white/10 bg-white/10 p-5 backdrop-blur">
             <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Freshness and scope</p>
-            <p className="mt-4 text-sm text-slate-100">Created {formatDate(analysis.createdAt)}</p>
-            <p className="mt-2 text-sm text-slate-100">Updated {formatDate(analysis.updatedAt)}</p>
-            <p className="mt-2 text-sm text-slate-100">Submission mode {titleCase(analysis.submission.kind.replaceAll("_", " "))}</p>
-            {analysis.methodologyVersion ? <p className="mt-2 text-sm text-slate-100">Methodology {analysis.methodologyVersion}</p> : null}
+            <div className="mt-4 space-y-3">
+              <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
+                Created {formatDate(analysis.createdAt)}
+              </div>
+              <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
+                Updated {formatDate(analysis.updatedAt)}
+              </div>
+              <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
+                Submission mode {titleCase(analysis.submission.kind.replaceAll("_", " "))}
+              </div>
+              {analysis.methodologyVersion ? (
+                <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
+                  Methodology {analysis.methodologyVersion}
+                </div>
+              ) : null}
+            </div>
             <Link href="/methodology" className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-white transition hover:text-sky-200">
               Review methodology <ArrowRight className="h-4 w-4" />
             </Link>
@@ -197,8 +244,8 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {selectedIsRepositoryProfile
-                ? "Use the inventory to focus the repository-level rating for the submitted project. The detail page keeps the full evidence trail and repository context."
-                : "Use the inventory to focus the path panel on one package. The detail page keeps the full evidence trail, raw signals, and repository context."}
+                ? "Focus the repository-level rating for the submitted project."
+                : "Focus the path panel on one package and jump into the evidence view when needed."}
             </p>
           </div>
           {selectedDependency ? (
