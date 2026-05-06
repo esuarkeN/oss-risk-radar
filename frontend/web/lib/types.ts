@@ -22,6 +22,7 @@ export type {
   RiskBucket,
   SubmissionKind,
   TrainingCalibrationBin,
+  TrainingDatasetRepositorySummary,
   TrainingDatasetSummary,
   TrainingRunArtifact,
   TrainingRunDatasetSummary,

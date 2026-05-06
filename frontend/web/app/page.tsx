@@ -9,7 +9,7 @@ import { productGlossary } from "@/lib/metric-glossary";
 const landingCards = [
   { title: "Repo overview", body: "See tracked repos, inactivity windows, and package performance in one page.", href: "/repositories" },
   { title: "Methodology", body: "Inspect the signals behind the current heuristic layer.", href: "/methodology" },
-  { title: "ML results", body: "Review AUROC, Brier score, calibration, and coefficient views.", href: "/ml-evaluation" },
+  { title: "ML results", body: "Review metrics, dataset coverage, and cached runs without crowding one page.", href: "/ml-evaluation" },
 ];
 
 export default function HomePage() {

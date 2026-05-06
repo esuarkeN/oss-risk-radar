@@ -3,13 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { InfoChipGroup } from "@/components/info-chip-group";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getTrainingDatasetSummary, listAnalyses } from "@/lib/api";
 import { formatConfidence, formatDate, formatOutlookScore, formatRiskScore } from "@/lib/format";
-import { heuristicSignalGlossary } from "@/lib/metric-glossary";
 import type { AnalysisRecord, DependencyRecord, TrainingDatasetSummary } from "@/lib/types";
 
 interface RepositoryRollup {
@@ -57,6 +55,8 @@ interface DependencyRankingRow {
 
 const timeframeOptions = [90, 180, 365] as const;
 type OutlookSortDirection = "asc" | "desc";
+type RadarView = "repositories" | "packages" | "dependencies";
+type ActivityStatus = "active" | "inactive" | "unknown";
 
 function daysSince(date?: string) {
   if (!date) {
@@ -80,10 +80,24 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function repositoryActivityStatus(repository: RepositoryRollup, timeframeDays: number): ActivityStatus {
+  if (repository.archived) {
+    return "inactive";
+  }
+
+  const ageDays = daysSince(repository.lastPushAt);
+  if (ageDays === null) {
+    return "unknown";
+  }
+
+  return ageDays > timeframeDays ? "inactive" : "active";
+}
+
 export function RepositoryRadar() {
   const [analyses, setAnalyses] = useState<AnalysisRecord[]>([]);
   const [dataset, setDataset] = useState<TrainingDatasetSummary | null>(null);
   const [timeframeDays, setTimeframeDays] = useState<(typeof timeframeOptions)[number]>(180);
+  const [activeView, setActiveView] = useState<RadarView>("repositories");
   const [search, setSearch] = useState("");
   const [repositoryOutlookSortDirection, setRepositoryOutlookSortDirection] = useState<OutlookSortDirection>("asc");
   const [packageOutlookSortDirection, setPackageOutlookSortDirection] = useState<OutlookSortDirection>("asc");
@@ -283,11 +297,34 @@ export function RepositoryRadar() {
   const inactiveRepositories = useMemo(
     () =>
       filteredRepositories.filter((repository) => {
-        const ageDays = daysSince(repository.lastPushAt);
-        return repository.archived || ageDays === null || ageDays > timeframeDays;
+        return repositoryActivityStatus(repository, timeframeDays) === "inactive";
       }),
     [filteredRepositories, timeframeDays]
   );
+
+  const averageRepositoryConfidence = useMemo(
+    () => (filteredRepositories.length ? average(filteredRepositories.map((repository) => repository.avgConfidence)) : 0),
+    [filteredRepositories]
+  );
+  const averagePackageRisk = useMemo(
+    () => (filteredPackages.length ? average(filteredPackages.map((pkg) => pkg.avgRisk)) : 0),
+    [filteredPackages]
+  );
+  const trainingBaseRepositories = dataset?.repositories ?? [];
+  const currentViewMeta = {
+    repositories: {
+      title: "Ranked source repositories",
+      description: "Score and compare OSS projects using the same repository-level signals applied to new repository submissions.",
+    },
+    packages: {
+      title: "Package-level snapshot",
+      description: "Switch here for ecosystem and package coverage once the repository view has done its job.",
+    },
+    dependencies: {
+      title: "Ranked dependency details",
+      description: "Jump into the highest-risk dependency rows without keeping three large tables open on the same page.",
+    },
+  } satisfies Record<RadarView, { title: string; description: string }>;
 
   if (error) {
     return <Card className="text-sm text-danger">{error}</Card>;
@@ -295,17 +332,45 @@ export function RepositoryRadar() {
 
   return (
     <div className="space-y-6">
-      <Card className="space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <Card className="space-y-5 overflow-hidden border-line bg-[linear-gradient(135deg,#081120_0%,#12314a_58%,#164a55_100%)] text-white">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">Repository radar</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Every tracked repo and OSS package in one compact view.</h1>
-            <p className="text-sm text-muted">Filter by inactivity window, sort by 12-month outlook, and watch the training base expand when completed analyses land.</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Repository radar</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-white">Rank OSS projects, packages, and dependency signals against the captured base.</h1>
+            <p className="max-w-3xl text-sm text-slate-200">
+              Search once, choose the slice you care about, and compare a newly scored repository with the training-base context nearby.
+            </p>
           </div>
-          <InfoChipGroup items={heuristicSignalGlossary} />
+          <div className="rounded-[1.35rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-200 backdrop-blur">
+            {repositoryRows.length} repos / {packageRows.length} packages / {filteredDependencyRows.length} dependency rows in the current filter
+          </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search repo, package, or ecosystem" />
+
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+          <div className="space-y-3">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search repo, package, or ecosystem"
+              className="border-white/10 bg-white text-slate-950 placeholder:text-slate-500"
+            />
+            <div className="flex flex-wrap gap-2">
+              {(["repositories", "packages", "dependencies"] as const).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setActiveView(view)}
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                    activeView === view
+                      ? "border-white/30 bg-white/15 text-white"
+                      : "border-white/10 bg-transparent text-slate-200 hover:border-white/20 hover:bg-white/10"
+                  }`}
+                >
+                  {view}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2">
             {timeframeOptions.map((option) => (
               <button
@@ -313,7 +378,9 @@ export function RepositoryRadar() {
                 type="button"
                 onClick={() => setTimeframeDays(option)}
                 className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
-                  timeframeDays === option ? "border-accent/50 bg-accent/12 text-accent" : "border-line bg-panel text-muted hover:text-foreground"
+                  timeframeDays === option
+                    ? "border-white/30 bg-white/15 text-white"
+                    : "border-white/10 bg-transparent text-slate-200 hover:border-white/20 hover:bg-white/10"
                 }`}
               >
                 {option}d window
@@ -327,14 +394,17 @@ export function RepositoryRadar() {
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Tracked repos</p>
           <p className="text-4xl font-semibold tracking-tight text-foreground">{repositoryRows.length}</p>
+          <p className="text-sm text-muted">Mapped source repositories across completed analyses</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Tracked packages</p>
           <p className="text-4xl font-semibold tracking-tight text-foreground">{packageRows.length}</p>
+          <p className="text-sm text-muted">Distinct package rows in the current captured base</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Inactive in {timeframeDays}d</p>
           <p className="text-4xl font-semibold tracking-tight text-foreground">{inactiveRepositories.length}</p>
+          <p className="text-sm text-muted">Repos archived or stale inside the chosen activity window; missing push dates stay unknown</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Training snapshots</p>
@@ -343,192 +413,268 @@ export function RepositoryRadar() {
         </Card>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.28fr_0.72fr]">
         <Card className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">Repositories</p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Mapped source repos</h2>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Current View</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">{currentViewMeta[activeView].title}</h2>
+              <p className="mt-2 text-sm text-muted">{currentViewMeta[activeView].description}</p>
             </div>
-            <Badge tone={inactiveRepositories.length > 0 ? "high" : "low"}>{inactiveRepositories.length} inactive</Badge>
+            <Badge tone={activeView === "repositories" && inactiveRepositories.length > 0 ? "high" : "neutral"}>
+              {activeView}
+            </Badge>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
-                  <th className="pb-3 pr-4">Repo</th>
-                  <th className="pb-3 pr-4">Window</th>
-                  <th className="pb-3 pr-4">
-                    <button
-                      type="button"
-                      onClick={() => setRepositoryOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
-                      className="inline-flex items-center gap-2 font-semibold text-muted transition hover:text-foreground"
-                    >
-                      12M outlook
-                      <span className="text-[10px] uppercase">{repositoryOutlookSortDirection === "asc" ? "low" : "high"}</span>
-                    </button>
-                  </th>
-                  <th className="pb-3 pr-4">Risk</th>
-                  <th className="pb-3 pr-4">Security</th>
-                  <th className="pb-3 pr-4">Scorecard</th>
-                  <th className="pb-3 pr-4">Confidence</th>
-                  <th className="pb-3 pr-4">Scope</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedRepositories.map((repository) => {
-                  const ageDays = daysSince(repository.lastPushAt);
-                  const inactive = repository.archived || ageDays === null || ageDays > timeframeDays;
 
-                  return (
-                    <tr key={repository.key} className="border-b border-line/70 align-top">
+          {activeView === "repositories" ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
+                    <th className="pb-3 pr-4">Repo</th>
+                    <th className="pb-3 pr-4">Window</th>
+                    <th className="pb-3 pr-4">
+                      <button
+                        type="button"
+                        onClick={() => setRepositoryOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
+                        className="inline-flex items-center gap-2 font-semibold text-muted transition hover:text-foreground"
+                      >
+                        12M outlook
+                        <span className="text-[10px] uppercase">{repositoryOutlookSortDirection === "asc" ? "low" : "high"}</span>
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4">Risk</th>
+                    <th className="pb-3 pr-4">Confidence</th>
+                    <th className="pb-3 pr-4">Scope</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRepositories.map((repository) => {
+                    const ageDays = daysSince(repository.lastPushAt);
+                    const activityStatus = repositoryActivityStatus(repository, timeframeDays);
+
+                    return (
+                      <tr key={repository.key} className="border-b border-line/70 align-top">
+                        <td className="py-4 pr-4">
+                          <p className="font-semibold text-foreground">{repository.label}</p>
+                          <p className="mt-1 text-xs text-muted">
+                            {repository.scorecardScore ? `Scorecard ${repository.scorecardScore.toFixed(1)} / ` : ""}
+                            Security {formatRiskScore(repository.avgSecurity)}
+                          </p>
+                        </td>
+                        <td className="py-4 pr-4">
+                          <Badge tone={activityStatus === "inactive" ? "high" : activityStatus === "active" ? "low" : "neutral"}>
+                            {activityStatus === "inactive" ? "Inactive" : activityStatus === "active" ? "Active" : "Unknown"}
+                          </Badge>
+                          <p className="mt-2 text-xs text-muted">{repository.archived ? "Archived" : ageDays !== null ? `${ageDays} days since push` : "No push date from enrichment"}</p>
+                        </td>
+                        <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(repository.avgOutlook12m)}</td>
+                        <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(repository.avgRisk)}</td>
+                        <td className="py-4 pr-4 text-foreground">{formatConfidence(repository.avgConfidence)}</td>
+                        <td className="py-4 pr-4 text-muted">
+                          <p>{repository.packageCount} packages</p>
+                          <p className="mt-1 text-xs">{repository.analysisCount} analyses / {repository.recentContributors90d ?? 0} recent contributors</p>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {activeView === "packages" ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
+                    <th className="pb-3 pr-4">Package</th>
+                    <th className="pb-3 pr-4">Ecosystem</th>
+                    <th className="pb-3 pr-4">
+                      <button
+                        type="button"
+                        onClick={() => setPackageOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
+                        className="inline-flex items-center gap-2 font-semibold text-muted transition hover:text-foreground"
+                      >
+                        12M outlook
+                        <span className="text-[10px] uppercase">{packageOutlookSortDirection === "asc" ? "low" : "high"}</span>
+                      </button>
+                    </th>
+                    <th className="pb-3 pr-4">Worst risk</th>
+                    <th className="pb-3 pr-4">Coverage</th>
+                    <th className="pb-3 pr-4">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedPackages.map((pkg) => (
+                    <tr key={pkg.key} className="border-b border-line/70 align-top">
                       <td className="py-4 pr-4">
-                        <p className="font-semibold text-foreground">{repository.label}</p>
-                        <p className="mt-1 text-xs text-muted">{repository.url ?? "Unlinked URL"}</p>
+                        <p className="font-semibold text-foreground">{pkg.packageName}</p>
+                        <p className="mt-1 text-xs text-muted">{pkg.versionCount} versions / Security {formatRiskScore(pkg.avgSecurity)}</p>
                       </td>
-                      <td className="py-4 pr-4">
-                        <Badge tone={inactive ? "high" : "low"}>{inactive ? "Inactive" : "Active"}</Badge>
-                        <p className="mt-2 text-xs text-muted">{repository.archived ? "Archived" : ageDays !== null ? `${ageDays} days since push` : "No push date"}</p>
-                      </td>
-                      <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(repository.avgOutlook12m)}</td>
-                      <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(repository.avgRisk)}</td>
-                      <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(repository.avgSecurity)}</td>
-                      <td className="py-4 pr-4 text-foreground">{repository.scorecardScore ? repository.scorecardScore.toFixed(1) : "-"}</td>
-                      <td className="py-4 pr-4 text-foreground">{formatConfidence(repository.avgConfidence)}</td>
-                      <td className="py-4 pr-4 text-muted">
-                        <p>{repository.packageCount} packages</p>
-                        <p className="mt-1 text-xs">{repository.analysisCount} analyses / {repository.recentContributors90d ?? 0} recent contributors</p>
-                      </td>
+                      <td className="py-4 pr-4 text-foreground">{pkg.ecosystem}</td>
+                      <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(pkg.avgOutlook12m)}</td>
+                      <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(pkg.maxRisk)}</td>
+                      <td className="py-4 pr-4 text-muted">{pkg.analysisCount} analyses / {pkg.mappedRepositories} repos</td>
+                      <td className="py-4 pr-4 text-muted">{pkg.lastSeenAt ? formatDate(pkg.lastSeenAt) : "Unknown"}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {!filteredRepositories.length ? <p className="text-sm text-muted">No mapped repositories match the current view.</p> : null}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {activeView === "dependencies" ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
+                      <th className="pb-3 pr-4">Dependency</th>
+                      <th className="pb-3 pr-4">Repo</th>
+                      <th className="pb-3 pr-4">12M outlook</th>
+                      <th className="pb-3 pr-4">Risk</th>
+                      <th className="pb-3 pr-4">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDependencyRows.slice(0, 50).map((dependency) => (
+                      <tr key={dependency.key} className="border-b border-line/70 align-top">
+                        <td className="py-4 pr-4">
+                          <p className="font-semibold text-foreground">{dependency.packageName}</p>
+                          <p className="mt-1 text-xs text-muted">{dependency.packageVersion} / {dependency.ecosystem} / {formatConfidence(dependency.confidence)} confidence</p>
+                        </td>
+                        <td className="py-4 pr-4 text-muted">{dependency.repositoryName ?? "Unmapped"}</td>
+                        <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(dependency.outlook12m)}</td>
+                        <td className="py-4 pr-4 text-foreground">{formatRiskScore(dependency.risk)}</td>
+                        <td className="py-4 pr-4">
+                          <Link
+                            href={`/analyses/${dependency.analysisId}/dependencies/${dependency.dependencyId}`}
+                            className="text-xs font-semibold uppercase tracking-[0.18em] text-accent"
+                          >
+                            Open detail
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {filteredDependencyRows.length > 50 ? (
+                <p className="text-xs text-muted">Showing the first 50 ranked dependencies in the current filtered view.</p>
+              ) : null}
+            </>
+          ) : null}
+
+          {activeView === "repositories" && !filteredRepositories.length ? <p className="text-sm text-muted">No mapped repositories match the current view.</p> : null}
+          {activeView === "packages" && !filteredPackages.length ? <p className="text-sm text-muted">No package rows match the current view.</p> : null}
+          {activeView === "dependencies" && !filteredDependencyRows.length ? <p className="text-sm text-muted">No dependency rows match the current search.</p> : null}
         </Card>
 
-        <Card className="space-y-4">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">Training base</p>
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">Auto-growing dataset snapshot</h2>
-          <div className="space-y-3 text-sm text-muted">
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
-              <span className="font-semibold text-foreground">Unique repos:</span> {dataset?.uniqueRepositories ?? 0}
+        <div className="grid gap-6">
+          <Card className="space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Training Base</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Auto-growing dataset snapshot</h2>
             </div>
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
-              <span className="font-semibold text-foreground">Unique packages:</span> {dataset?.uniquePackages ?? 0}
+            <div className="space-y-3 text-sm text-muted">
+              <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                <span className="font-semibold text-foreground">Unique repos:</span> {dataset?.uniqueRepositories ?? 0}
+              </div>
+              <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                <span className="font-semibold text-foreground">Unique packages:</span> {dataset?.uniquePackages ?? 0}
+              </div>
+              <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                <span className="font-semibold text-foreground">Completed analyses:</span> {dataset?.uniqueAnalyses ?? 0}
+              </div>
+              <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3 break-all">
+                <span className="font-semibold text-foreground">Dataset file:</span> {dataset?.datasetPath ?? "tmp/training/snapshots.json"}
+              </div>
             </div>
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
-              <span className="font-semibold text-foreground">Completed analyses captured:</span> {dataset?.uniqueAnalyses ?? 0}
+            <p className="text-sm text-muted">
+              {dataset?.autoCaptureEnabled === false
+                ? "Training auto-capture is disabled for this API instance."
+                : "Completed analyses are converted into snapshot rows automatically, then new repository searches are scored with the same OSS signals."}
+            </p>
+          </Card>
+
+          <Card className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-muted">Base Repos</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Top training projects</h2>
+              </div>
+              <Link href="/ml-evaluation/dataset" className="text-sm font-semibold text-accent transition hover:text-foreground">
+                Full list
+              </Link>
             </div>
-            <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3 break-all">
-              <span className="font-semibold text-foreground">Dataset file:</span> {dataset?.datasetPath ?? "tmp/training/snapshots.json"}
+            {trainingBaseRepositories.length ? (
+              <div className="space-y-3">
+                {trainingBaseRepositories.slice(0, 5).map((repository) => (
+                  <div key={repository.url} className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-foreground">{repository.fullName || repository.url}</p>
+                        <p className="mt-1 text-xs text-muted">{repository.snapshotCount} snapshots / {repository.packageCount} packages</p>
+                      </div>
+                      <Badge tone="neutral">#{repository.rank}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">No training repositories have been captured yet.</p>
+            )}
+          </Card>
+
+          <Card className="space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Current Slice</p>
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Quick read</h2>
             </div>
-          </div>
-          <p className="text-sm text-muted">
-            {dataset?.autoCaptureEnabled === false
-              ? "Training auto-capture is disabled for this API instance."
-              : "Each completed repository analysis is converted into snapshot rows for the ML training base automatically."}
-          </p>
-        </Card>
+            {activeView === "repositories" ? (
+              <div className="space-y-3 text-sm text-muted">
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Filtered repos:</span> {filteredRepositories.length}
+                </div>
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Inactive repos:</span> {inactiveRepositories.length}
+                </div>
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Avg confidence:</span> {formatConfidence(averageRepositoryConfidence)}
+                </div>
+              </div>
+            ) : null}
+            {activeView === "packages" ? (
+              <div className="space-y-3 text-sm text-muted">
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Filtered packages:</span> {filteredPackages.length}
+                </div>
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Avg risk:</span> {formatRiskScore(averagePackageRisk)}
+                </div>
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Packages with repo mapping:</span> {filteredPackages.filter((pkg) => pkg.mappedRepositories > 0).length}
+                </div>
+              </div>
+            ) : null}
+            {activeView === "dependencies" ? (
+              <div className="space-y-3 text-sm text-muted">
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Filtered dependency rows:</span> {filteredDependencyRows.length}
+                </div>
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Rows shown:</span> {Math.min(filteredDependencyRows.length, 50)}
+                </div>
+                <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
+                  <span className="font-semibold text-foreground">Highest risk in slice:</span>{" "}
+                  {filteredDependencyRows[0] ? formatRiskScore(filteredDependencyRows[0].risk) : "-"}
+                </div>
+              </div>
+            ) : null}
+          </Card>
+        </div>
       </div>
-
-      <Card className="space-y-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">Dependency ranking</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Individual dependency outlook table</h2>
-          <p className="mt-2 text-sm text-muted">Every analyzed dependency stays clickable from the overview page so you can jump straight into the evidence trail.</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
-                <th className="pb-3 pr-4">Dependency</th>
-                <th className="pb-3 pr-4">Repo</th>
-                <th className="pb-3 pr-4">12M outlook</th>
-                <th className="pb-3 pr-4">Risk</th>
-                <th className="pb-3 pr-4">Confidence</th>
-                <th className="pb-3 pr-4">Detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDependencyRows.slice(0, 50).map((dependency) => (
-                <tr key={dependency.key} className="border-b border-line/70 align-top">
-                  <td className="py-4 pr-4">
-                    <p className="font-semibold text-foreground">{dependency.packageName}</p>
-                    <p className="mt-1 text-xs text-muted">{dependency.packageVersion} - {dependency.ecosystem}</p>
-                  </td>
-                  <td className="py-4 pr-4 text-muted">{dependency.repositoryName ?? "Unmapped"}</td>
-                  <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(dependency.outlook12m)}</td>
-                  <td className="py-4 pr-4 text-foreground">{formatRiskScore(dependency.risk)}</td>
-                  <td className="py-4 pr-4 text-foreground">{formatConfidence(dependency.confidence)}</td>
-                  <td className="py-4 pr-4">
-                    <Link
-                      href={`/analyses/${dependency.analysisId}/dependencies/${dependency.dependencyId}`}
-                      className="text-xs font-semibold uppercase tracking-[0.18em] text-accent"
-                    >
-                      Open detail
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {!filteredDependencyRows.length ? <p className="text-sm text-muted">No dependency rows match the current search.</p> : null}
-        {filteredDependencyRows.length > 50 ? (
-          <p className="text-xs text-muted">Showing the first 50 ranked dependencies in the current filtered view.</p>
-        ) : null}
-      </Card>
-
-      <Card className="space-y-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">OSS tools</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Package-level performance snapshot</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-line text-xs uppercase tracking-[0.18em] text-muted">
-                <th className="pb-3 pr-4">Package</th>
-                <th className="pb-3 pr-4">Ecosystem</th>
-                <th className="pb-3 pr-4">
-                  <button
-                    type="button"
-                    onClick={() => setPackageOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
-                    className="inline-flex items-center gap-2 font-semibold text-muted transition hover:text-foreground"
-                  >
-                    12M outlook
-                    <span className="text-[10px] uppercase">{packageOutlookSortDirection === "asc" ? "low" : "high"}</span>
-                  </button>
-                </th>
-                <th className="pb-3 pr-4">Worst risk</th>
-                <th className="pb-3 pr-4">Avg risk</th>
-                <th className="pb-3 pr-4">Security</th>
-                <th className="pb-3 pr-4">Coverage</th>
-                <th className="pb-3 pr-4">Last seen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedPackages.map((pkg) => (
-                <tr key={pkg.key} className="border-b border-line/70 align-top">
-                  <td className="py-4 pr-4">
-                    <p className="font-semibold text-foreground">{pkg.packageName}</p>
-                    <p className="mt-1 text-xs text-muted">{pkg.versionCount} versions across analyses</p>
-                  </td>
-                  <td className="py-4 pr-4 text-foreground">{pkg.ecosystem}</td>
-                  <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(pkg.avgOutlook12m)}</td>
-                  <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(pkg.maxRisk)}</td>
-                  <td className="py-4 pr-4 text-foreground">{formatRiskScore(pkg.avgRisk)}</td>
-                  <td className="py-4 pr-4 text-foreground">{formatRiskScore(pkg.avgSecurity)}</td>
-                  <td className="py-4 pr-4 text-muted">{pkg.analysisCount} analyses / {pkg.mappedRepositories} repos</td>
-                  <td className="py-4 pr-4 text-muted">{pkg.lastSeenAt ? formatDate(pkg.lastSeenAt) : "Unknown"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
   );
 }

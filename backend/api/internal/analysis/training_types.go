@@ -3,13 +3,27 @@ package analysis
 import "time"
 
 type TrainingDatasetSummary struct {
-	DatasetPath        string     `json:"datasetPath"`
-	TotalSnapshots     int        `json:"totalSnapshots"`
-	UniqueAnalyses     int        `json:"uniqueAnalyses"`
-	UniqueRepositories int        `json:"uniqueRepositories"`
-	UniquePackages     int        `json:"uniquePackages"`
-	LastUpdatedAt      *time.Time `json:"lastUpdatedAt,omitempty"`
-	AutoCaptureEnabled bool       `json:"autoCaptureEnabled"`
+	DatasetPath        string                             `json:"datasetPath"`
+	TotalSnapshots     int                                `json:"totalSnapshots"`
+	UniqueAnalyses     int                                `json:"uniqueAnalyses"`
+	UniqueRepositories int                                `json:"uniqueRepositories"`
+	UniquePackages     int                                `json:"uniquePackages"`
+	LastUpdatedAt      *time.Time                         `json:"lastUpdatedAt,omitempty"`
+	AutoCaptureEnabled bool                               `json:"autoCaptureEnabled"`
+	Repositories       []TrainingDatasetRepositorySummary `json:"repositories"`
+}
+
+type TrainingDatasetRepositorySummary struct {
+	Rank           int    `json:"rank"`
+	FullName       string `json:"fullName"`
+	URL            string `json:"url"`
+	SnapshotCount  int    `json:"snapshotCount"`
+	PackageCount   int    `json:"packageCount"`
+	AnalysisCount  int    `json:"analysisCount"`
+	Archived       bool   `json:"archived"`
+	Stars          int    `json:"stars"`
+	Forks          int    `json:"forks"`
+	LastObservedAt string `json:"lastObservedAt,omitempty"`
 }
 
 type GetTrainingDatasetSummaryResponse struct {

@@ -4,7 +4,7 @@ import "context"
 
 func (s *Service) GetTrainingDatasetSummary(_ context.Context) (TrainingDatasetSummary, error) {
 	if s.trainingDataset == nil {
-		return TrainingDatasetSummary{AutoCaptureEnabled: false}, nil
+		return TrainingDatasetSummary{AutoCaptureEnabled: false, Repositories: []TrainingDatasetRepositorySummary{}}, nil
 	}
 	return s.trainingDataset.Summary()
 }

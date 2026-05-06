@@ -131,14 +131,14 @@ npm run ml:seed:foundation -- `
 To build and train from that seed in one pass:
 
 ```powershell
-npm run ml:bootstrap -- `
-  --generate-foundation-seed `
-  --foundation-target-repositories 2000 `
+npm run ml:bootstrap:foundation -- `
   --github-token $env:GITHUB_TOKEN `
   --gharchive-source .\tmp\gharchive `
   --output-dir .\tmp\training\oss-maintenance `
   --training-output-path .\tmp\training\snapshots.json
 ```
+
+The plain `npm run ml:bootstrap -- --gharchive-source ...` path intentionally remains a small starter run for local smoke tests. Use `ml:bootstrap:foundation` for the thesis/training base because it asks the GitHub Search API for a broad active, dormant, and archived repository mix.
 
 When `--generate-foundation-seed` is enabled, the repo helper now enforces:
 
