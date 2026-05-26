@@ -2,7 +2,10 @@ package analysis_test
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +14,8 @@ import (
 )
 
 type fakeTrainingScorer struct {
-	calls int
+	calls             int
+	lastSnapshotCount int
 }
 
 func (f *fakeTrainingScorer) Score(_ context.Context, _ string, dependencies []analysis.DependencyRecord) (map[string]analysis.RiskProfile, error) {
@@ -26,6 +30,7 @@ func (*fakeTrainingScorer) Ready(context.Context) error { return nil }
 
 func (f *fakeTrainingScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
 	f.calls++
+	f.lastSnapshotCount = len(snapshots)
 	return analysis.TrainingRunArtifact{
 		Status:       "completed",
 		ModelName:    "logistic-regression-baseline",
@@ -33,8 +38,8 @@ func (f *fakeTrainingScorer) TrainModel(_ context.Context, snapshots []analysis.
 		TrainedAt:    time.Now().UTC().Format(time.RFC3339Nano),
 		DatasetSummary: &analysis.TrainingRunDatasetSummary{
 			TotalRows:     len(snapshots),
-			LabeledRows:   0,
-			UnlabeledRows: len(snapshots),
+			LabeledRows:   len(snapshots),
+			UnlabeledRows: 0,
 			FeatureNames:  []string{"repository_archived", "release_cadence_days"},
 		},
 		SplitSummary: &analysis.TrainingRunSplitSummary{TrainRows: 2, ValidationRows: 1, TestRows: 1},
@@ -75,17 +80,19 @@ func TestTriggerTrainingRunCachesLatestArtifact(t *testing.T) {
 	defer cancel()
 
 	tempDir := t.TempDir()
+	datasetPath := filepath.Join(tempDir, "training", "snapshots.json")
 	scorer := &fakeTrainingScorer{}
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
 		MethodologyVersion:  "heuristic-v1",
 		Store:               storage.NewMemoryStore(),
 		Scorer:              scorer,
 		UploadDir:           filepath.Join(tempDir, "uploads"),
-		TrainingDatasetPath: filepath.Join(tempDir, "training", "snapshots.json"),
+		TrainingDatasetPath: datasetPath,
 		TrainingRunsDir:     filepath.Join(tempDir, "training", "runs"),
 		WorkerPollInterval:  10 * time.Millisecond,
 		RetryDelay:          10 * time.Millisecond,
 	})
+	writeLabeledTrainingDataset(t, datasetPath)
 	service.Start(ctx)
 
 	created, _, err := service.CreateAnalysis(ctx, analysis.AnalysisSubmission{Kind: analysis.SubmissionDemo})
@@ -151,4 +158,161 @@ func TestTriggerTrainingRunCachesLatestArtifact(t *testing.T) {
 	if len(history) != 2 {
 		t.Fatalf("expected two cached training artifacts, got %d", len(history))
 	}
+}
+
+func TestTriggerTrainingRunRequiresRealLabeledSnapshots(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	datasetPath := filepath.Join(tempDir, "training", "snapshots.json")
+	scorer := &fakeTrainingScorer{}
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion:  "heuristic-v1",
+		Store:               storage.NewMemoryStore(),
+		Scorer:              scorer,
+		UploadDir:           filepath.Join(tempDir, "uploads"),
+		TrainingDatasetPath: datasetPath,
+		TrainingRunsDir:     filepath.Join(tempDir, "training", "runs"),
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
+	})
+
+	if _, _, err := service.TriggerTrainingRun(ctx, false); err == nil {
+		t.Fatal("expected training without labeled snapshots to fail")
+	}
+	if scorer.calls != 0 {
+		t.Fatalf("expected no training call without labeled snapshots, got %d", scorer.calls)
+	}
+}
+
+func TestTriggerTrainingRunRejectsLabeledSnapshotsWithoutRepositoryIdentity(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	datasetPath := filepath.Join(tempDir, "training", "snapshots.json")
+	scorer := &fakeTrainingScorer{}
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion:  "heuristic-v1",
+		Store:               storage.NewMemoryStore(),
+		Scorer:              scorer,
+		UploadDir:           filepath.Join(tempDir, "uploads"),
+		TrainingDatasetPath: datasetPath,
+		TrainingRunsDir:     filepath.Join(tempDir, "training", "runs"),
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
+	})
+	writeLabeledTrainingDatasetWithoutRepository(t, datasetPath)
+
+	if _, _, err := service.TriggerTrainingRun(ctx, false); err == nil || !strings.Contains(err.Error(), "GitHub repository identity") {
+		t.Fatalf("expected repository identity validation error, got %v", err)
+	}
+	if scorer.calls != 0 {
+		t.Fatalf("expected no training call for non-project labeled snapshots, got %d", scorer.calls)
+	}
+}
+
+func writeLabeledTrainingDataset(t *testing.T, datasetPath string) {
+	t.Helper()
+
+	falseLabel := false
+	trueLabel := true
+	snapshots := []analysis.TrainingSnapshotRecord{
+		trainingSnapshot("real-active-001", "2021-01-01T00:00:00Z", "facebook/react", falseLabel),
+		trainingSnapshot("real-active-002", "2021-04-01T00:00:00Z", "django/django", falseLabel),
+		trainingSnapshot("real-inactive-001", "2021-07-01T00:00:00Z", "request/request", trueLabel),
+		trainingSnapshot("real-inactive-002", "2021-10-01T00:00:00Z", "atom/atom", trueLabel),
+	}
+	writeTrainingDataset(t, datasetPath, snapshots)
+}
+
+func writeTrainingDataset(t *testing.T, datasetPath string, snapshots []analysis.TrainingSnapshotRecord) {
+	t.Helper()
+
+	payload, err := json.MarshalIndent(struct {
+		UpdatedAt time.Time                         `json:"updatedAt"`
+		Snapshots []analysis.TrainingSnapshotRecord `json:"snapshots"`
+	}{
+		UpdatedAt: time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC),
+		Snapshots: snapshots,
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal training dataset: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(datasetPath), 0o755); err != nil {
+		t.Fatalf("failed to create training dataset dir: %v", err)
+	}
+	if err := os.WriteFile(datasetPath, payload, 0o644); err != nil {
+		t.Fatalf("failed to write training dataset: %v", err)
+	}
+}
+
+func writeLabeledTrainingDatasetWithoutRepository(t *testing.T, datasetPath string) {
+	t.Helper()
+
+	label := true
+	snapshot := trainingSnapshot("placeholder-001", "2021-01-01T00:00:00Z", "placeholder/project", label)
+	snapshot.Dependency.Repository = nil
+	writeTrainingDataset(t, datasetPath, []analysis.TrainingSnapshotRecord{snapshot})
+}
+
+func trainingSnapshot(id string, observedAt string, fullName string, label bool) analysis.TrainingSnapshotRecord {
+	lastPushAgeDays := 7
+	lastReleaseAgeDays := 30
+	releaseCadenceDays := 45
+	recentContributors := 8
+	concentration := 0.3
+	issueGrowth := -0.05
+	prResponseDays := 3.0
+	if label {
+		lastPushAgeDays = 720
+		lastReleaseAgeDays = 900
+		releaseCadenceDays = 220
+		recentContributors = 0
+		concentration = 0.95
+		issueGrowth = 0.4
+		prResponseDays = 90
+	}
+
+	return analysis.TrainingSnapshotRecord{
+		AnalysisID:       "fixture-" + id,
+		ObservedAt:       observedAt,
+		LabelInactive12M: &label,
+		Dependency: analysis.TrainingDependencySignalSnapshot{
+			DependencyID:   id,
+			PackageName:    fullName,
+			PackageVersion: "repository-snapshot",
+			Ecosystem:      "github",
+			Direct:         true,
+			Repository: &analysis.TrainingRepositorySignalSnapshot{
+				FullName:                 fullName,
+				URL:                      "https://github.com/" + fullName,
+				DefaultBranch:            "main",
+				Archived:                 label,
+				Stars:                    1000,
+				Forks:                    100,
+				OpenIssues:               50,
+				LastPushAgeDays:          &lastPushAgeDays,
+				LastReleaseAgeDays:       &lastReleaseAgeDays,
+				ReleaseCadenceDays:       &releaseCadenceDays,
+				RecentContributors90d:    &recentContributors,
+				ContributorConcentration: &concentration,
+				OpenIssueGrowth90d:       &issueGrowth,
+				PRResponseMedianDays:     &prResponseDays,
+			},
+			HistoricalFeatures: map[string]float64{
+				"commits_90d":                     float64(maxInt(0, 120-lastPushAgeDays/10)),
+				"contributors_90d":                float64(recentContributors),
+				"days_since_last_commit":          float64(lastPushAgeDays),
+				"days_since_last_release":         float64(lastReleaseAgeDays),
+				"release_gap_risk":                map[bool]float64{true: 1, false: 0.15}[label],
+				"concentration_risk_score":        concentration,
+				"activity_drop_365d_vs_prev_365d": map[bool]float64{true: 0.9, false: 0.0}[label],
+			},
+		},
+	}
+}
+
+func maxInt(left int, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }

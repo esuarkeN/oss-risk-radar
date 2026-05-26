@@ -155,7 +155,12 @@ export function MlTrainingDatasetView() {
               Repository submissions use the same scoring surface as these base projects, so a newly searched repo can be compared against the captured OSS population.
             </p>
           </div>
-          <Badge tone="neutral">{trainingRepositories.length} repos</Badge>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/ml-evaluation/repositories" className="text-sm font-semibold text-accent transition hover:text-foreground">
+              Open full repo list
+            </Link>
+            <Badge tone="neutral">{trainingRepositories.length} repos</Badge>
+          </div>
         </div>
 
         <Input

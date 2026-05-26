@@ -19,6 +19,7 @@ function parseArgs(argv) {
     sampleLimitPerEcosystemProvided: false,
     sampleSeed: "42",
     includeForks: false,
+    replaceTrainingOutput: false,
     seedFileProvided: false,
     generateFoundationSeed: false,
     foundationTargetRepositories: "2000",
@@ -87,6 +88,9 @@ function parseArgs(argv) {
         break;
       case "--include-forks":
         args.includeForks = true;
+        break;
+      case "--replace-training-output":
+        args.replaceTrainingOutput = true;
         break;
       case "--generate-foundation-seed":
         args.generateFoundationSeed = true;
@@ -200,7 +204,7 @@ function parsePositiveInteger(value, flagName) {
 }
 
 function defaultMinimumInactiveRepositories(targetRepositories) {
-  return Math.max(10, Math.floor(targetRepositories * 0.05));
+  return Math.max(25, Math.floor(targetRepositories * 0.2));
 }
 
 function verifyDatasetSummary(args, summary) {
@@ -309,6 +313,9 @@ export async function buildDataset(args) {
   }
   if (args.includeForks) {
     dockerArgs.push("--include-forks");
+  }
+  if (args.replaceTrainingOutput) {
+    dockerArgs.push("--replace-training-output");
   }
   for (const source of args.gharchiveSources) {
     dockerArgs.push("--gharchive-source", toContainerPath(source));

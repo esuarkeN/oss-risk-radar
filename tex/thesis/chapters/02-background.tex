@@ -1,0 +1,65 @@
+\chapter{Background}
+\label{chap:background}
+
+This chapter introduces the conceptual foundations required for the thesis. It first explains the software supply-chain security context in which open-source dependencies are used and assessed. It then discusses open-source software sustainability and repository health metrics. Afterwards, it outlines important limitations of metric-based project assessment. Finally, it introduces the machine-learning concepts that are relevant for tabular inactivity-risk scoring.
+
+\section{Software Supply-Chain Security}
+\label{sec:background-supply-chain-security}
+
+Modern software systems are often composed of internally developed code and externally maintained components. In secure software development, these externally maintained components include commercial, third-party, and open-source software dependencies. The NIST Secure Software Development Framework explicitly treats the acquisition and maintenance of well-secured software components as part of secure development practice \cite{souppaya2022ssdf}. Therefore, dependency management is not only a build or maintenance concern, but also part of software supply-chain security.
+
+Software supply-chain security focuses on reducing risks that arise when software artifacts, build processes, dependencies, and distribution channels are not sufficiently controlled or verifiable. The SLSA framework addresses this problem by defining security-oriented requirements for software artifacts and build processes, including provenance and integrity-related controls \cite{slsa2025spec}. In the context of this thesis, these frameworks motivate why dependencies should be monitored beyond simple version updates.
+
+Open-source dependencies are especially relevant because they are reused across many downstream projects. Open-source software is defined by licensing conditions that allow use, modification, and redistribution under criteria specified by the Open Source Initiative \cite{osiOpenSourceDefinition}. These freedoms enable broad reuse, but they also mean that downstream users often depend on external maintainers and public project infrastructure. As a result, the maintenance activity of an upstream repository can become relevant for downstream risk assessment.
+
+For this thesis, software supply-chain security provides the practical context for inactivity-risk scoring. The goal is not to determine whether a dependency is secure or insecure in general. Instead, the goal is to estimate whether publicly observable repository signals indicate an elevated risk of future inactivity. Such a score can support dependency monitoring, replacement planning, or prioritization of manual review.
+
+% TODO: Later, briefly connect this to your real demonstrator workflow:
+% project manifest/lockfile -> dependency extraction -> package-to-repository mapping -> inactivity-risk score.
+
+\section{Open-Source Sustainability and Project Health}
+\label{sec:background-oss-health}
+
+Open-source sustainability describes whether a project can continue to provide value and maintain its software over time. Project health is commonly assessed through observable indicators such as activity, responsiveness, contributor participation, and release behavior. The CHAOSS project provides standardized metrics and metrics models for understanding open-source community and project health \cite{chaossStarterProjectHealth}. Its Starter Project Health Metrics Model is intended as an entry point for measuring selected aspects of project health in a structured way \cite{chaossStarterProjectHealth}.
+
+Repository activity is one category of observable project health. Examples include commits, releases, tags, issues, pull requests, and contributor activity. These signals are useful because they can often be collected from public repository platforms and package metadata sources. Prior research has used revision activity and project-level attributes to study open-source project survival and inactivity-related outcomes \cite{robinson2022survival}. In this thesis, such activity signals form the basis for predicting whether a dependency repository becomes inactive within a 12-month horizon.
+
+Security-practice indicators form a second category of observable signals. OpenSSF Scorecard is an automated tool that assesses open-source projects using security-related checks \cite{zahan2022scorecard}. These checks do not directly measure future maintenance activity, but they may provide additional information about project practices, repository configuration, and security posture. Therefore, selected Scorecard checks can be considered as candidate features for an inactivity-risk model.
+
+However, project health is broader than any single metric. Goggins et al. argue that making open-source project health transparent requires structured measurement and interpretation rather than isolated indicators \cite{goggins2021transparent}. This is important for the thesis because inactivity-risk scoring should not be interpreted as a complete judgement of project sustainability. Instead, the score is treated as a limited operational signal for dependency triage.
+
+% TODO: Later, add a table with possible health indicators:
+% Feature group | Example signals | Possible data source | Expected relevance.
+
+\section{Metric Pitfalls and Limitations}
+\label{sec:background-metric-pitfalls}
+
+Although repository metrics are useful, they can be misleading when interpreted without context. Yehudi et al. show that individual context-free online community health indicators are insufficient for identifying open-source software sustainability across heterogeneous projects \cite{yehudi2023contextfree}. This means that a metric value can have different meanings depending on the project type, maturity, governance model, and maintenance style.
+
+One example is commit activity. A low number of recent commits may indicate reduced maintenance, but it may also indicate that a project is stable and does not require frequent changes. Similarly, a high number of issues may indicate an active user community, but it may also indicate unresolved maintenance problems. Therefore, this thesis does not treat single metrics as direct proof of project health or project failure. Instead, multiple signals are combined and evaluated empirically.
+
+Responsiveness metrics also require caution. For example, time-to-first-response can be affected by automated bot responses in pull-request workflows. Hasan et al. show that bot-generated first responses can influence the interpretation of responsiveness measurements in GitHub pull requests \cite{hasan2023firstresponse}. For this reason, responsiveness-related indicators should be interpreted carefully and, where possible, separated into human and automated activity.
+
+A further limitation is that public repository data may be incomplete. Development may move to another platform, releases may be published outside the observed repository, or maintainers may communicate through channels that are not captured by GitHub metadata. Package-to-repository mappings may also be ambiguous or missing. Therefore, the empirical results of this thesis must be interpreted as evidence based on publicly observable data, not as a complete representation of all project activity.
+
+These limitations influence the design of the inactivity label. Inactivity is not defined as project death or abandonment. Instead, it is operationalized as the absence of selected observable activity signals within a defined prediction horizon. This makes the label measurable and reproducible, while still acknowledging that it is only a proxy for elevated maintenance risk.
+
+\section{Machine Learning Basics for Tabular Risk Scoring}
+\label{sec:background-ml-basics}
+
+The prediction task in this thesis is a binary classification problem. At a given observation time \(t\), a repository is represented by a set of features derived from public metadata and activity signals. The target variable indicates whether the repository becomes inactive in the interval \( [t, t + 12\ \text{months}] \). The model therefore estimates the probability that a dependency repository will become inactive within the prediction horizon.
+
+A simple baseline is required to determine whether machine learning provides value beyond straightforward heuristics. For this thesis, a recency-based baseline can use the time since the last observed commit or release as a simple inactivity-risk indicator. Such a baseline is important because repository inactivity is closely related to recent activity by definition. A machine-learning model is only useful if it improves over this simpler reference point.
+
+Logistic regression can be used as an interpretable probabilistic baseline for binary classification. Tree-based models, such as random forests and gradient boosting, can capture non-linear relationships and interactions between features \cite{james2021islr,breiman2001randomforests,friedman2001greedy}. These properties make them suitable candidates for tabular repository metadata, where activity, maintenance, and security-practice indicators may interact in non-linear ways.
+
+Model evaluation should consider both discrimination and calibration. Discrimination describes how well a model separates inactive from active repositories. Common metrics include the area under the receiver operating characteristic curve and the area under the precision-recall curve. Precision-recall evaluation is especially relevant when the positive class is rare or imbalanced \cite{saito2015precision}. Calibration describes whether predicted probabilities correspond to observed outcome frequencies. This is important because a risk score should be interpretable as a probability-like triage signal rather than only as a ranking \cite{niculescu2005probabilities}.
+
+To avoid overly optimistic evaluation, the dataset should be split in a time-aware way. A random split could allow information from later periods to influence model development for earlier periods, which would not reflect the real prediction setting. A time-aware split better matches the intended use case: using historical repository information to predict future inactivity.
+
+\section{Summary}
+\label{sec:background-summary}
+
+This chapter established the background for the thesis. Software supply-chain security motivates the need to monitor open-source dependencies as externally maintained components. Open-source project health metrics provide observable signals that can be used for inactivity-risk prediction. However, such metrics are context-dependent and can be distorted by project-specific practices, automation, or incomplete data. Machine-learning-based risk scoring can combine multiple signals, but it must be evaluated against simple baselines and assessed using both discrimination and calibration metrics.
+
+The following chapter discusses related work on open-source inactivity, repository health measurement, and security-practice indicators in more detail.

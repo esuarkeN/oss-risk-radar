@@ -28,6 +28,7 @@ if (payload.reusedCachedRun) {
   console.log("cache: refreshed latest cached run");
 }
 if (run.metrics) {
+  console.log(`quality: ${run.metrics.qualityScore}`);
   console.log(`auroc: ${run.metrics.rocAuc}`);
   console.log(`brier: ${run.metrics.brierScore}`);
   console.log(`inactive 12m rate: ${run.metrics.positiveRate}`);

@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: oss-risk-radar
+
+resources:
+  - namespace.yaml
+  - app-config.yaml
+  - postgres.yaml
+  - scoring.yaml
+  - api.yaml
+  - web.yaml
+  - ingress.yaml
+
+configMapGenerator:
+  - name: postgres-init
+    files:
+      - postgres-init/001_initial_schema.sql
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+images:
+  - name: ghcr.io/example/oss-risk-radar-api
+    newName: ghcr.io/your-org/oss-risk-radar-api
+    newTag: latest
+  - name: ghcr.io/example/oss-risk-radar-scoring
+    newName: ghcr.io/your-org/oss-risk-radar-scoring
+    newTag: latest
+  - name: ghcr.io/example/oss-risk-radar-web
+    newName: ghcr.io/your-org/oss-risk-radar-web
+    newTag: latest
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: oss-risk-radar-config
+      fieldPath: data.PUBLIC_HOST
+    targets:
+      - select:
+          kind: Ingress
+          name: oss-risk-radar
+        fieldPaths:
+          - spec.rules.0.host
+          - spec.tls.0.hosts.0

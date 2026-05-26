@@ -168,6 +168,12 @@ export function MlResultsDashboard() {
               Inspect dataset
             </Link>
             <Link
+              href="/ml-evaluation/repositories"
+              className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
+            >
+              Inspect repos
+            </Link>
+            <Link
               href="/ml-evaluation/runs"
               className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
             >
@@ -206,7 +212,13 @@ export function MlResultsDashboard() {
       </section>
 
       <section className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label="Quality"
+            value={formatTrainingMetric(run?.metrics?.qualityScore)}
+            detail="Combined held-out score from AUROC skill and Brier skill."
+            accent="primary"
+          />
           <MetricCard
             label="AUROC"
             value={formatTrainingMetric(run?.metrics?.rocAuc)}

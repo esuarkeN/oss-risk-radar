@@ -1,0 +1,66 @@
+\chapter{Introduction}
+\label{chap:introduction}
+
+\section{Motivation and Problem Statement}
+\label{sec:intro-motivation}
+
+Modern software systems are not developed in isolation, but are commonly assembled from first-party code, third-party components, and open-source software dependencies. In this thesis, open-source software is understood as software distributed under a license that complies with the Open Source Definition, which includes rights such as use, modification, and redistribution \cite{osiOpenSourceDefinition}. From a secure software development perspective, such dependencies are relevant because the NIST Secure Software Development Framework explicitly includes the acquisition and maintenance of well-secured third-party and open-source components as part of secure development practice \cite{souppaya2022ssdf}. Similarly, the SLSA framework addresses software supply-chain integrity by focusing on artifacts, build processes, provenance, and related security controls \cite{slsa2025spec}.
+
+The practical relevance of dependency management becomes visible in both empirical studies and real-world incidents. Miller et al. studied open-source dependency abandonment in the npm ecosystem and found that abandonment is common among widely used packages, while downstream projects often remain exposed to abandoned dependencies \cite{miller2025abandonment}. Their work also emphasizes that indirect dependencies can create wider consequences, because developers may have limited ability to react when an abandoned package appears only transitively in their dependency graph \cite{miller2025abandonment}. In an earlier interview study, Miller et al. found that developers who experienced dependency abandonment often lacked clear strategies and felt that they were improvising when responding to such situations \cite{miller2023wingingit}.
+
+Dependency-related risk is not limited to abandonment alone. Empirical work on vulnerable dependencies shows that known dependency vulnerabilities can persist for substantial periods. Prana et al. analyzed open-source dependencies in 450 Java, Python, and Ruby projects and found that many dependency vulnerabilities persisted throughout the observation period, while fixed vulnerabilities took several months to resolve on average \cite{prana2021outsight}. Such findings indicate that delayed maintenance and delayed updates can create long-lived exposure in downstream software.
+
+Real-world incidents further illustrate the potential impact of dependency problems. In 2016, the unpublishing of the small npm package \texttt{left-pad} caused a disruption for many projects that depended on it directly or indirectly, leading npm to manually restore the package and later change its unpublishing policy \cite{npm2016leftpad}. In 2017, Equifax disclosed that attackers exploited an Apache Struts vulnerability in its online dispute portal; the Federal Trade Commission later announced a settlement of at least \$575 million and potentially up to \$700 million related to the breach \cite{equifax2017incident,ftc2019equifax}. More recently, the XZ Utils backdoor showed that open-source project maintenance and maintainer trust can become part of the attack surface: OpenSSF and the OpenJS Foundation described the case as a warning sign for social-engineering takeover attempts against open-source projects \cite{openssf2024xzalert}.
+
+These examples do not imply that every inactive repository is insecure, abandoned, or harmful. A project may be stable, temporarily paused, or maintained through channels that are not fully visible in public repository data. However, they show that dependency health, maintainability, and responsiveness are relevant for secure software supply chains. Therefore, this thesis treats repository inactivity not as a definitive indicator of project death, but as an operational proxy for elevated maintenance risk. The central question is whether publicly observable repository signals can help estimate this risk early enough to support dependency triage and monitoring.
+
+\section{Research Question and Objectives}
+\label{sec:intro-research-question}
+
+The central research question of this thesis is:
+
+\begin{quote}
+To what extent can a machine-learning-based inactivity-risk scoring tool, using only publicly observable repository health indicators and security-practice signals, predict 12-month OSS dependency inactivity and support risk-based dependency triage in secure dependency management?
+\end{quote}
+
+To answer this research question, the thesis pursues the following objectives:
+
+\begin{enumerate}
+    \item Define an operational inactivity label for open-source repositories within a 12-month prediction horizon.
+    \item Construct a reproducible dataset from publicly observable repository metadata and dependency-related sources.
+    \item Engineer activity, maintenance, and selected security-practice features based on repository and project health indicators.
+    \item Train and compare simple baselines and machine-learning models for inactivity-risk prediction.
+    \item Evaluate the models using discrimination and calibration metrics that are suitable for risk scoring.
+    \item Demonstrate how the trained model can be applied to a concrete dependency set to support risk-based triage.
+\end{enumerate}
+
+The research follows a Design Science Research-oriented approach because the thesis develops and evaluates an artifact: an inactivity-risk scoring workflow for open-source dependencies \cite{hevner2004design,peffers2007design}. The empirical part evaluates whether the artifact produces useful predictive signals, while the practical demonstrator shows how the scoring workflow can be integrated into dependency monitoring.
+
+\section{Scope and Assumptions}
+\label{sec:intro-scope}
+
+The scope of this thesis is limited to open-source software dependencies whose source repositories and package metadata are publicly observable. The empirical dataset focuses on repositories that can be associated with an open-source license. Where GitHub license metadata is used, matched license keys and names are treated according to GitHub's SPDX-based license information \cite{githubRestLicenses}. The thesis does not investigate private repositories, closed-source vendor components, or dependencies whose source repository cannot be mapped with sufficient confidence.
+
+The prediction target is repository inactivity within the interval \( [t, t + 12\ \text{months}] \). Inactivity is operationalized primarily through the absence of commits and releases or tags during the prediction horizon. This definition follows the idea that revision activity can be used as an observable signal for survival-style analysis of open-source projects \cite{robinson2022survival}. Issue and pull-request activity are treated as predictor variables instead of label components, because they can indicate maintenance interaction without necessarily changing the released software artifact. Responsiveness-related features are interpreted cautiously, since bot-generated responses can distort measurements such as time to first response in pull-request workflows \cite{hasan2023firstresponse}.
+
+The thesis assumes that publicly observable repository signals can provide useful but incomplete evidence about future inactivity. It does not assume that these signals fully explain project sustainability. This distinction is important because previous research shows that cross-project health indicators can have different meanings depending on project context \cite{yehudi2023contextfree}. As a result, the model output is interpreted as a triage aid rather than as an automated decision system.
+
+\section{Contributions}
+\label{sec:intro-contributions}
+
+This thesis makes the following contributions:
+
+\begin{enumerate}
+    \item It defines a practical 12-month inactivity-risk label for open-source dependency repositories.
+    \item It proposes a reproducible data collection and feature engineering workflow based on public repository, package, and dependency metadata.
+    \item It evaluates whether repository health indicators and security-practice signals can support machine-learning-based inactivity prediction.
+    \item It compares predictive models against simple baselines and assesses both discrimination and probability calibration.
+    \item It demonstrates how an inactivity-risk score can be applied to a dependency set in order to produce a ranked triage view for secure dependency management.
+\end{enumerate}
+
+These contributions are intended to support software teams that need to prioritize dependency review and monitoring effort. The goal is not to replace expert judgement, but to provide a measurable and reproducible signal that can help identify dependencies that may deserve closer attention.
+
+\section{Structure of the Thesis}
+\label{sec:intro-structure}
+
+The remainder of this thesis is structured as follows. Chapter~\ref{chap:background} introduces the theoretical background, including software supply-chain security, open-source sustainability, project health metrics, and machine-learning basics for tabular risk scoring. Chapter~\ref{chap:related-work} discusses related work on open-source inactivity, repository health indicators, and security-practice metrics. Chapter~\ref{chap:methodology} presents the research design, inactivity label, dataset construction, feature engineering approach, models, baselines, and evaluation plan. Chapter~\ref{chap:implementation} describes the technical implementation of the data pipeline and scoring workflow. Chapter~\ref{chap:evaluation} reports and discusses the empirical results, including predictive performance, calibration, feature importance, and error analysis. Chapter~\ref{chap:conclusion} concludes the thesis and outlines limitations and opportunities for future work.

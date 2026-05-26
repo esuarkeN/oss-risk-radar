@@ -103,9 +103,11 @@ def labeled_rows(rows: list[TrainingRow]) -> list[TrainingRow]:
     return [row for row in rows if row.label_inactive_12m is not None]
 
 
-def time_aware_split(rows: list[TrainingRow], train_ratio: float = 0.7, validation_ratio: float = 0.15) -> DatasetSplit:
+def time_aware_split(rows: list[TrainingRow], train_ratio: float = 0.75, validation_ratio: float = 0.15) -> DatasetSplit:
     if len(rows) < 3:
         raise ValueError("at least three labeled rows are required for time-aware train/validation/test splits")
+    if train_ratio <= 0 or validation_ratio <= 0 or train_ratio + validation_ratio >= 1:
+        raise ValueError("train_ratio and validation_ratio must be positive and leave room for a test split")
 
     ordered = sorted(rows, key=lambda row: row.observed_at)
     count = len(ordered)

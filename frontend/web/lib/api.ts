@@ -18,7 +18,9 @@ import type {
 } from "@oss-risk-radar/schemas";
 
 const API_BASE_URL =
-  process.env.WEB_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1";
+  typeof window === "undefined"
+    ? process.env.WEB_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1"
+    : process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {

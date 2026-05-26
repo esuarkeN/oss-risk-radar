@@ -16,6 +16,7 @@ class BinaryClassificationMetrics:
     brier_score: float
     log_loss: float
     roc_auc: float
+    model_quality_score: float
 
 
 def _safe_divide(numerator: float, denominator: float) -> float:
@@ -59,6 +60,7 @@ def compute_binary_classification_metrics(
     false_positives = sum(1 for decision, label in zip(decisions, labels, strict=True) if decision == 1 and label == 0)
     false_negatives = sum(1 for decision, label in zip(decisions, labels, strict=True) if decision == 0 and label == 1)
 
+    positive_rate = sum(labels) / len(labels)
     accuracy = _safe_divide(true_positives + true_negatives, len(labels))
     precision = _safe_divide(true_positives, true_positives + false_positives)
     recall = _safe_divide(true_positives, true_positives + false_negatives)
@@ -69,16 +71,26 @@ def compute_binary_classification_metrics(
         (label * math.log(prediction + epsilon)) + ((1 - label) * math.log(1 - prediction + epsilon))
         for prediction, label in zip(clipped, labels, strict=True)
     ) / len(labels)
+    roc_auc = _roc_auc(clipped, labels)
+
+    if positive_rate <= 0 or positive_rate >= 1:
+        model_quality_score = 0.0
+    else:
+        climatology_brier = positive_rate * (1.0 - positive_rate)
+        auc_skill = max(0.0, min(1.0, (roc_auc - 0.5) / 0.5))
+        brier_skill = max(0.0, min(1.0, 1.0 - (brier_score / climatology_brier)))
+        model_quality_score = max(0.0, min(1.0, (0.6 * auc_skill) + (0.4 * brier_skill)))
 
     return BinaryClassificationMetrics(
         threshold=threshold,
         sample_count=len(labels),
-        positive_rate=sum(labels) / len(labels),
+        positive_rate=positive_rate,
         accuracy=accuracy,
         precision=precision,
         recall=recall,
         f1_score=f1_score,
         brier_score=brier_score,
         log_loss=log_loss,
-        roc_auc=_roc_auc(clipped, labels),
+        roc_auc=roc_auc,
+        model_quality_score=model_quality_score,
     )

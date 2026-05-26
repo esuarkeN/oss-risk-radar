@@ -9,6 +9,7 @@ import { EcosystemBreakdownChart } from "@/components/charts/ecosystem-breakdown
 import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart";
 import { DependencyPathExplorer } from "@/components/dependency-path-explorer";
 import { DependencyTable } from "@/components/dependency-table";
+import { RepositoryMlAnalysisPanel } from "@/components/repository-ml-analysis-panel";
 import { SummaryCard } from "@/components/summary-card";
 import { useToast } from "@/components/toast-provider";
 import { Badge } from "@/components/ui/badge";
@@ -283,6 +284,8 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
           )}
         </Card>
       </div>
+
+      <RepositoryMlAnalysisPanel dependency={selectedDependency} />
 
       {selectedDependency && !selectedIsRepositoryProfile ? (
         <DependencyPathExplorer dependency={selectedDependency} dependencies={dependencies} graph={graph} />

@@ -93,6 +93,7 @@ def test_model_training_endpoint_returns_metrics(training_snapshots: list[dict[s
     body = response.json()
     assert body["status"] == "completed"
     assert body["metrics"]["sample_count"] == 2
+    assert "model_quality_score" in body["metrics"]
     assert len(body["calibration_bins"]) == 5
     assert body["artifact"]["feature_version"] == "feature-set-v1"
     assert len(body["artifact"]["feature_names"]) == len(body["artifact"]["coefficients"])

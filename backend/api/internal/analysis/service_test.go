@@ -290,13 +290,14 @@ func TestCreateAnalysisUsesLatestTrainedModelWhenAvailable(t *testing.T) {
 	defer cancel()
 
 	tempDir := t.TempDir()
+	datasetPath := tempDir + "/snapshots.json"
 	scorer := &fakeModelScorer{}
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
 		MethodologyVersion:  "heuristic-v1",
 		Store:               storage.NewMemoryStore(),
 		Scorer:              scorer,
 		UploadDir:           tempDir,
-		TrainingDatasetPath: tempDir + "/snapshots.json",
+		TrainingDatasetPath: datasetPath,
 		TrainingRunsDir:     tempDir + "/runs",
 		WorkerPollInterval:  10 * time.Millisecond,
 		RetryDelay:          10 * time.Millisecond,
@@ -308,6 +309,7 @@ func TestCreateAnalysisUsesLatestTrainedModelWhenAvailable(t *testing.T) {
 		t.Fatalf("CreateAnalysis returned error: %v", err)
 	}
 	waitForAnalysis(t, ctx, service, initial.ID)
+	writeLabeledTrainingDataset(t, datasetPath)
 
 	if _, _, err := service.TriggerTrainingRun(ctx, true); err != nil {
 		t.Fatalf("TriggerTrainingRun returned error: %v", err)
@@ -338,13 +340,14 @@ func TestCreateAnalysisFallsBackToHeuristicWhenModelScoringFails(t *testing.T) {
 	defer cancel()
 
 	tempDir := t.TempDir()
+	datasetPath := tempDir + "/snapshots.json"
 	scorer := &fakeModelScorer{modelErr: errors.New("model scorer unavailable")}
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
 		MethodologyVersion:  "heuristic-v1",
 		Store:               storage.NewMemoryStore(),
 		Scorer:              scorer,
 		UploadDir:           tempDir,
-		TrainingDatasetPath: tempDir + "/snapshots.json",
+		TrainingDatasetPath: datasetPath,
 		TrainingRunsDir:     tempDir + "/runs",
 		WorkerPollInterval:  10 * time.Millisecond,
 		RetryDelay:          10 * time.Millisecond,
@@ -356,6 +359,7 @@ func TestCreateAnalysisFallsBackToHeuristicWhenModelScoringFails(t *testing.T) {
 		t.Fatalf("CreateAnalysis returned error: %v", err)
 	}
 	waitForAnalysis(t, ctx, service, initial.ID)
+	writeLabeledTrainingDataset(t, datasetPath)
 
 	if _, _, err := service.TriggerTrainingRun(ctx, true); err != nil {
 		t.Fatalf("TriggerTrainingRun returned error: %v", err)
@@ -472,12 +476,27 @@ func TestRepositorySubmissionCreatesRepositoryProfileWithoutManifest(t *testing.
 	if err != nil {
 		t.Fatalf("GetTrainingDatasetSummary returned error: %v", err)
 	}
-	if len(summary.Repositories) != 1 {
-		t.Fatalf("expected one ranked training repository, got %#v", summary.Repositories)
+	var repository *analysis.TrainingDatasetRepositorySummary
+	for index := range summary.Repositories {
+		if summary.Repositories[index].FullName == "facebook/react" {
+			repository = &summary.Repositories[index]
+			break
+		}
 	}
-	repository := summary.Repositories[0]
-	if repository.Rank != 1 || repository.FullName != "facebook/react" || repository.SnapshotCount != 1 || repository.PackageCount != 1 || repository.AnalysisCount != 1 {
+	if repository == nil {
+		t.Fatalf("expected ranked training repository for facebook/react, got %#v", summary.Repositories)
+	}
+	if repository.SnapshotCount != 1 || repository.PackageCount != 1 || repository.AnalysisCount != 1 {
 		t.Fatalf("unexpected ranked training repository: %#v", repository)
+	}
+	if repository.Stars != 230000 || repository.OpenIssues != 1000 {
+		t.Fatalf("expected repository popularity and issue signals in training summary, got %#v", repository)
+	}
+	if repository.LastPushAgeDays == nil || *repository.LastPushAgeDays != 2 {
+		t.Fatalf("expected activity signal in training summary, got %#v", repository)
+	}
+	if repository.RecentContributors90d == nil || *repository.RecentContributors90d != 35 {
+		t.Fatalf("expected contributor activity signal in training summary, got %#v", repository)
 	}
 }
 

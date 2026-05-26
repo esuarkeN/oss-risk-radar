@@ -33,7 +33,7 @@ from app.training.maintenance_dataset.events import GHArchiveAdapter
 from app.training.maintenance_dataset.features import build_snapshot_features
 from app.training.maintenance_dataset.labels import build_snapshot_label
 from app.training.maintenance_dataset.sampling import derive_popularity_tier, sample_candidates
-from app.training.maintenance_dataset.storage import load_package_candidates, read_jsonl, write_json, write_jsonl
+from app.training.maintenance_dataset.storage import load_package_candidates, read_json, read_jsonl, write_json, write_jsonl
 
 
 @dataclass(slots=True)
@@ -76,6 +76,7 @@ class DatasetBuildConfig:
     sample_seed: int = 42
     include_forks: bool = False
     training_output_path: str | Path | None = None
+    merge_existing_training_output: bool = True
 
 
 @dataclass(slots=True)
@@ -287,10 +288,20 @@ class DatasetBuilder:
                 }
             )
 
-        payload = {"updatedAt": datetime.now(UTC).isoformat(), "snapshots": exported_rows}
+        existing_rows = self._load_existing_training_snapshot_rows() if self.config.merge_existing_training_output else []
+        training_rows, merge_summary = _merge_training_snapshot_rows(existing_rows, exported_rows)
+
+        payload = {"updatedAt": datetime.now(UTC).isoformat(), "snapshots": training_rows}
         write_json(self.paths.training_snapshots, payload)
-        labeled_rows = sum(1 for row in exported_rows if row["label_inactive_12m"] is not None)
-        return {"training_snapshots": len(exported_rows), "labeled_rows": labeled_rows}
+        labeled_rows = sum(1 for row in training_rows if row.get("label_inactive_12m") is not None)
+        return {
+            "training_snapshots": len(training_rows),
+            "exported_training_snapshots": len(exported_rows),
+            "existing_training_snapshots": len(existing_rows),
+            "added_training_snapshots": merge_summary["added"],
+            "updated_training_snapshots": merge_summary["updated"],
+            "labeled_rows": labeled_rows,
+        }
 
     def build_all(self) -> dict[str, int]:
         summary: dict[str, int] = {}
@@ -528,6 +539,77 @@ class DatasetBuilder:
 
     def _load_label_rows(self) -> list[SnapshotLabelRow]:
         return [_snapshot_label_row_from_dict(item) for item in read_jsonl(self.paths.snapshot_labels)]
+
+    def _load_existing_training_snapshot_rows(self) -> list[dict[str, Any]]:
+        if not self.paths.training_snapshots.exists():
+            return []
+        if self.paths.training_snapshots.stat().st_size == 0:
+            return []
+        payload = read_json(self.paths.training_snapshots)
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if isinstance(payload, dict):
+            snapshots = payload.get("snapshots", [])
+            if isinstance(snapshots, list):
+                return [item for item in snapshots if isinstance(item, dict)]
+        return []
+
+
+def _merge_training_snapshot_rows(
+    existing_rows: list[dict[str, Any]],
+    exported_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    passthrough_rows: list[dict[str, Any]] = []
+    keyed_rows: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in existing_rows:
+        key = _training_snapshot_identity(row)
+        if key is None:
+            passthrough_rows.append(row)
+            continue
+        keyed_rows[key] = row
+
+    added = 0
+    updated = 0
+    for row in exported_rows:
+        key = _training_snapshot_identity(row)
+        if key is None:
+            passthrough_rows.append(row)
+            added += 1
+            continue
+        if key in keyed_rows:
+            updated += 1
+        else:
+            added += 1
+        keyed_rows[key] = row
+
+    merged_rows = passthrough_rows + list(keyed_rows.values())
+    merged_rows.sort(key=_training_snapshot_sort_key)
+    return merged_rows, {"added": added, "updated": updated}
+
+
+def _training_snapshot_identity(row: dict[str, Any]) -> tuple[str, str, str] | None:
+    dependency = row.get("dependency")
+    if not isinstance(dependency, dict):
+        return None
+    analysis_id = _nonempty_string(row.get("analysis_id"))
+    observed_at = _nonempty_string(row.get("observed_at"))
+    dependency_id = _nonempty_string(dependency.get("dependency_id"))
+    if analysis_id is None or observed_at is None or dependency_id is None:
+        return None
+    return (analysis_id, observed_at, dependency_id)
+
+
+def _training_snapshot_sort_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    dependency = row.get("dependency")
+    dependency_id = dependency.get("dependency_id") if isinstance(dependency, dict) else ""
+    return (str(row.get("observed_at", "")), str(row.get("analysis_id", "")), str(dependency_id))
+
+
+def _nonempty_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _package_record_from_dict(payload: dict[str, Any]) -> PackageRecord:

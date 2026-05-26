@@ -208,9 +208,19 @@ export interface TrainingDatasetRepositorySummary {
   snapshotCount: number;
   packageCount: number;
   analysisCount: number;
+  labeledSnapshotCount: number;
+  inactiveLabelCount: number;
   archived: boolean;
   stars: number;
   forks: number;
+  openIssues: number;
+  lastPushAgeDays?: number;
+  lastReleaseAgeDays?: number;
+  releaseCadenceDays?: number;
+  recentContributors90d?: number;
+  contributorConcentration?: number;
+  openIssueGrowth90d?: number;
+  pullRequestMedianResponseDays?: number;
   lastObservedAt?: string;
 }
 
@@ -243,6 +253,7 @@ export interface TrainingRunMetrics {
   brierScore: number;
   logLoss: number;
   rocAuc: number;
+  qualityScore: number;
 }
 
 export interface TrainingCalibrationBin {

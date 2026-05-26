@@ -1,0 +1,37 @@
+\documentclass[
+  12pt,
+  a4paper,
+  oneside,
+  listof=totoc,
+  bibliography=totoc,
+  numbers=noenddot
+]{scrreprt}
+
+\input{settings}
+\input{metadata}
+
+\begin{document}
+
+\pagenumbering{Roman}
+\input{frontmatter/titlepage}
+\input{frontmatter/abstract}
+\tableofcontents
+\listoffigures
+\listoftables
+\input{abbreviations}
+
+\cleardoublepage
+\pagenumbering{arabic}
+
+\input{chapters/01-introduction}
+\input{chapters/02-background}
+\input{chapters/03-methodology}
+\input{chapters/04-implementation}
+\input{chapters/05-evaluation}
+\input{chapters/06-conclusion}
+
+\printbibliography
+\appendix
+\input{appendix/appendix-a}
+
+\end{document}

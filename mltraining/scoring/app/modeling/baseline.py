@@ -17,7 +17,7 @@ class LogisticRegressionModel:
     intercept: float
     standardization: StandardizationProfile
     model_name: str = "logistic-regression-baseline"
-    model_version: str = "0.2.0"
+    model_version: str = "0.3.0"
 
 
 def _sigmoid(value: float) -> float:
@@ -62,6 +62,17 @@ def _apply_standardization(matrix: list[list[float]], profile: StandardizationPr
     return transformed
 
 
+def _balanced_sample_weights(labels: list[int]) -> list[float]:
+    positive_count = sum(1 for label in labels if label == 1)
+    negative_count = len(labels) - positive_count
+    if positive_count == 0 or negative_count == 0:
+        return [1.0 for _ in labels]
+
+    positive_weight = len(labels) / (2.0 * positive_count)
+    negative_weight = len(labels) / (2.0 * negative_count)
+    return [positive_weight if label == 1 else negative_weight for label in labels]
+
+
 def fit_logistic_regression(
     feature_names: list[str],
     matrix: list[list[float]],
@@ -79,24 +90,25 @@ def fit_logistic_regression(
     feature_count = len(feature_names)
     weights = [0.0 for _ in range(feature_count)]
     intercept = 0.0
-    sample_count = float(len(labels))
+    sample_weights = _balanced_sample_weights(labels)
+    sample_weight_total = sum(sample_weights) or float(len(labels))
 
     for _ in range(epochs):
         gradient_weights = [0.0 for _ in range(feature_count)]
         gradient_intercept = 0.0
 
-        for row, label in zip(standardized_matrix, labels, strict=True):
+        for row, label, sample_weight in zip(standardized_matrix, labels, sample_weights, strict=True):
             linear_term = intercept + sum(weight * value for weight, value in zip(weights, row, strict=True))
             prediction = _sigmoid(linear_term)
-            error = prediction - label
+            error = (prediction - label) * sample_weight
             gradient_intercept += error
             for index, value in enumerate(row):
                 gradient_weights[index] += error * value
 
-        intercept -= learning_rate * gradient_intercept / sample_count
+        intercept -= learning_rate * gradient_intercept / sample_weight_total
         for index in range(feature_count):
             penalty = l2_penalty * weights[index]
-            weights[index] -= learning_rate * ((gradient_weights[index] / sample_count) + penalty)
+            weights[index] -= learning_rate * ((gradient_weights[index] / sample_weight_total) + penalty)
 
     return LogisticRegressionModel(
         feature_names=feature_names,

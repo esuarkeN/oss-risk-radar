@@ -130,6 +130,87 @@ def test_dataset_builder_exports_existing_training_snapshot_format(tmp_path) -> 
     assert any(item.label_inactive_12m is False for item in validated)
 
 
+def test_dataset_builder_merges_export_into_existing_training_snapshots(tmp_path) -> None:
+    seed_path = tmp_path / "seed.csv"
+    with seed_path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["ecosystem", "package_name", "package_version", "popularity_tier"])
+        writer.writeheader()
+        writer.writerow({"ecosystem": "npm", "package_name": "widget-ui", "package_version": "2.0.0", "popularity_tier": "medium"})
+
+    training_path = tmp_path / "training" / "snapshots.json"
+    training_path.parent.mkdir(parents=True)
+    stale_snapshot_id = "acme__widget-ui:2024-01-01"
+    training_path.write_text(
+        json.dumps(
+            {
+                "updatedAt": "2024-01-01T00:00:00+00:00",
+                "snapshots": [
+                    {
+                        "analysis_id": "analysis_existing",
+                        "observed_at": "2023-11-01T00:00:00Z",
+                        "label_inactive_12m": False,
+                        "dependency": {
+                            "dependency_id": "dep_existing",
+                            "package_name": "existing-package",
+                            "package_version": "1.0.0",
+                            "ecosystem": "npm",
+                            "direct": True,
+                        },
+                    },
+                    {
+                        "analysis_id": f"dataset:{stale_snapshot_id}",
+                        "observed_at": "2024-01-01T00:00:00+00:00",
+                        "label_inactive_12m": True,
+                        "dependency": {
+                            "dependency_id": stale_snapshot_id,
+                            "package_name": "widget-ui",
+                            "package_version": "stale",
+                            "ecosystem": "npm",
+                            "direct": True,
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    builder = DatasetBuilder(
+        config=DatasetBuildConfig(
+            seed_file=seed_path,
+            output_dir=tmp_path / "dataset",
+            gharchive_sources=["fixture"],
+            observation_start=datetime(2024, 1, 1, tzinfo=UTC),
+            observation_end=datetime(2024, 1, 1, tzinfo=UTC),
+            observation_interval_months=3,
+            training_output_path=training_path,
+        ),
+        adapters=PipelineAdapters(
+            gharchive=FakeGHArchiveAdapter(),
+            depsdev=FakeDepsDevAdapter(),
+            github=FakeGitHubAdapter(),
+            npm_registry=FakeNpmRegistryAdapter(),
+            pypi_registry=FakePyPIRegistryAdapter(),
+        ),
+    )
+
+    summary = builder.build_all()
+
+    assert summary["existing_training_snapshots"] == 2
+    assert summary["exported_training_snapshots"] == 1
+    assert summary["added_training_snapshots"] == 0
+    assert summary["updated_training_snapshots"] == 1
+    assert summary["training_snapshots"] == 2
+    payload = json.loads(training_path.read_text(encoding="utf-8"))
+    snapshots = payload["snapshots"]
+    validated = [TrainingSnapshotInput.model_validate(item) for item in snapshots]
+    assert len(validated) == 2
+    assert any(item.analysis_id == "analysis_existing" for item in validated)
+    refreshed = next(item for item in snapshots if item["analysis_id"] == f"dataset:{stale_snapshot_id}")
+    assert refreshed["dependency"]["package_version"] == "2.0.0"
+    assert refreshed["dependency"]["historical_features"]
+
+
 def test_dataset_builder_supports_repository_seed_candidates(tmp_path) -> None:
     seed_path = tmp_path / "foundation-seed.csv"
     with seed_path.open("w", encoding="utf-8", newline="") as handle:

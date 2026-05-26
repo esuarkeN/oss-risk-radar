@@ -7,7 +7,16 @@ from typing import Any
 from app.modeling import FEATURE_VERSION, fit_logistic_regression, predict_probabilities, serialize_logistic_regression_model
 from app.schemas.score import CalibrationBin, DatasetSplitSummary, EvaluationMetrics, LogisticRegressionModelArtifact, TrainingSnapshotInput
 from app.training.calibration import fit_histogram_calibrator
-from app.training.datasets import build_dataset, labeled_rows, load_snapshots_from_uri, rows_to_matrix, summarize_dataset, time_aware_split
+from app.training.datasets import (
+    DatasetSplit,
+    TrainingRow,
+    build_dataset,
+    labeled_rows,
+    load_snapshots_from_uri,
+    rows_to_matrix,
+    summarize_dataset,
+    time_aware_split,
+)
 from app.training.evaluation import compute_binary_classification_metrics
 
 
@@ -17,7 +26,7 @@ class TrainingRunConfig:
     snapshots: list[TrainingSnapshotInput] | list[dict[str, Any]] | None = None
     label_horizon_months: int = 12
     algorithm: str = "logistic_regression"
-    train_ratio: float = 0.7
+    train_ratio: float = 0.75
     validation_ratio: float = 0.15
     calibration_bins: int = 10
     threshold: float = 0.5
@@ -48,6 +57,19 @@ def _load_snapshots(config: TrainingRunConfig) -> list[TrainingSnapshotInput]:
     raise ValueError("a dataset path or inline snapshots are required")
 
 
+def _row_identity(row: TrainingRow) -> tuple[str, str, str]:
+    return (row.analysis_id, row.dependency_id, row.observed_at.isoformat())
+
+
+def _assert_disjoint_splits(split: DatasetSplit) -> None:
+    train_keys = {_row_identity(row) for row in split.train}
+    validation_keys = {_row_identity(row) for row in split.validation}
+    test_keys = {_row_identity(row) for row in split.test}
+
+    if train_keys & validation_keys or train_keys & test_keys or validation_keys & test_keys:
+        raise ValueError("train, validation, and test splits must be disjoint; duplicate snapshot identities crossed a split boundary")
+
+
 def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
     snapshots = _load_snapshots(config)
     dataset = build_dataset(snapshots)
@@ -59,7 +81,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         return TrainingRunResult(
             status="insufficient_data",
             model_name="logistic-regression-baseline",
-            model_version="0.2.0",
+            model_version="0.3.0",
             trained_at=trained_at,
             dataset_summary=summary,
             split_summary=None,
@@ -74,6 +96,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         train_ratio=config.train_ratio,
         validation_ratio=config.validation_ratio,
     )
+    _assert_disjoint_splits(split)
 
     train_matrix, train_labels = rows_to_matrix(split.train, dataset.feature_names)
     validation_matrix, validation_labels = rows_to_matrix(split.validation, dataset.feature_names)
@@ -104,6 +127,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         )
         for bin_summary in calibrator.bins
     ]
+    split_note = f"{config.train_ratio:.0%}/{config.validation_ratio:.0%}/{(1.0 - config.train_ratio - config.validation_ratio):.0%}"
 
     return TrainingRunResult(
         status="completed",
@@ -127,6 +151,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
             brier_score=round(metrics.brier_score, 6),
             log_loss=round(metrics.log_loss, 6),
             roc_auc=round(metrics.roc_auc, 6),
+            model_quality_score=round(metrics.model_quality_score, 6),
         ),
         calibration_bins=calibration_bins,
         artifact=serialize_logistic_regression_model(
@@ -136,7 +161,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
             calibration_bins=calibration_bins,
         ),
         note=(
-            f"Trained {model.model_name} using {FEATURE_VERSION} on a time-aware split. "
+            f"Trained {model.model_name} using {FEATURE_VERSION} on a {split_note} time-aware split with class-balanced inactive labels. "
             "The latest model artifact is now available for runtime scoring, but it still needs historical-label validation before thesis claims."
         ),
     )

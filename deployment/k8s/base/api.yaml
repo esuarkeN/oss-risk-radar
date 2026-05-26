@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: oss-risk-radar
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: oss-risk-radar
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: oss-risk-radar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: api
+      app.kubernetes.io/part-of: oss-risk-radar
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: api
+        app.kubernetes.io/part-of: oss-risk-radar
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16.4-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgres -U oss_risk_radar -d oss_risk_radar; do sleep 2; done
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oss-risk-radar-secrets
+                  key: POSTGRES_PASSWORD
+      containers:
+        - name: api
+          image: ghcr.io/example/oss-risk-radar-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: API_ADDR
+              value: :8080
+            - name: API_ALLOWED_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: oss-risk-radar-config
+                  key: PUBLIC_ORIGIN
+            - name: SCORING_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: oss-risk-radar-config
+                  key: SCORING_BASE_URL
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: oss-risk-radar-secrets
+                  key: DATABASE_URL
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: oss-risk-radar-secrets
+                  key: GITHUB_TOKEN
+                  optional: true
+            - name: UPLOAD_DIR
+              value: /app/tmp/uploads
+            - name: TRAINING_DATASET_PATH
+              value: /app/tmp/training/snapshots.json
+            - name: TRAINING_RUNS_DIR
+              value: /app/tmp/training/runs
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          volumeMounts:
+            - name: api-data
+              mountPath: /app/tmp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+      volumes:
+        - name: api-data
+          persistentVolumeClaim:
+            claimName: api-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: api-data
+  labels:
+    app.kubernetes.io/name: api
+    app.kubernetes.io/part-of: oss-risk-radar
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

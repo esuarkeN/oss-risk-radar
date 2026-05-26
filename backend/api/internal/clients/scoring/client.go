@@ -35,8 +35,10 @@ type scoreRequest struct {
 }
 
 type trainModelRequest struct {
-	ModelName string                            `json:"model_name"`
-	Snapshots []analysis.TrainingSnapshotRecord `json:"snapshots"`
+	ModelName       string                            `json:"model_name"`
+	Snapshots       []analysis.TrainingSnapshotRecord `json:"snapshots"`
+	TrainRatio      float64                           `json:"train_ratio"`
+	ValidationRatio float64                           `json:"validation_ratio"`
 }
 
 type dependencySignalInput struct {
@@ -163,6 +165,7 @@ type trainModelResponse struct {
 		BrierScore   float64 `json:"brier_score"`
 		LogLoss      float64 `json:"log_loss"`
 		RocAuc       float64 `json:"roc_auc"`
+		QualityScore float64 `json:"model_quality_score"`
 	} `json:"metrics"`
 	CalibrationBins []calibrationBinOutput `json:"calibration_bins"`
 	Artifact        *struct {
@@ -237,7 +240,7 @@ func (c *Client) ScoreModel(
 }
 
 func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
-	payload := trainModelRequest{ModelName: "logistic-regression-baseline", Snapshots: snapshots}
+	payload := trainModelRequest{ModelName: "logistic-regression-baseline", Snapshots: snapshots, TrainRatio: 0.75, ValidationRatio: 0.15}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return analysis.TrainingRunArtifact{}, err
@@ -302,6 +305,7 @@ func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSn
 			BrierScore:   decoded.Metrics.BrierScore,
 			LogLoss:      decoded.Metrics.LogLoss,
 			RocAuc:       decoded.Metrics.RocAuc,
+			QualityScore: decoded.Metrics.QualityScore,
 		}
 	}
 	if decoded.Artifact != nil {
