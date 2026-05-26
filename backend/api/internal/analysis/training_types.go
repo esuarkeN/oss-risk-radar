@@ -14,16 +14,26 @@ type TrainingDatasetSummary struct {
 }
 
 type TrainingDatasetRepositorySummary struct {
-	Rank           int    `json:"rank"`
-	FullName       string `json:"fullName"`
-	URL            string `json:"url"`
-	SnapshotCount  int    `json:"snapshotCount"`
-	PackageCount   int    `json:"packageCount"`
-	AnalysisCount  int    `json:"analysisCount"`
-	Archived       bool   `json:"archived"`
-	Stars          int    `json:"stars"`
-	Forks          int    `json:"forks"`
-	LastObservedAt string `json:"lastObservedAt,omitempty"`
+	Rank                          int      `json:"rank"`
+	FullName                      string   `json:"fullName"`
+	URL                           string   `json:"url"`
+	SnapshotCount                 int      `json:"snapshotCount"`
+	PackageCount                  int      `json:"packageCount"`
+	AnalysisCount                 int      `json:"analysisCount"`
+	LabeledSnapshotCount          int      `json:"labeledSnapshotCount"`
+	InactiveLabelCount            int      `json:"inactiveLabelCount"`
+	Archived                      bool     `json:"archived"`
+	Stars                         int      `json:"stars"`
+	Forks                         int      `json:"forks"`
+	OpenIssues                    int      `json:"openIssues"`
+	LastPushAgeDays               *int     `json:"lastPushAgeDays,omitempty"`
+	LastReleaseAgeDays            *int     `json:"lastReleaseAgeDays,omitempty"`
+	ReleaseCadenceDays            *int     `json:"releaseCadenceDays,omitempty"`
+	RecentContributors90d         *int     `json:"recentContributors90d,omitempty"`
+	ContributorConcentration      *float64 `json:"contributorConcentration,omitempty"`
+	OpenIssueGrowth90d            *float64 `json:"openIssueGrowth90d,omitempty"`
+	PullRequestMedianResponseDays *float64 `json:"pullRequestMedianResponseDays,omitempty"`
+	LastObservedAt                string   `json:"lastObservedAt,omitempty"`
 }
 
 type GetTrainingDatasetSummaryResponse struct {
@@ -56,6 +66,7 @@ type TrainingRunMetrics struct {
 	BrierScore   float64 `json:"brierScore"`
 	LogLoss      float64 `json:"logLoss"`
 	RocAuc       float64 `json:"rocAuc"`
+	QualityScore float64 `json:"qualityScore"`
 }
 
 type TrainingCalibrationBin struct {

@@ -27,6 +27,7 @@ export type {
   TrainingRunArtifact,
   TrainingRunDatasetSummary,
   TrainingRunMetrics,
+  TrainingRunModelArtifact,
   TrainingRunSplitSummary,
   TriggerTrainingRunRequest,
   TriggerTrainingRunResponse,

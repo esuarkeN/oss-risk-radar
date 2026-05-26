@@ -46,6 +46,17 @@ func (s *Service) TriggerTrainingRun(ctx context.Context, force bool) (TrainingR
 	if len(snapshots) == 0 {
 		return TrainingRunArtifact{}, false, errors.New("no training snapshots are available yet")
 	}
+	labeledSnapshots := labeledTrainingSnapshotCount(snapshots)
+	if labeledSnapshots == 0 {
+		return TrainingRunArtifact{}, false, errors.New("no labeled real-project training snapshots are available yet; build a historical dataset before training")
+	}
+	realProjectLabeledSnapshots := realProjectLabeledTrainingSnapshotCount(snapshots)
+	if realProjectLabeledSnapshots == 0 {
+		return TrainingRunArtifact{}, false, errors.New("no labeled real-project training snapshots include a GitHub repository identity; rebuild the historical dataset from real repositories before training")
+	}
+	if realProjectLabeledSnapshots < labeledSnapshots {
+		return TrainingRunArtifact{}, false, errors.New("all labeled training snapshots must include a GitHub repository identity before training")
+	}
 
 	latest, err := s.trainingRuns.Latest()
 	if err != nil {

@@ -56,6 +56,10 @@ export const heuristicSignalGlossary: InfoChipItem[] = [
 
 export const modelMetricGlossary: InfoChipItem[] = [
   {
+    label: "Quality",
+    description: "A held-out summary score that combines AUROC skill with Brier skill. It is useful for comparison, not as a standalone proof."
+  },
+  {
     label: "AUROC",
     description: "How well the model ranks riskier dependencies ahead of less risky ones across thresholds. Higher is better."
   },

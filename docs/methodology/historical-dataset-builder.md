@@ -8,8 +8,12 @@ The builder lives in `mltraining/scoring/app/training/maintenance_dataset` and i
 
 - The existing trainer already consumes snapshot JSON or JSONL through `TrainingSnapshotInput`.
 - The default backend dataset path is `tmp/training/snapshots.json`.
+- Training requires labeled real-project snapshots. Runtime analysis captures without `label_inactive_12m` are not enough to train a model, and labeled rows must include a GitHub repository identity.
 - The dataset builder writes inspectable intermediate JSONL tables plus a final `training_snapshots.json` export in that same snapshot shape.
+- When the final export path already exists, the builder merges into it by `analysis_id`, `dependency_id`, and `observed_at`, so newly built repositories expand the current training base instead of replacing it.
 - The snapshot export now supports an optional `historical_features` map so richer observation-time features survive into the training pipeline unchanged.
+
+The project intentionally does not ship a fake training corpus. For thesis-grade claims, build the dataset from real repositories and real historical observations, then train only from that exported snapshot file.
 
 ## Data flow
 
@@ -109,6 +113,7 @@ That command:
 
 - prepares the seed file if needed
 - builds the historical dataset
+- merges the exported historical rows into `tmp/training/snapshots.json`
 - triggers the existing training API
 - verifies that `tmp/training/runs/*.json` and `tmp/training/latest-run.json` were written
 
@@ -118,6 +123,28 @@ Seed file columns:
 - optional: `package_version`, `popularity_tier`, `downloads_30d`, `direct_dependents_count`, `source`, `repository_url`, `repository_full_name`
 
 For repository-first foundation runs, use `ecosystem=github` plus `repository_url` and `repository_full_name`. The builder now treats those as first-class candidates instead of trying to resolve them back through package registries.
+
+The repository contains a deterministic real-project seed at `scripts/ml/real-project-foundation-seed.csv`. It includes active candidates and retired/dormant candidates, but those seed categories are not labels. Labels are still derived from the future historical window.
+
+To build from the committed real-project seed:
+
+```powershell
+npm run ml:dataset:real-projects -- `
+  --gharchive-source .\tmp\gharchive `
+  --output-dir .\tmp\training\oss-maintenance `
+  --training-output-path .\tmp\training\snapshots.json
+```
+
+Add `--replace-training-output` when you intentionally want to discard the existing snapshot file and export only the rows from the current builder run.
+
+To build and train from that same real-project seed:
+
+```powershell
+npm run ml:bootstrap:real-projects -- `
+  --gharchive-source .\tmp\gharchive `
+  --output-dir .\tmp\training\oss-maintenance `
+  --training-output-path .\tmp\training\snapshots.json
+```
 
 To generate a basic repository foundation seed from the GitHub Search API:
 
@@ -138,14 +165,18 @@ npm run ml:bootstrap:foundation -- `
   --training-output-path .\tmp\training\snapshots.json
 ```
 
-The plain `npm run ml:bootstrap -- --gharchive-source ...` path intentionally remains a small starter run for local smoke tests. Use `ml:bootstrap:foundation` for the thesis/training base because it asks the GitHub Search API for a broad active, dormant, and archived repository mix.
+The plain `npm run ml:bootstrap -- --gharchive-source ...` path intentionally remains a small starter run for local smoke tests. Use `ml:bootstrap:foundation` for the thesis/training base because it asks the GitHub Search API for a broad active, dormant, and archived repository mix. The default foundation seed is intentionally inactive-heavy: about 45% active repositories and 55% dormant or archived repositories before sampling.
+
+Use `ml:bootstrap:real-projects` when you want a stable, repeatable real-project seed. Use `ml:bootstrap:foundation` when you want a larger search-generated real-project corpus.
 
 When `--generate-foundation-seed` is enabled, the repo helper now enforces:
 
 - at least the requested number of unique repositories in the exported dataset
-- at least a small inactive-repository floor in the labeled export
+- at least a 20% inactive-repository floor in the labeled export
 - non-empty validation and test slices during bootstrap
 - a non-zero inactive 12m rate in the evaluation slice
+
+Training uses a 75/15/10 time-aware split by default. The model fits only on the earliest training slice, calibrates on the following validation slice, and reports AUROC, Brier score, and a combined quality score only on the final held-out test slice. The combined quality score normalizes AUROC into ranking skill above random and combines it with Brier skill against the label-rate baseline.
 
 ## Connecting to the existing trainer
 

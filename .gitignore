@@ -32,3 +32,23 @@ postgres-data/
 
 # Local scratch space
 tmp/
+
+# LaTeX build output
+tex/thesis/build/
+tex/thesis/**/*.aux
+tex/thesis/**/*.bbl
+tex/thesis/**/*.bcf
+tex/thesis/**/*.blg
+tex/thesis/**/*.fdb_latexmk
+tex/thesis/**/*.fls
+tex/thesis/**/*.glg
+tex/thesis/**/*.glo
+tex/thesis/**/*.gls
+tex/thesis/**/*.ist
+tex/thesis/**/*.lof
+tex/thesis/**/*.log
+tex/thesis/**/*.lot
+tex/thesis/**/*.out
+tex/thesis/**/*.run.xml
+tex/thesis/**/*.synctex.gz
+tex/thesis/**/*.toc

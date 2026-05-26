@@ -7,20 +7,31 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
 
 type trainingRepositoryAggregate struct {
-	fullName       string
-	url            string
-	snapshotCount  int
-	packageKeys    map[string]struct{}
-	analysisIDs    map[string]struct{}
-	archived       bool
-	stars          int
-	forks          int
-	lastObservedAt string
+	fullName                      string
+	url                           string
+	snapshotCount                 int
+	packageKeys                   map[string]struct{}
+	analysisIDs                   map[string]struct{}
+	labeledSnapshotCount          int
+	inactiveLabelCount            int
+	archived                      bool
+	stars                         int
+	forks                         int
+	openIssues                    int
+	lastPushAgeDays               *int
+	lastReleaseAgeDays            *int
+	releaseCadenceDays            *int
+	recentContributors90d         *int
+	contributorConcentration      *float64
+	openIssueGrowth90d            *float64
+	pullRequestMedianResponseDays *float64
+	lastObservedAt                string
 }
 
 type trainingDatasetEnvelope struct {
@@ -75,6 +86,12 @@ func (m *trainingDatasetManager) Summary() (TrainingDatasetSummary, error) {
 			aggregate.snapshotCount++
 			aggregate.packageKeys[packageKey] = struct{}{}
 			aggregate.analysisIDs[snapshot.AnalysisID] = struct{}{}
+			if snapshot.LabelInactive12M != nil {
+				aggregate.labeledSnapshotCount++
+				if *snapshot.LabelInactive12M {
+					aggregate.inactiveLabelCount++
+				}
+			}
 			aggregate.archived = aggregate.archived || repository.Archived
 			if repository.Stars > aggregate.stars {
 				aggregate.stars = repository.Stars
@@ -82,8 +99,16 @@ func (m *trainingDatasetManager) Summary() (TrainingDatasetSummary, error) {
 			if repository.Forks > aggregate.forks {
 				aggregate.forks = repository.Forks
 			}
-			if snapshot.ObservedAt > aggregate.lastObservedAt {
+			if snapshot.ObservedAt >= aggregate.lastObservedAt {
 				aggregate.lastObservedAt = snapshot.ObservedAt
+				aggregate.openIssues = repository.OpenIssues
+				aggregate.lastPushAgeDays = cloneIntPointer(repository.LastPushAgeDays)
+				aggregate.lastReleaseAgeDays = cloneIntPointer(repository.LastReleaseAgeDays)
+				aggregate.releaseCadenceDays = cloneIntPointer(repository.ReleaseCadenceDays)
+				aggregate.recentContributors90d = cloneIntPointer(repository.RecentContributors90d)
+				aggregate.contributorConcentration = cloneFloatPointer(repository.ContributorConcentration)
+				aggregate.openIssueGrowth90d = cloneFloatPointer(repository.OpenIssueGrowth90d)
+				aggregate.pullRequestMedianResponseDays = cloneFloatPointer(repository.PRResponseMedianDays)
 			}
 		}
 	}
@@ -110,15 +135,25 @@ func rankedTrainingRepositories(aggregates map[string]*trainingRepositoryAggrega
 	rows := make([]TrainingDatasetRepositorySummary, 0, len(aggregates))
 	for _, aggregate := range aggregates {
 		rows = append(rows, TrainingDatasetRepositorySummary{
-			FullName:       aggregate.fullName,
-			URL:            aggregate.url,
-			SnapshotCount:  aggregate.snapshotCount,
-			PackageCount:   len(aggregate.packageKeys),
-			AnalysisCount:  len(aggregate.analysisIDs),
-			Archived:       aggregate.archived,
-			Stars:          aggregate.stars,
-			Forks:          aggregate.forks,
-			LastObservedAt: aggregate.lastObservedAt,
+			FullName:                      aggregate.fullName,
+			URL:                           aggregate.url,
+			SnapshotCount:                 aggregate.snapshotCount,
+			PackageCount:                  len(aggregate.packageKeys),
+			AnalysisCount:                 len(aggregate.analysisIDs),
+			LabeledSnapshotCount:          aggregate.labeledSnapshotCount,
+			InactiveLabelCount:            aggregate.inactiveLabelCount,
+			Archived:                      aggregate.archived,
+			Stars:                         aggregate.stars,
+			Forks:                         aggregate.forks,
+			OpenIssues:                    aggregate.openIssues,
+			LastPushAgeDays:               cloneIntPointer(aggregate.lastPushAgeDays),
+			LastReleaseAgeDays:            cloneIntPointer(aggregate.lastReleaseAgeDays),
+			ReleaseCadenceDays:            cloneIntPointer(aggregate.releaseCadenceDays),
+			RecentContributors90d:         cloneIntPointer(aggregate.recentContributors90d),
+			ContributorConcentration:      cloneFloatPointer(aggregate.contributorConcentration),
+			OpenIssueGrowth90d:            cloneFloatPointer(aggregate.openIssueGrowth90d),
+			PullRequestMedianResponseDays: cloneFloatPointer(aggregate.pullRequestMedianResponseDays),
+			LastObservedAt:                aggregate.lastObservedAt,
 		})
 	}
 
@@ -136,6 +171,22 @@ func rankedTrainingRepositories(aggregates map[string]*trainingRepositoryAggrega
 		rows[i].Rank = i + 1
 	}
 	return rows
+}
+
+func cloneIntPointer(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneFloatPointer(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 func (m *trainingDatasetManager) LoadSnapshots() ([]TrainingSnapshotRecord, string, error) {
@@ -173,15 +224,7 @@ func (m *trainingDatasetManager) UpsertAnalysisSnapshots(item AnalysisRecord) er
 	}
 
 	filtered = append(filtered, snapshotsFromAnalysis(item)...)
-	sort.Slice(filtered, func(i, j int) bool {
-		if filtered[i].ObservedAt != filtered[j].ObservedAt {
-			return filtered[i].ObservedAt < filtered[j].ObservedAt
-		}
-		if filtered[i].AnalysisID != filtered[j].AnalysisID {
-			return filtered[i].AnalysisID < filtered[j].AnalysisID
-		}
-		return filtered[i].Dependency.DependencyID < filtered[j].Dependency.DependencyID
-	})
+	sortTrainingSnapshots(filtered)
 
 	dataset.Snapshots = filtered
 	dataset.UpdatedAt = time.Now().UTC()
@@ -211,6 +254,50 @@ func (m *trainingDatasetManager) read() (trainingDatasetEnvelope, error) {
 		dataset.Snapshots = []TrainingSnapshotRecord{}
 	}
 	return dataset, nil
+}
+
+func labeledTrainingSnapshotCount(snapshots []TrainingSnapshotRecord) int {
+	count := 0
+	for _, snapshot := range snapshots {
+		if snapshot.LabelInactive12M != nil {
+			count++
+		}
+	}
+	return count
+}
+
+func realProjectLabeledTrainingSnapshotCount(snapshots []TrainingSnapshotRecord) int {
+	count := 0
+	for _, snapshot := range snapshots {
+		if snapshot.LabelInactive12M != nil && hasTrainingSnapshotRepositoryIdentity(snapshot) {
+			count++
+		}
+	}
+	return count
+}
+
+func hasTrainingSnapshotRepositoryIdentity(snapshot TrainingSnapshotRecord) bool {
+	repository := snapshot.Dependency.Repository
+	if repository == nil {
+		return false
+	}
+	if strings.TrimSpace(repository.FullName) == "" {
+		return false
+	}
+	repositoryURL := strings.ToLower(strings.TrimSpace(repository.URL))
+	return strings.HasPrefix(repositoryURL, "https://github.com/") || strings.HasPrefix(repositoryURL, "http://github.com/")
+}
+
+func sortTrainingSnapshots(snapshots []TrainingSnapshotRecord) {
+	sort.Slice(snapshots, func(i, j int) bool {
+		if snapshots[i].ObservedAt != snapshots[j].ObservedAt {
+			return snapshots[i].ObservedAt < snapshots[j].ObservedAt
+		}
+		if snapshots[i].AnalysisID != snapshots[j].AnalysisID {
+			return snapshots[i].AnalysisID < snapshots[j].AnalysisID
+		}
+		return snapshots[i].Dependency.DependencyID < snapshots[j].Dependency.DependencyID
+	})
 }
 
 func (m *trainingDatasetManager) write(dataset trainingDatasetEnvelope) error {

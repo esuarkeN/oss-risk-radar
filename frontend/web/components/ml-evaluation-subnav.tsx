@@ -17,6 +17,11 @@ const links = [
     description: "Training-base coverage, label balance, and features.",
   },
   {
+    href: "/ml-evaluation/repositories",
+    label: "Repositories",
+    description: "Searchable list of training repos and activity signals.",
+  },
+  {
     href: "/ml-evaluation/runs",
     label: "Runs",
     description: "Cached artifacts, splits, hashes, and status history.",
@@ -27,7 +32,7 @@ export function MlEvaluationSubnav() {
   const pathname = usePathname();
 
   return (
-    <nav className="grid gap-3 lg:grid-cols-3">
+    <nav className="grid gap-3 lg:grid-cols-4">
       {links.map((link) => {
         const isActive = pathname === link.href;
 

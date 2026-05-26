@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -204,16 +206,18 @@ func TestTriggerTrainingRunEndpoint(t *testing.T) {
 	defer cancel()
 
 	tempDir := t.TempDir()
+	datasetPath := filepath.Join(tempDir, "snapshots.json")
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
 		MethodologyVersion:  "heuristic-v1",
 		Store:               storage.NewMemoryStore(),
 		Scorer:              fakeRouterScorer{},
 		UploadDir:           tempDir,
-		TrainingDatasetPath: tempDir + "/snapshots.json",
+		TrainingDatasetPath: datasetPath,
 		TrainingRunsDir:     tempDir + "/runs",
 		WorkerPollInterval:  10 * time.Millisecond,
 		RetryDelay:          10 * time.Millisecond,
 	})
+	writeRouterTrainingDataset(t, datasetPath)
 	service.Start(ctx)
 	router := NewRouter(config.Config{ServiceName: "oss-risk-radar-api", AllowedOrigin: "http://localhost:3000"}, slog.Default(), service)
 
@@ -250,5 +254,57 @@ func TestTriggerTrainingRunEndpoint(t *testing.T) {
 	}
 	if payload.Run.ArtifactPath == "" {
 		t.Fatalf("expected cached artifact path, got %#v", payload)
+	}
+}
+
+func writeRouterTrainingDataset(t *testing.T, datasetPath string) {
+	t.Helper()
+
+	active := false
+	inactive := true
+	snapshots := []analysis.TrainingSnapshotRecord{
+		routerTrainingSnapshot("router-real-active-001", "2021-01-01T00:00:00Z", "facebook/react", active),
+		routerTrainingSnapshot("router-real-active-002", "2021-04-01T00:00:00Z", "django/django", active),
+		routerTrainingSnapshot("router-real-inactive-001", "2021-07-01T00:00:00Z", "request/request", inactive),
+		routerTrainingSnapshot("router-real-inactive-002", "2021-10-01T00:00:00Z", "atom/atom", inactive),
+	}
+	payload, err := json.MarshalIndent(struct {
+		UpdatedAt time.Time                         `json:"updatedAt"`
+		Snapshots []analysis.TrainingSnapshotRecord `json:"snapshots"`
+	}{UpdatedAt: time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC), Snapshots: snapshots}, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal training dataset: %v", err)
+	}
+	if err := os.WriteFile(datasetPath, payload, 0o644); err != nil {
+		t.Fatalf("failed to write training dataset: %v", err)
+	}
+}
+
+func routerTrainingSnapshot(id string, observedAt string, fullName string, label bool) analysis.TrainingSnapshotRecord {
+	lastPushAgeDays := 10
+	if label {
+		lastPushAgeDays = 720
+	}
+	return analysis.TrainingSnapshotRecord{
+		AnalysisID:       "router-fixture-" + id,
+		ObservedAt:       observedAt,
+		LabelInactive12M: &label,
+		Dependency: analysis.TrainingDependencySignalSnapshot{
+			DependencyID:   id,
+			PackageName:    fullName,
+			PackageVersion: "repository-snapshot",
+			Ecosystem:      "github",
+			Direct:         true,
+			Repository: &analysis.TrainingRepositorySignalSnapshot{
+				FullName:        fullName,
+				URL:             "https://github.com/" + fullName,
+				DefaultBranch:   "main",
+				Archived:        label,
+				Stars:           1000,
+				Forks:           100,
+				OpenIssues:      50,
+				LastPushAgeDays: &lastPushAgeDays,
+			},
+		},
 	}
 }

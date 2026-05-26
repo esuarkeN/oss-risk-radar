@@ -54,9 +54,9 @@ export function MlTrainingRunsView() {
           <p className="text-sm text-muted">{latestRun?.cachedAt ? `Cached ${formatDate(latestRun.cachedAt)}` : "No latest artifact yet"}</p>
         </Card>
         <Card className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.24em] text-muted">Latest AUROC</p>
-          <p className="text-4xl font-semibold tracking-tight text-foreground">{formatTrainingMetric(latestRun?.metrics?.rocAuc)}</p>
-          <p className="text-sm text-muted">Most recent held-out ranking score</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-muted">Latest quality</p>
+          <p className="text-4xl font-semibold tracking-tight text-foreground">{formatTrainingMetric(latestRun?.metrics?.qualityScore)}</p>
+          <p className="text-sm text-muted">AUROC and Brier skill on held-out data</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Latest hash</p>
@@ -88,7 +88,8 @@ export function MlTrainingRunsView() {
                   </Link>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  <RunMetric label="Quality" value={formatTrainingMetric(run.metrics?.qualityScore)} />
                   <RunMetric label="AUROC" value={formatTrainingMetric(run.metrics?.rocAuc)} />
                   <RunMetric label="Brier" value={formatTrainingMetric(run.metrics?.brierScore)} />
                   <RunMetric label="Inactive 12m rate" value={formatTrainingRate(run.metrics?.positiveRate)} />

@@ -131,27 +131,27 @@ function buildBuckets(targetRepositories, includeArchived) {
   const buckets = [
     {
       label: "active-high",
-      target: Math.round(targetRepositories * 0.3),
+      target: Math.round(targetRepositories * 0.2),
       query: `is:public fork:false archived:false stars:>=500 pushed:>=${activeSince}`
     },
     {
       label: "active-medium",
-      target: Math.round(targetRepositories * 0.2),
+      target: Math.round(targetRepositories * 0.15),
       query: `is:public fork:false archived:false stars:50..499 pushed:>=${activeSince}`
     },
     {
       label: "active-low",
-      target: Math.round(targetRepositories * 0.15),
+      target: Math.round(targetRepositories * 0.1),
       query: `is:public fork:false archived:false stars:10..49 pushed:>=${activeSince}`
     },
     {
       label: "dormant-high",
-      target: Math.round(targetRepositories * 0.15),
+      target: Math.round(targetRepositories * 0.2),
       query: `is:public fork:false archived:false stars:100..99999 pushed:<=${dormantBefore}`
     },
     {
       label: "dormant-low",
-      target: Math.round(targetRepositories * 0.1),
+      target: Math.round(targetRepositories * 0.15),
       query: `is:public fork:false archived:false stars:10..99 pushed:<=${dormantBefore}`
     }
   ];
@@ -159,7 +159,7 @@ function buildBuckets(targetRepositories, includeArchived) {
   if (includeArchived) {
     buckets.push({
       label: "archived",
-      target: Math.round(targetRepositories * 0.1),
+      target: Math.round(targetRepositories * 0.2),
       query: "is:public fork:false archived:true stars:>=10"
     });
   }

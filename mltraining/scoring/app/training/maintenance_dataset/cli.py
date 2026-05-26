@@ -30,6 +30,11 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--sample-limit-per-ecosystem", type=int, default=24, help="Deterministic sample limit for each ecosystem.")
     parser.add_argument("--sample-seed", type=int, default=42, help="Deterministic seed for package sampling.")
     parser.add_argument("--training-output-path", default=None, help="Optional final snapshot JSON path. Defaults under output-dir.")
+    parser.add_argument(
+        "--replace-training-output",
+        action="store_true",
+        help="Overwrite the final snapshot JSON instead of merging into any existing training output file.",
+    )
     parser.add_argument("--github-token", default=None, help="GitHub token for repository metadata enrichment.")
     parser.add_argument("--include-forks", action="store_true", help="Keep forked repositories in the sampled candidate set.")
 
@@ -52,6 +57,7 @@ def main() -> int:
         sample_seed=args.sample_seed,
         include_forks=args.include_forks,
         training_output_path=args.training_output_path,
+        merge_existing_training_output=not args.replace_training_output,
     )
     builder = DatasetBuilder(config=config, adapters=PipelineAdapters.live(github_token=args.github_token))
 

@@ -144,6 +144,7 @@ class EvaluationMetrics(BaseModel):
     brier_score: float = Field(ge=0, le=1)
     log_loss: float = Field(ge=0)
     roc_auc: float = Field(ge=0, le=1)
+    model_quality_score: float = Field(ge=0, le=1)
 
 
 class CalibrationBin(BaseModel):
@@ -193,7 +194,7 @@ class ModelTrainRequest(BaseModel):
     model_name: str = "logistic-regression-baseline"
     dataset_uri: str | None = None
     snapshots: list[TrainingSnapshotInput] = Field(default_factory=list)
-    train_ratio: float = Field(default=0.7, gt=0, lt=1)
+    train_ratio: float = Field(default=0.75, gt=0, lt=1)
     validation_ratio: float = Field(default=0.15, gt=0, lt=1)
     calibration_bins: int = Field(default=10, ge=3, le=50)
     threshold: float = Field(default=0.5, gt=0, lt=1)
