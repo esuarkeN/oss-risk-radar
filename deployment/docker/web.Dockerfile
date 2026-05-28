@@ -1,4 +1,4 @@
-FROM node:25-alpine AS build
+FROM node:26-alpine AS build
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /workspace
 COPY package.json ./package.json
@@ -8,7 +8,7 @@ COPY frontend/web ./frontend/web
 RUN npm ci
 RUN npm run build --workspace @oss-risk-radar/web
 
-FROM node:25-alpine AS runner
+FROM node:26-alpine AS runner
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
