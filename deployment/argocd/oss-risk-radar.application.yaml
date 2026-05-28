@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/your-org/oss-risk-radar.git
+    repoURL: https://github.com/esuarkeN/oss-risk-radar.git
     targetRevision: main
     path: deployment/k8s/base
   destination:

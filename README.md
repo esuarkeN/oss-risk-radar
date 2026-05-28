@@ -27,7 +27,7 @@ This repository now contains a working phase-2 vertical slice with:
 - `backend`: operational services, currently the Go API in `backend/api`
 - `mltraining`: scoring, feature engineering, and model experimentation code in `mltraining/scoring`
 - `shared`: reusable packages and contracts, including `shared/packages/schemas`
-- `deployment`: Dockerfiles, Compose assets, and Postgres initialization scripts
+- `deployment`: Dockerfiles, Compose assets, Kubernetes manifests, Argo CD application config, and Postgres initialization scripts
 - `docs`: architecture, methodology, threat model, roadmap, and API notes
 - `scripts`: startup helpers, infra scripts, and scaffold validation
 
@@ -55,6 +55,16 @@ This repository now contains a working phase-2 vertical slice with:
 2. Run the scoring service from `mltraining/scoring` with `uvicorn app.main:app --reload --host 0.0.0.0 --port 8090`.
 3. Run the Go API from `backend/api` with `go run ./cmd/api`.
 4. Run the frontend from `frontend/web` with `npm run dev`.
+
+### Docker and Compose notes
+
+- Canonical image definitions live in `deployment/docker/*.Dockerfile`.
+- The compose file can start only shared infrastructure, such as Postgres, without the app profile.
+- App containers are behind the Compose `apps` profile; use `docker compose --profile apps up --build` for raw Compose control.
+
+## Deployment
+
+The canonical production-style deployment guide is [`deployment/k8s/README.md`](deployment/k8s/README.md). It covers the k3s + Argo CD flow for `https://oss-risk-radar.gamedivers.de`, including GHCR image publishing, runtime secrets, DNS/TLS assumptions, and Argo CD sync.
 
 ## Current API surface
 
@@ -107,4 +117,4 @@ OSS Risk Radar is not framed as a vulnerability scanner or a definitive trust sc
 7. Persist trained model artifacts and model registry metadata beyond in-memory training responses.
 8. Add notebook-friendly demo datasets and evaluation reports under `mltraining/scoring` for thesis validation.
 9. Add browser-level end-to-end tests for submit -> job -> dashboard -> detail navigation.
-10. Add deployment manifests and environment hardening for cloud or self-hosted production targets.
+10. Harden the Kubernetes deployment with observability, backups, secret rotation, and rollout verification.

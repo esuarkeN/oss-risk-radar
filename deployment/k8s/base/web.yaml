@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
         - name: web
-          image: ghcr.io/example/oss-risk-radar-web:latest
+          image: ghcr.io/esuarken/oss-risk-radar-web:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

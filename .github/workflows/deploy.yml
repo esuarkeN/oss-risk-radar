@@ -1,0 +1,96 @@
+name: Build & Propose Deploy (Argo CD)
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - "deployment/k8s/**"
+      - "deployment/argocd/**"
+      - "docs/**"
+      - "tex/**"
+      - "**/*.md"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  build-and-propose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Normalize image names
+        id: images
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "api=ghcr.io/${owner}/oss-risk-radar-api" >> "$GITHUB_OUTPUT"
+          echo "scoring=ghcr.io/${owner}/oss-risk-radar-scoring" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/${owner}/oss-risk-radar-web" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3.11.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push API image
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: deployment/docker/api.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.api }}:${{ github.sha }}
+            ${{ steps.images.outputs.api }}:latest
+
+      - name: Build & push scoring image
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: deployment/docker/scoring.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.scoring }}:${{ github.sha }}
+            ${{ steps.images.outputs.scoring }}:latest
+
+      - name: Build & push web image
+        uses: docker/build-push-action@v6.18.0
+        with:
+          context: .
+          file: deployment/docker/web.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.images.outputs.web }}:${{ github.sha }}
+            ${{ steps.images.outputs.web }}:latest
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2.1.0
+
+      - name: Update image tags in Kustomize
+        shell: bash
+        run: |
+          cd deployment/k8s/base
+          kustomize edit set image ghcr.io/esuarken/oss-risk-radar-api=${{ steps.images.outputs.api }}:${GITHUB_SHA}
+          kustomize edit set image ghcr.io/esuarken/oss-risk-radar-scoring=${{ steps.images.outputs.scoring }}:${GITHUB_SHA}
+          kustomize edit set image ghcr.io/esuarken/oss-risk-radar-web=${{ steps.images.outputs.web }}:${GITHUB_SHA}
+
+      - name: Create PR for deploy
+        uses: peter-evans/create-pull-request@v8.0.0
+        with:
+          branch: deploy/${{ github.sha }}
+          title: Deploy ${{ github.sha }} (Argo CD)
+          commit-message: "chore(deploy): bump images to ${{ github.sha }}"
+          body: |
+            Argo CD will sync this after merge.
+            - API: `${{ steps.images.outputs.api }}:${{ github.sha }}`
+            - Scoring: `${{ steps.images.outputs.scoring }}:${{ github.sha }}`
+            - Web: `${{ steps.images.outputs.web }}:${{ github.sha }}`
+          labels: deploy

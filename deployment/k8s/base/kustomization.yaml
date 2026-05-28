@@ -20,14 +20,11 @@ generatorOptions:
   disableNameSuffixHash: true
 
 images:
-  - name: ghcr.io/example/oss-risk-radar-api
-    newName: ghcr.io/your-org/oss-risk-radar-api
+  - name: ghcr.io/esuarken/oss-risk-radar-api
     newTag: latest
-  - name: ghcr.io/example/oss-risk-radar-scoring
-    newName: ghcr.io/your-org/oss-risk-radar-scoring
+  - name: ghcr.io/esuarken/oss-risk-radar-scoring
     newTag: latest
-  - name: ghcr.io/example/oss-risk-radar-web
-    newName: ghcr.io/your-org/oss-risk-radar-web
+  - name: ghcr.io/esuarken/oss-risk-radar-web
     newTag: latest
 
 replacements:

@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: oss-risk-radar-config
 data:
-  PUBLIC_HOST: radar.example.com
-  PUBLIC_ORIGIN: https://radar.example.com
+  PUBLIC_HOST: oss-risk-radar.gamedivers.de
+  PUBLIC_ORIGIN: https://oss-risk-radar.gamedivers.de
   WEB_API_BASE_URL: http://api:8080/api/v1
   SCORING_BASE_URL: http://scoring:8090
