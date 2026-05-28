@@ -35,7 +35,7 @@ spec:
     spec:
       containers:
         - name: scoring
-          image: ghcr.io/example/oss-risk-radar-scoring:latest
+          image: ghcr.io/esuarken/oss-risk-radar-scoring:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

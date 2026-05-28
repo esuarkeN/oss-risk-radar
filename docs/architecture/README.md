@@ -9,7 +9,7 @@ OSS Risk Radar is organized as a monorepo with clear ownership boundaries so tha
 - `mltraining/scoring` hosts the Python scoring, feature extraction, and model experimentation code.
 - `shared/packages/schemas` will hold shared contracts, generated clients, and JSON schema artifacts.
 - `docs` captures architecture, methodology, API contracts, threat model, and roadmap material.
-- `deployment` contains container, compose, and environment scaffolding.
+- `deployment` contains container, Compose, Kubernetes, Argo CD, and environment scaffolding.
 - `scripts` contains developer helpers and validation scripts.
 
 ## Service boundaries

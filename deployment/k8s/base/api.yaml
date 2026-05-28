@@ -48,7 +48,7 @@ spec:
                   key: POSTGRES_PASSWORD
       containers:
         - name: api
-          image: ghcr.io/example/oss-risk-radar-api:latest
+          image: ghcr.io/esuarken/oss-risk-radar-api:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
