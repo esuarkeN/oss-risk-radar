@@ -23,7 +23,7 @@ export function LogisticCoefficientChart({ data }: LogisticCoefficientChartProps
           <XAxis type="number" tickLine={false} axisLine={false} stroke="hsl(var(--muted))" />
           <YAxis dataKey="feature" type="category" width={150} tickLine={false} axisLine={false} stroke="hsl(var(--muted))" />
           <Tooltip
-            formatter={(value: number) => value.toFixed(2)}
+            formatter={(value) => Number(value ?? 0).toFixed(2)}
             contentStyle={{
               borderRadius: 18,
               borderColor: "hsl(var(--border))",
