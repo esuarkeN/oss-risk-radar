@@ -151,7 +151,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
               <XAxis type="number" tickLine={false} axisLine={false} stroke="hsl(var(--muted))" tickFormatter={(value) => Number(value).toFixed(1)} />
               <YAxis dataKey="label" type="category" width={150} tickLine={false} axisLine={false} stroke="hsl(var(--muted))" />
               <Tooltip
-                formatter={(value: number) => formatImpact(value)}
+                formatter={(value) => formatImpact(Number(value ?? 0))}
                 labelFormatter={(label) => String(label)}
                 contentStyle={{
                   borderRadius: 18,

@@ -27,7 +27,7 @@ export function ModelMetricComparisonChart({ data }: ModelMetricComparisonChartP
           <XAxis dataKey="model" tickLine={false} axisLine={false} stroke="hsl(var(--muted))" />
           <YAxis tickLine={false} axisLine={false} stroke="hsl(var(--muted))" domain={[0, 1]} tickFormatter={formatPercent} />
           <Tooltip
-            formatter={(value: number) => value.toFixed(3)}
+            formatter={(value) => Number(value ?? 0).toFixed(3)}
             contentStyle={{
               borderRadius: 18,
               borderColor: "hsl(var(--border))",
