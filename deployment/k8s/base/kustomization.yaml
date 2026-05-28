@@ -3,39 +3,42 @@ kind: Kustomization
 namespace: oss-risk-radar
 
 resources:
-  - namespace.yaml
-  - app-config.yaml
-  - postgres.yaml
-  - scoring.yaml
-  - api.yaml
-  - web.yaml
-  - ingress.yaml
+- namespace.yaml
+- app-config.yaml
+- postgres.yaml
+- scoring.yaml
+- api.yaml
+- web.yaml
+- ingress.yaml
 
 configMapGenerator:
-  - name: postgres-init
-    files:
-      - postgres-init/001_initial_schema.sql
+- files:
+  - postgres-init/001_initial_schema.sql
+  name: postgres-init
 
 generatorOptions:
   disableNameSuffixHash: true
 
 images:
-  - name: ghcr.io/esuarken/oss-risk-radar-api
-    newTag: latest
-  - name: ghcr.io/esuarken/oss-risk-radar-scoring
-    newTag: latest
-  - name: ghcr.io/esuarken/oss-risk-radar-web
-    newTag: latest
+- name: ghcr.io/esuarken/oss-risk-radar-api
+  newName: ghcr.io/esuarken/oss-risk-radar-api
+  newTag: d5032d2be1d2a866e34919834e67cad57d37b986
+- name: ghcr.io/esuarken/oss-risk-radar-scoring
+  newName: ghcr.io/esuarken/oss-risk-radar-scoring
+  newTag: d5032d2be1d2a866e34919834e67cad57d37b986
+- name: ghcr.io/esuarken/oss-risk-radar-web
+  newName: ghcr.io/esuarken/oss-risk-radar-web
+  newTag: d5032d2be1d2a866e34919834e67cad57d37b986
 
 replacements:
-  - source:
-      kind: ConfigMap
-      name: oss-risk-radar-config
-      fieldPath: data.PUBLIC_HOST
-    targets:
-      - select:
-          kind: Ingress
-          name: oss-risk-radar
-        fieldPaths:
-          - spec.rules.0.host
-          - spec.tls.0.hosts.0
+- source:
+    fieldPath: data.PUBLIC_HOST
+    kind: ConfigMap
+    name: oss-risk-radar-config
+  targets:
+  - fieldPaths:
+    - spec.rules.0.host
+    - spec.tls.0.hosts.0
+    select:
+      kind: Ingress
+      name: oss-risk-radar
