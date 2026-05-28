@@ -42,7 +42,7 @@ ghcr.io/esuarken/oss-risk-radar-scoring
 ghcr.io/esuarken/oss-risk-radar-web
 ```
 
-On every push to `main`, it opens a deploy PR that updates image tags in `deployment/k8s/base/kustomization.yaml`. Merge that PR and Argo CD will roll out the new images.
+On every push to `main`, it builds the images, pushes them to GHCR, commits the new image tags to `deployment/k8s/base/kustomization.yaml`, and pushes that deploy commit back to `main`. Argo CD then syncs the updated image tags automatically.
 
 For the first deployment, either run the workflow manually from GitHub Actions or build/push images yourself:
 
