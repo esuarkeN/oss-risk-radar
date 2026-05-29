@@ -33,6 +33,7 @@ spec:
         app.kubernetes.io/name: scoring
         app.kubernetes.io/part-of: oss-risk-radar
     spec:
+      enableServiceLinks: false
       containers:
         - name: scoring
           image: ghcr.io/esuarken/oss-risk-radar-scoring:latest
