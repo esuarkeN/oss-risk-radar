@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { CalibrationCurveChart } from "@/components/charts/calibration-curve-chart";
+import { LogisticCoefficientChart } from "@/components/charts/logistic-coefficient-chart";
+import { ModelMetricComparisonChart } from "@/components/charts/model-metric-comparison-chart";
 import { TrainingMetricHistoryChart } from "@/components/charts/training-metric-history-chart";
 import { InfoChipGroup } from "@/components/info-chip-group";
 import { Badge } from "@/components/ui/badge";
@@ -14,9 +16,11 @@ import { triggerTrainingRun } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import {
   calibrationDataFromRun,
+  logisticCoefficientsFromRun,
   formatTrainingMetric,
   formatTrainingRate,
   formatTrainingSplit,
+  modelMetricsFromRuns,
   metricHistoryFromRuns,
   shortTrainingHash,
 } from "@/lib/ml-evaluation";
@@ -72,6 +76,79 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
+function AurocTable({ rows }: { rows: ReturnType<typeof modelMetricsFromRuns> }) {
+  return (
+    <Card className="space-y-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.24em] text-muted">AUROC Table</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Recent model ranking quality</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
+              <th className="pb-3 pr-4">Run</th>
+              <th className="pb-3 pr-4">AUROC</th>
+              <th className="pb-3 pr-4">F1</th>
+              <th className="pb-3 pr-4">Precision</th>
+              <th className="pb-3 pr-4">Recall</th>
+              <th className="pb-3 pr-4">Brier</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.model} className="border-b border-line/70 last:border-b-0">
+                <td className="py-3 pr-4 font-semibold text-foreground">{row.model}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.auroc)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.f1)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.precision)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.recall)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.brier)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function VariableEffectsTable({ rows }: { rows: ReturnType<typeof logisticCoefficientsFromRun> }) {
+  return (
+    <Card className="space-y-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.24em] text-muted">Variable Effects</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Strongest logistic effects</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
+              <th className="pb-3 pr-4">Variable</th>
+              <th className="pb-3 pr-4">Effect</th>
+              <th className="pb-3 pr-4">Direction</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.feature} className="border-b border-line/70 last:border-b-0">
+                <td className="py-3 pr-4 font-semibold text-foreground">{row.feature}</td>
+                <td className="py-3 pr-4 text-foreground">{row.weight.toFixed(3)}</td>
+                <td className="py-3 pr-4">
+                  <Badge tone={row.weight >= 0 ? "high" : "low"}>{row.weight >= 0 ? "raises risk" : "lowers risk"}</Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-sm text-muted">
+        Coefficients are read from the active artifact after training standardization; large absolute values move the inactivity probability the most.
+      </p>
+    </Card>
+  );
+}
+
 export function MlResultsDashboard() {
   const { dataset, latestRun: run, runs, loading, error, refresh } = useMlEvaluationState();
   const { toast } = useToast();
@@ -79,6 +156,8 @@ export function MlResultsDashboard() {
 
   const calibrationData = useMemo(() => calibrationDataFromRun(run), [run]);
   const metricHistory = useMemo(() => metricHistoryFromRuns(runs), [runs]);
+  const modelMetricRows = useMemo(() => modelMetricsFromRuns(runs), [runs]);
+  const coefficientRows = useMemo(() => logisticCoefficientsFromRun(run), [run]);
 
   const datasetReady = (dataset?.totalSnapshots ?? 0) > 0;
   const canTrigger = datasetReady && !running;
@@ -250,6 +329,36 @@ export function MlResultsDashboard() {
           <MetricCard label="Log loss" value={formatTrainingMetric(run?.metrics?.logLoss)} detail="Penalty for overconfident wrong probabilities." />
         </div>
       </section>
+
+      {modelMetricRows.length ? (
+        <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+          <ModelMetricComparisonChart data={modelMetricRows} />
+          <AurocTable rows={modelMetricRows} />
+        </section>
+      ) : (
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">AUROC Table</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No evaluated model runs yet</h2>
+          </div>
+          <p className="text-sm text-muted">A completed training run with held-out labels will populate the AUROC and classification table.</p>
+        </Card>
+      )}
+
+      {coefficientRows.length ? (
+        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <LogisticCoefficientChart data={coefficientRows} />
+          <VariableEffectsTable rows={coefficientRows} />
+        </section>
+      ) : (
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Variable Effects</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No coefficient artifact yet</h2>
+          </div>
+          <p className="text-sm text-muted">The logistic variable-effect table appears after a completed run stores feature names and coefficients.</p>
+        </Card>
+      )}
 
       <section className="grid gap-6 xl:grid-cols-[1.16fr_0.84fr]">
         {calibrationData.length ? (

@@ -144,6 +144,8 @@ type RiskProfile struct {
 	ConfidenceScore            float64             `json:"confidenceScore"`
 	RiskBucket                 RiskBucket          `json:"riskBucket"`
 	ActionLevel                ActionLevel         `json:"actionLevel"`
+	ScoringMethod              string              `json:"scoringMethod,omitempty"`
+	ScoringModel               string              `json:"scoringModel,omitempty"`
 	Caveats                    []string            `json:"caveats"`
 	MissingSignals             []string            `json:"missingSignals"`
 	ExplanationFactors         []ExplanationFactor `json:"explanationFactors"`

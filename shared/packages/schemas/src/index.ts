@@ -54,6 +54,8 @@ export interface RiskProfile {
   confidenceScore: number;
   riskBucket: RiskBucket;
   actionLevel: ActionLevel;
+  scoringMethod?: "model" | "heuristic" | "failsafe" | string;
+  scoringModel?: string;
   caveats: string[];
   missingSignals: string[];
   explanationFactors: ExplanationFactor[];

@@ -23,6 +23,14 @@ func (fakeScorer) Score(_ context.Context, _ string, dependencies []analysis.Dep
 
 func (fakeScorer) Ready(context.Context) error { return nil }
 
+type failingScorer struct{}
+
+func (failingScorer) Score(context.Context, string, []analysis.DependencyRecord) (map[string]analysis.RiskProfile, error) {
+	return nil, errors.New("scoring service unavailable")
+}
+
+func (failingScorer) Ready(context.Context) error { return errors.New("scoring service unavailable") }
+
 type validatingScorecardScorer struct{}
 
 func (validatingScorecardScorer) Score(_ context.Context, _ string, dependencies []analysis.DependencyRecord) (map[string]analysis.RiskProfile, error) {
@@ -205,6 +213,40 @@ func TestCreateAnalysisFromUploadParsesManifest(t *testing.T) {
 	}
 	if completed.Dependencies[0].PackageName != "requests" {
 		t.Fatalf("expected requests dependency, got %#v", completed.Dependencies[0])
+	}
+}
+
+func TestCreateAnalysisCompletesWithFailsafeScoringWhenScorerFails(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion: "heuristic-v1",
+		Store:              storage.NewMemoryStore(),
+		Scorer:             failingScorer{},
+		UploadDir:          t.TempDir(),
+		WorkerPollInterval: 10 * time.Millisecond,
+		RetryDelay:         10 * time.Millisecond,
+	})
+	service.Start(ctx)
+
+	created, _, err := service.CreateAnalysis(ctx, analysis.AnalysisSubmission{Kind: analysis.SubmissionDemo})
+	if err != nil {
+		t.Fatalf("CreateAnalysis returned error: %v", err)
+	}
+
+	completed := waitForAnalysis(t, ctx, service, created.ID)
+	if completed.Status != analysis.AnalysisStatusCompleted {
+		t.Fatalf("expected completed analysis, got %s", completed.Status)
+	}
+	if completed.Summary.ScoreAvailabilityCount != completed.Summary.DependencyCount {
+		t.Fatalf("expected every dependency to receive a failsafe score, got summary %#v", completed.Summary)
+	}
+	if len(completed.Dependencies) == 0 || completed.Dependencies[0].RiskProfile == nil {
+		t.Fatalf("expected scored dependencies, got %#v", completed.Dependencies)
+	}
+	if completed.Dependencies[0].RiskProfile.ScoringMethod != "failsafe" {
+		t.Fatalf("expected failsafe scoring marker, got %#v", completed.Dependencies[0].RiskProfile)
 	}
 }
 

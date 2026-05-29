@@ -17,9 +17,20 @@ import type {
   TriggerTrainingRunResponse,
 } from "@oss-risk-radar/schemas";
 
+const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
+
+function normalizeExternalApiBaseUrl(value: string | undefined) {
+  if (!value || value.startsWith("/")) {
+    return null;
+  }
+  return value.replace(/\/+$/, "");
+}
+
 const API_BASE_URL =
   typeof window === "undefined"
-    ? process.env.WEB_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1"
+    ? normalizeExternalApiBaseUrl(process.env.WEB_API_BASE_URL) ??
+      normalizeExternalApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) ??
+      DEFAULT_API_BASE_URL
     : process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/v1";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

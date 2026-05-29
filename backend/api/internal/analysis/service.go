@@ -454,7 +454,7 @@ func (s *Service) scoreDependencies(ctx context.Context, analysisID string, depe
 			if ok {
 				scores, scoreErr := modelScorer.ScoreModel(ctx, analysisID, dependencies, *latestRun.ModelArtifact)
 				if scoreErr == nil {
-					return scores, nil
+					return completeRiskProfiles(dependencies, scores, "model", latestRun.ModelArtifact.ModelName), nil
 				}
 				s.logger.Warn(
 					"model scoring failed, falling back to heuristic scoring",
@@ -467,7 +467,13 @@ func (s *Service) scoreDependencies(ctx context.Context, analysisID string, depe
 		}
 	}
 
-	return s.scorer.Score(ctx, analysisID, dependencies)
+	scores, err := s.scorer.Score(ctx, analysisID, dependencies)
+	if err == nil {
+		return completeRiskProfiles(dependencies, scores, "heuristic", ""), nil
+	}
+
+	s.logger.Warn("heuristic scoring failed, using in-process failsafe scoring", "analysis_id", analysisID, "error", err)
+	return fallbackRiskProfiles(dependencies, err), nil
 }
 
 func (s *Service) parseUpload(upload UploadArtifact) ([]DependencyRecord, error) {

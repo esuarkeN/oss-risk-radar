@@ -87,6 +87,40 @@ export function metricHistoryFromRuns(runs: TrainingRunArtifact[]): TrainingMetr
     }));
 }
 
+export function modelMetricsFromRuns(runs: TrainingRunArtifact[]): ModelMetric[] {
+  return sortTrainingRuns(runs)
+    .filter((run) => run.metrics)
+    .slice(0, 6)
+    .map((run) => ({
+      model: `${run.modelName || "model"} ${shortTrainingHash(run.datasetHash)}`,
+      auroc: run.metrics?.rocAuc ?? 0,
+      f1: run.metrics?.f1Score ?? 0,
+      precision: run.metrics?.precision ?? 0,
+      recall: run.metrics?.recall ?? 0,
+      brier: run.metrics?.brierScore ?? 0,
+      note: run.message,
+    }));
+}
+
+export function logisticCoefficientsFromRun(run: TrainingRunArtifact | null, limit = 12): LogisticCoefficient[] {
+  const artifact = run?.modelArtifact;
+  if (!artifact?.featureNames.length || artifact.featureNames.length !== artifact.coefficients.length) {
+    return [];
+  }
+
+  return artifact.featureNames
+    .map((feature, index) => ({
+      feature: formatFeatureName(feature),
+      weight: artifact.coefficients[index] ?? 0,
+    }))
+    .sort((left, right) => Math.abs(right.weight) - Math.abs(left.weight))
+    .slice(0, limit);
+}
+
+export function formatFeatureName(feature: string) {
+  return feature.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 export function sortTrainingRuns(runs: TrainingRunArtifact[]) {
   return [...runs].sort((left, right) => {
     const leftTimestamp = left.cachedAt ? new Date(left.cachedAt).getTime() : 0;

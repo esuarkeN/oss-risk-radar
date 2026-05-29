@@ -59,7 +59,7 @@ type repositorySnapshotInput struct {
 	Stars                    int      `json:"stars"`
 	Forks                    int      `json:"forks"`
 	OpenIssues               int      `json:"open_issues"`
-	LastPushAgeDays          int      `json:"last_push_age_days"`
+	LastPushAgeDays          *int     `json:"last_push_age_days,omitempty"`
 	LastReleaseAgeDays       *int     `json:"last_release_age_days,omitempty"`
 	ReleaseCadenceDays       *int     `json:"release_cadence_days,omitempty"`
 	RecentContributors90d    *int     `json:"recent_contributors_90d,omitempty"`
@@ -436,6 +436,11 @@ func toDependencySignal(dependency analysis.DependencyRecord) dependencySignalIn
 	}
 
 	if dependency.Repository != nil {
+		var lastPushAgeDays *int
+		if !dependency.Repository.LastPushAt.IsZero() || dependency.Repository.LastPushAgeDays > 0 {
+			value := dependency.Repository.LastPushAgeDays
+			lastPushAgeDays = &value
+		}
 		input.Repository = &repositorySnapshotInput{
 			FullName:                 dependency.Repository.FullName,
 			URL:                      dependency.Repository.URL,
@@ -444,7 +449,7 @@ func toDependencySignal(dependency analysis.DependencyRecord) dependencySignalIn
 			Stars:                    dependency.Repository.Stars,
 			Forks:                    dependency.Repository.Forks,
 			OpenIssues:               dependency.Repository.OpenIssues,
-			LastPushAgeDays:          dependency.Repository.LastPushAgeDays,
+			LastPushAgeDays:          lastPushAgeDays,
 			LastReleaseAgeDays:       dependency.Repository.LastReleaseAgeDays,
 			ReleaseCadenceDays:       dependency.Repository.ReleaseCadenceDays,
 			RecentContributors90d:    dependency.Repository.RecentContributors90d,

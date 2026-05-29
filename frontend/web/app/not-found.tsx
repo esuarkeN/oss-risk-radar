@@ -1,13 +1,37 @@
+import { ArrowLeft, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
+
+import { SiteHeader } from "@/components/site-header";
+
 export default function NotFound() {
   return (
-    <div className="flex min-h-[50vh] items-center justify-center">
-      <div className="max-w-lg rounded-lg border border-line bg-panel p-10 text-center shadow-soft">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted">Not Found</p>
-        <h1 className="mt-4 text-3xl font-bold">The requested analysis view was not available.</h1>
-        <p className="mt-4 text-sm leading-7 text-muted">
-          The analysis may have expired from the in-memory API store or the dependency identifier was incorrect.
-        </p>
+    <>
+      <SiteHeader />
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="max-w-lg rounded-lg border border-line bg-panel p-8 text-center shadow-soft sm:p-10">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted">Not Found</p>
+          <h1 className="mt-4 text-3xl font-bold">This page is not available.</h1>
+          <p className="mt-4 text-sm leading-7 text-muted">
+            The URL does not match an available dashboard, or the referenced analysis is no longer in the API store.
+          </p>
+          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link
+              href="/repositories"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-foreground px-4 py-2 text-sm font-semibold text-background transition hover:border-accent hover:bg-accent"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Repository overview
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-line bg-panelAlt px-4 py-2 text-sm font-semibold text-foreground transition hover:border-accent hover:text-accent"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              New analysis
+            </Link>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

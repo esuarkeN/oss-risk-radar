@@ -44,6 +44,32 @@ def _roc_auc(predictions: list[float], labels: list[int]) -> float:
     return (concordant + (0.5 * ties)) / total_pairs
 
 
+def select_decision_threshold(predictions: list[float], labels: list[int]) -> float:
+    if len(predictions) != len(labels):
+        raise ValueError("predictions and labels must have the same length")
+    if not predictions:
+        raise ValueError("predictions cannot be empty")
+
+    clipped = [max(0.0, min(1.0, prediction)) for prediction in predictions]
+    candidates = sorted({0.5, *clipped})
+    best_threshold = 0.5
+    best_score = (-1.0, -1.0, -1.0, -1.0)
+
+    for threshold in candidates:
+        metrics = compute_binary_classification_metrics(clipped, labels, threshold=threshold)
+        score = (
+            metrics.f1_score,
+            metrics.recall,
+            metrics.precision,
+            -abs(threshold - 0.5),
+        )
+        if score > best_score:
+            best_score = score
+            best_threshold = threshold
+
+    return max(0.01, min(0.99, best_threshold))
+
+
 def compute_binary_classification_metrics(
     predictions: list[float], labels: list[int], threshold: float = 0.5
 ) -> BinaryClassificationMetrics:

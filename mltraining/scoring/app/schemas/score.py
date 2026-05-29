@@ -197,7 +197,7 @@ class ModelTrainRequest(BaseModel):
     train_ratio: float = Field(default=0.75, gt=0, lt=1)
     validation_ratio: float = Field(default=0.15, gt=0, lt=1)
     calibration_bins: int = Field(default=10, ge=3, le=50)
-    threshold: float = Field(default=0.5, gt=0, lt=1)
+    threshold: float | None = Field(default=None, gt=0, lt=1)
 
     @model_validator(mode="after")
     def validate_data_source(self) -> "ModelTrainRequest":

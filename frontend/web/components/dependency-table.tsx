@@ -234,6 +234,13 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
                     <p className="mt-2 text-xs uppercase tracking-[0.14em] text-muted">
                       {titleCase(dependency.riskProfile?.actionLevel ?? "monitor")}
                     </p>
+                    {dependency.riskProfile?.scoringMethod ? (
+                      <p className="mt-1 text-xs text-muted">
+                        {dependency.riskProfile.scoringMethod === "model"
+                          ? `ML ${dependency.riskProfile.scoringModel ?? ""}`.trim()
+                          : titleCase(dependency.riskProfile.scoringMethod)}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-4 py-4 align-top font-medium text-foreground">
                     {formatRiskScore(dependency.riskProfile?.securityPostureScore ?? 0)}

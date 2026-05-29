@@ -38,6 +38,14 @@ const submissionModes: Array<{
 
 const supportedArtifacts = ["package-lock.json", "requirements.txt", "poetry.lock", "go.mod"];
 
+function analysisHref(analysisId: string, cached: boolean) {
+  const normalizedId = analysisId.trim();
+  if (!normalizedId) {
+    throw new Error("The API created an analysis without returning an analysis id.");
+  }
+  return cached ? `/analyses/${encodeURIComponent(normalizedId)}?cached=1` : `/analyses/${encodeURIComponent(normalizedId)}`;
+}
+
 export function CreateAnalysisForm() {
   const router = useRouter();
   const { toast } = useToast();
@@ -113,8 +121,9 @@ export function CreateAnalysisForm() {
           ? "A matching result already existed, so the saved analysis is opening immediately."
           : "The analysis job started and the detail page is opening now.",
       });
+      const targetHref = analysisHref(response.analysis.id, response.reusedExistingAnalysis);
       startTransition(() => {
-        router.push(response.reusedExistingAnalysis ? `/analyses/${response.analysis.id}?cached=1` : `/analyses/${response.analysis.id}`);
+        router.push(targetHref);
       });
     } catch (caught) {
       toast({

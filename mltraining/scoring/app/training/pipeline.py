@@ -17,7 +17,7 @@ from app.training.datasets import (
     summarize_dataset,
     time_aware_split,
 )
-from app.training.evaluation import compute_binary_classification_metrics
+from app.training.evaluation import compute_binary_classification_metrics, select_decision_threshold
 
 
 @dataclass(slots=True)
@@ -29,7 +29,7 @@ class TrainingRunConfig:
     train_ratio: float = 0.75
     validation_ratio: float = 0.15
     calibration_bins: int = 10
-    threshold: float = 0.5
+    threshold: float | None = None
 
 
 @dataclass(slots=True)
@@ -122,13 +122,17 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         validation_labels,
         bin_count=config.calibration_bins,
     )
+    calibrated_validation_predictions = calibrator.predict(validation_predictions)
+    threshold = config.threshold
+    if threshold is None:
+        threshold = select_decision_threshold(calibrated_validation_predictions, validation_labels)
 
     test_predictions = predict_probabilities(model, test_matrix)
     calibrated_predictions = calibrator.predict(test_predictions)
     metrics = compute_binary_classification_metrics(
         calibrated_predictions,
         test_labels,
-        threshold=config.threshold,
+        threshold=threshold,
     )
     calibration_bins = [
         CalibrationBin(
@@ -170,7 +174,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         artifact=serialize_logistic_regression_model(
             model,
             trained_at=trained_at,
-            threshold=config.threshold,
+            threshold=metrics.threshold,
             calibration_bins=calibration_bins,
         ),
         note=(
