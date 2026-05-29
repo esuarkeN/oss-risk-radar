@@ -125,64 +125,64 @@ export function MlResultsDashboard() {
       ) : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.12fr_0.88fr]">
-        <Card className="space-y-5 overflow-hidden border-line bg-[linear-gradient(135deg,#081120_0%,#12314a_58%,#164a55_100%)] text-white">
+        <Card className="space-y-5 overflow-hidden border-line bg-panel">
           <div className="space-y-3">
             <StatusPill status={run?.status} />
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight">Latest training result without the dashboard sprawl.</h2>
-              <p className="mt-2 max-w-3xl text-sm text-slate-200">
+              <h2 className="text-3xl font-semibold tracking-tight text-foreground">Latest training result without the dashboard sprawl.</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
                 Trigger training here, keep the key metrics above the fold, and push data inspection and artifact history into their own pages.
               </p>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Training base</p>
-              <p className="mt-2 text-lg font-semibold text-white">{dataset?.totalSnapshots ?? 0} snapshots</p>
-              <p className="text-sm text-slate-200">{dataset?.uniqueRepositories ?? 0} repositories in the current base</p>
+            <div className="rounded-lg border border-line bg-panelAlt p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Training base</p>
+              <p className="mt-2 text-lg font-semibold text-foreground">{dataset?.totalSnapshots ?? 0} snapshots</p>
+              <p className="text-sm text-muted">{dataset?.uniqueRepositories ?? 0} repositories in the current base</p>
             </div>
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Dataset hash</p>
-              <p className="mt-2 text-lg font-semibold text-white">{shortTrainingHash(run?.datasetHash)}</p>
-              <p className="text-sm text-slate-200">{run?.cachedAt ? `Cached ${formatDate(run.cachedAt)}` : "No cached artifact yet"}</p>
+            <div className="rounded-lg border border-line bg-panelAlt p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Dataset hash</p>
+              <p className="mt-2 text-lg font-semibold text-foreground">{shortTrainingHash(run?.datasetHash)}</p>
+              <p className="text-sm text-muted">{run?.cachedAt ? `Cached ${formatDate(run.cachedAt)}` : "No cached artifact yet"}</p>
             </div>
-            <div className="rounded-[1.25rem] border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Time-aware split</p>
-              <p className="mt-2 text-lg font-semibold text-white">{formatTrainingSplit(run)}</p>
-              <p className="text-sm text-slate-200">{run?.metrics ? `${run.metrics.sampleCount} held-out samples evaluated` : "Split appears after the first completed run"}</p>
+            <div className="rounded-lg border border-line bg-panelAlt p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Time-aware split</p>
+              <p className="mt-2 text-lg font-semibold text-foreground">{formatTrainingSplit(run)}</p>
+              <p className="text-sm text-muted">{run?.metrics ? `${run.metrics.sampleCount} held-out samples evaluated` : "Split appears after the first completed run"}</p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button className="border-white/20 bg-white/10 text-white hover:border-white/40 hover:bg-white/15" onClick={() => void handleTrigger(false)} disabled={!canTrigger}>
+            <Button onClick={() => void handleTrigger(false)} disabled={!canTrigger}>
               {running ? "Running..." : run ? "Reuse latest or run" : "Run training"}
             </Button>
-            <Button className="border-white/20 bg-transparent text-white hover:border-white/40 hover:bg-white/10" onClick={() => void handleTrigger(true)} disabled={!canTrigger}>
+            <Button className="bg-panel text-foreground hover:bg-panelAlt hover:text-foreground" onClick={() => void handleTrigger(true)} disabled={!canTrigger}>
               Force rerun
             </Button>
             <Link
               href="/ml-evaluation/dataset"
-              className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
+              className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:bg-panelAlt"
             >
               Inspect dataset
             </Link>
             <Link
               href="/ml-evaluation/repositories"
-              className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
+              className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:bg-panelAlt"
             >
               Inspect repos
             </Link>
             <Link
               href="/ml-evaluation/runs"
-              className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/10"
+              className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:bg-panelAlt"
             >
               Inspect runs
             </Link>
           </div>
 
           {!datasetReady && !loading ? (
-            <p className="text-sm text-slate-200">Run repository analyses first so the training snapshot base has enough data to build from.</p>
+            <p className="text-sm text-muted">Run repository analyses first so the training snapshot base has enough data to build from.</p>
           ) : null}
         </Card>
 
@@ -191,6 +191,10 @@ export function MlResultsDashboard() {
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Latest Artifact</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">What changed in the current training picture</h2>
           </div>
+
+          <p className="text-sm leading-6 text-muted">
+            The deployed trainer currently produces the calibrated logistic-regression baseline. The thesis model track should add XGBoost, a compact neural network, and a calibrated ensemble score once those artifacts are implemented.
+          </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <DetailBlock label="Model" value={run?.modelName ? `${run.modelName} ${run.modelVersion}` : "Waiting for first run"} />
@@ -204,9 +208,10 @@ export function MlResultsDashboard() {
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Badge tone="neutral">Subpages reduce clutter</Badge>
-            <Badge tone="neutral">Toasts handle action feedback</Badge>
-            <Badge tone="neutral">Overview stays metric-first</Badge>
+            <Badge tone="neutral">Current: logistic regression</Badge>
+            <Badge tone="neutral">Next: XGBoost</Badge>
+            <Badge tone="neutral">Next: neural net</Badge>
+            <Badge tone="neutral">Target: calibrated ensemble</Badge>
           </div>
         </Card>
       </section>

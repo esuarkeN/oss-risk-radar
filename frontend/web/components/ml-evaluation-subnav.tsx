@@ -41,16 +41,16 @@ export function MlEvaluationSubnav() {
             key={link.href}
             href={link.href}
             className={cn(
-              "rounded-[1.5rem] border px-5 py-4 transition",
+              "rounded-lg border px-5 py-4 transition",
               isActive
-                ? "border-accent/35 bg-panel shadow-soft"
+                ? "border-foreground bg-foreground text-background shadow-soft"
                 : "border-line bg-panel/70 hover:border-accent/20 hover:bg-panelAlt/80",
             )}
           >
-            <p className={cn("text-sm font-semibold tracking-tight", isActive ? "text-foreground" : "text-muted")}>
+            <p className={cn("text-sm font-semibold tracking-tight", isActive ? "text-background" : "text-muted")}>
               {link.label}
             </p>
-            <p className="mt-1 text-sm text-muted">{link.description}</p>
+            <p className={cn("mt-1 text-sm", isActive ? "text-background/70" : "text-muted")}>{link.description}</p>
           </Link>
         );
       })}

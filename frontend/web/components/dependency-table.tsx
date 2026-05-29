@@ -88,8 +88,8 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
     <Card className="space-y-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-950">Repository and Dependency Inventory</h3>
-          <p className="mt-1 text-sm text-slate-500">
+          <h3 className="text-lg font-semibold text-foreground">Repository and Dependency Inventory</h3>
+          <p className="mt-1 text-sm text-muted">
             Filter the repository target and resolved packages by risk, ecosystem, dependency depth, and repository coverage before opening detail views.
           </p>
         </div>
@@ -99,7 +99,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
               key={bucket}
               type="button"
               onClick={() => setFilters((current) => ({ ...current, bucket: current.bucket === bucket ? "all" : bucket }))}
-              className="rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 transition hover:border-sky-300 hover:text-sky-800"
+              className="rounded-md border border-line px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted transition hover:border-accent/40 hover:text-foreground"
             >
               {bucket} {bucketCounts[bucket] ?? 0}
             </button>
@@ -109,13 +109,13 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.8fr))]">
         <input
-          className="h-11 rounded-full border border-slate-200 px-4 text-sm outline-none focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+          className="h-11 rounded-md border border-line bg-panel px-4 text-sm outline-none focus:border-accent/60 focus:ring-4 focus:ring-accent/10"
           placeholder="Search repository, package, path"
           value={filters.search}
           onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
         />
         <select
-          className="h-11 rounded-full border border-slate-200 px-4 text-sm outline-none focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+          className="h-11 rounded-md border border-line bg-panel px-4 text-sm outline-none focus:border-accent/60 focus:ring-4 focus:ring-accent/10"
           value={filters.bucket}
           onChange={(event) => setFilters((current) => ({ ...current, bucket: event.target.value as DependencyFilterState["bucket"] }))}
         >
@@ -126,7 +126,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
           <option value="low">Low</option>
         </select>
         <select
-          className="h-11 rounded-full border border-slate-200 px-4 text-sm outline-none focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+          className="h-11 rounded-md border border-line bg-panel px-4 text-sm outline-none focus:border-accent/60 focus:ring-4 focus:ring-accent/10"
           value={filters.ecosystem}
           onChange={(event) => setFilters((current) => ({ ...current, ecosystem: event.target.value as DependencyFilterState["ecosystem"] }))}
         >
@@ -137,29 +137,29 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
             </option>
           ))}
         </select>
-        <label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-sm text-slate-600">
+        <label className="flex h-11 items-center gap-3 rounded-md border border-line bg-panel px-4 text-sm text-muted">
           <input
             type="checkbox"
             checked={filters.directOnly}
             onChange={(event) => setFilters((current) => ({ ...current, directOnly: event.target.checked }))}
-            className="h-4 w-4 rounded border-slate-300"
+            className="h-4 w-4 rounded border-line"
           />
           Direct only
         </label>
-        <label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-sm text-slate-600">
+        <label className="flex h-11 items-center gap-3 rounded-md border border-line bg-panel px-4 text-sm text-muted">
           <input
             type="checkbox"
             checked={mappedOnly}
             onChange={(event) => setMappedOnly(event.target.checked)}
-            className="h-4 w-4 rounded border-slate-300"
+            className="h-4 w-4 rounded border-line"
           />
           Mapped repos only
         </label>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-panelAlt px-4 py-3 text-sm text-muted">
         <p>
-          Showing <span className="font-semibold text-slate-950">{filteredDependencies.length}</span> of {dependencies.length} entries.
+          Showing <span className="font-semibold text-foreground">{filteredDependencies.length}</span> of {dependencies.length} entries.
         </p>
         <div className="flex flex-wrap gap-2">
           {filters.directOnly ? <Badge tone="neutral">Direct only</Badge> : null}
@@ -167,7 +167,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
           {filters.bucket !== "all" ? <Badge tone={filters.bucket}>{filters.bucket}</Badge> : null}
           {filters.ecosystem !== "all" ? <Badge tone="neutral">{filters.ecosystem}</Badge> : null}
           {filters.search ? <Badge tone="neutral">Search: {filters.search}</Badge> : null}
-          <Button type="button" onClick={resetFilters} className="h-auto border-transparent bg-transparent px-0 py-0 text-sky-700 hover:bg-transparent">
+          <Button type="button" onClick={resetFilters} className="h-auto border-transparent bg-transparent px-0 py-0 text-accent hover:bg-transparent hover:text-foreground">
             Reset filters
           </Button>
         </div>
@@ -176,14 +176,14 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
       <div className="overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-y-3 text-left text-sm">
           <thead>
-            <tr className="text-slate-500">
+            <tr className="text-muted">
               <th className="pb-2">Package</th>
               <th className="pb-2">Path</th>
               <th className="pb-2">
                 <button
                   type="button"
                   onClick={() => setOutlookSortDirection((current) => (current === "asc" ? "desc" : "asc"))}
-                  className="inline-flex items-center gap-2 font-semibold text-slate-500 transition hover:text-slate-800"
+                  className="inline-flex items-center gap-2 font-semibold text-muted transition hover:text-foreground"
                 >
                   12M Outlook
                   <span className="text-[10px] uppercase">{outlookSortDirection === "asc" ? "low" : "high"}</span>
@@ -202,15 +202,15 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
               const repositoryProfile = isRepositoryProfile(dependency);
 
               return (
-                <tr key={dependency.id} className={`rounded-2xl ${selected ? "bg-sky-50" : "bg-slate-50"} text-slate-700`}>
-                  <td className="rounded-l-2xl px-4 py-4 align-top">
+                <tr key={dependency.id} className={`${selected ? "bg-accent/10" : "bg-panelAlt"} text-muted`}>
+                  <td className="rounded-l-lg px-4 py-4 align-top">
                     <Link
                       href={`/analyses/${dependency.analysisId}/dependencies/${dependency.id}`}
-                      className="font-semibold text-slate-950 transition hover:text-sky-700"
+                      className="font-semibold text-foreground transition hover:text-accent"
                     >
                       {dependencyDisplayName(dependency)}
                     </Link>
-                    <p className="mt-1 text-xs text-slate-500">{dependencyDisplayVersion(dependency)}</p>
+                    <p className="mt-1 text-xs text-muted">{dependencyDisplayVersion(dependency)}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge tone={repositoryProfile ? "neutral" : dependency.direct ? "medium" : "neutral"}>
                         {repositoryProfile ? "Repository target" : dependency.direct ? "Direct" : "Transitive"}
@@ -219,44 +219,44 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
                       {dependency.parsedFromUploadId ? <Badge tone="neutral">Upload-backed</Badge> : null}
                     </div>
                   </td>
-                  <td className="px-4 py-4 align-top text-slate-500">
-                    <p className="font-medium text-slate-700">{repositoryProfile ? "Repository scope" : `Depth ${Math.max(dependency.dependencyPath.length - 1, 0)}`}</p>
+                  <td className="px-4 py-4 align-top text-muted">
+                    <p className="font-medium text-foreground">{repositoryProfile ? "Repository scope" : `Depth ${Math.max(dependency.dependencyPath.length - 1, 0)}`}</p>
                     <p className="mt-1 max-w-xs text-xs leading-6">{repositoryProfile ? dependency.repository?.url ?? formatPath(dependency.dependencyPath) : formatPath(dependency.dependencyPath)}</p>
                   </td>
-                  <td className="px-4 py-4 align-top font-medium text-slate-900">
+                  <td className="px-4 py-4 align-top font-medium text-foreground">
                     {formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}
                   </td>
                   <td className="px-4 py-4 align-top">
                     <div className="flex items-center gap-3">
                       <RiskBadge bucket={dependency.riskProfile?.riskBucket} />
-                      <span className="font-medium text-slate-900">{formatRiskScore(dependency.riskProfile?.inactivityRiskScore ?? 0)}</span>
+                      <span className="font-medium text-foreground">{formatRiskScore(dependency.riskProfile?.inactivityRiskScore ?? 0)}</span>
                     </div>
-                    <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
+                    <p className="mt-2 text-xs uppercase tracking-[0.14em] text-muted">
                       {titleCase(dependency.riskProfile?.actionLevel ?? "monitor")}
                     </p>
                   </td>
-                  <td className="px-4 py-4 align-top font-medium text-slate-900">
+                  <td className="px-4 py-4 align-top font-medium text-foreground">
                     {formatRiskScore(dependency.riskProfile?.securityPostureScore ?? 0)}
                   </td>
                   <td className="px-4 py-4 align-top">{formatConfidence(dependency.riskProfile?.confidenceScore ?? 0)}</td>
-                  <td className="px-4 py-4 align-top text-slate-500">
-                    <p className="font-medium text-slate-900">{dependency.repository?.fullName ?? "Unmapped"}</p>
+                  <td className="px-4 py-4 align-top text-muted">
+                    <p className="font-medium text-foreground">{dependency.repository?.fullName ?? "Unmapped"}</p>
                     <p className="mt-1 text-xs">{dependency.rawSignalsAvailable ? "Raw signals attached" : "Signal snapshot pending"}</p>
                   </td>
-                  <td className="rounded-r-2xl px-4 py-4 align-top">
+                  <td className="rounded-r-lg px-4 py-4 align-top">
                     <div className="flex flex-col gap-2">
                       {onSelectDependency ? (
                         <Button
                           type="button"
                           onClick={() => onSelectDependency(dependency.id)}
-                          className={selected ? "border-sky-300 bg-sky-100 text-sky-900" : undefined}
+                          className={selected ? "border-accent/30 bg-accent/15 text-accent hover:text-background" : undefined}
                         >
                           {selected ? (repositoryProfile ? "Viewing profile" : "Viewing path") : (repositoryProfile ? "View profile" : "Explore path")}
                         </Button>
                       ) : null}
                       <Link
                         href={`/analyses/${dependency.analysisId}/dependencies/${dependency.id}`}
-                        className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700"
+                        className="text-xs font-semibold uppercase tracking-[0.14em] text-accent"
                       >
                         Open detail
                       </Link>
@@ -270,7 +270,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
       </div>
 
       {!filteredDependencies.length ? (
-        <div className="rounded-[1.5rem] border border-dashed border-slate-300 px-5 py-8 text-sm text-slate-500">
+        <div className="rounded-lg border border-dashed border-line px-5 py-8 text-sm text-muted">
           No repository or dependency entries matched the current filter set. Loosen the search or bucket filters to widen the analysis slice.
         </div>
       ) : null}

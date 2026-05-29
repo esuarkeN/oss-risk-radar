@@ -232,10 +232,14 @@ func (m *trainingDatasetManager) UpsertAnalysisSnapshots(item AnalysisRecord) er
 }
 
 func (m *trainingDatasetManager) read() (trainingDatasetEnvelope, error) {
-	if m == nil || m.path == "" {
+	return readTrainingDatasetFile(m.path)
+}
+
+func readTrainingDatasetFile(path string) (trainingDatasetEnvelope, error) {
+	if path == "" {
 		return trainingDatasetEnvelope{}, nil
 	}
-	payload, err := os.ReadFile(m.path)
+	payload, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return trainingDatasetEnvelope{Snapshots: []TrainingSnapshotRecord{}}, nil
@@ -254,6 +258,59 @@ func (m *trainingDatasetManager) read() (trainingDatasetEnvelope, error) {
 		dataset.Snapshots = []TrainingSnapshotRecord{}
 	}
 	return dataset, nil
+}
+
+func (m *trainingDatasetManager) BootstrapFromSeed(seedPath string, mergeExisting bool) (bool, error) {
+	if m == nil || m.path == "" {
+		return false, nil
+	}
+
+	seedDataset, err := readTrainingDatasetFile(seedPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	if len(seedDataset.Snapshots) == 0 {
+		return false, nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	merged := append([]TrainingSnapshotRecord(nil), seedDataset.Snapshots...)
+	seen := make(map[string]struct{}, len(merged))
+	for _, snapshot := range merged {
+		seen[trainingSnapshotKey(snapshot)] = struct{}{}
+	}
+
+	if mergeExisting {
+		currentDataset, err := m.read()
+		if err != nil {
+			return false, err
+		}
+		for _, snapshot := range currentDataset.Snapshots {
+			if snapshot.LabelInactive12M != nil && !hasTrainingSnapshotRepositoryIdentity(snapshot) {
+				continue
+			}
+			key := trainingSnapshotKey(snapshot)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			merged = append(merged, snapshot)
+			seen[key] = struct{}{}
+		}
+		if currentDataset.UpdatedAt.After(seedDataset.UpdatedAt) {
+			seedDataset.UpdatedAt = currentDataset.UpdatedAt
+		}
+	}
+
+	sortTrainingSnapshots(merged)
+	if seedDataset.UpdatedAt.IsZero() {
+		seedDataset.UpdatedAt = time.Now().UTC()
+	}
+	return true, m.write(trainingDatasetEnvelope{UpdatedAt: seedDataset.UpdatedAt, Snapshots: merged})
 }
 
 func labeledTrainingSnapshotCount(snapshots []TrainingSnapshotRecord) int {
@@ -286,6 +343,17 @@ func hasTrainingSnapshotRepositoryIdentity(snapshot TrainingSnapshotRecord) bool
 	}
 	repositoryURL := strings.ToLower(strings.TrimSpace(repository.URL))
 	return strings.HasPrefix(repositoryURL, "https://github.com/") || strings.HasPrefix(repositoryURL, "http://github.com/")
+}
+
+func trainingSnapshotKey(snapshot TrainingSnapshotRecord) string {
+	return strings.Join([]string{
+		snapshot.AnalysisID,
+		snapshot.ObservedAt,
+		snapshot.Dependency.DependencyID,
+		snapshot.Dependency.Ecosystem,
+		snapshot.Dependency.PackageName,
+		snapshot.Dependency.PackageVersion,
+	}, "\x00")
 }
 
 func sortTrainingSnapshots(snapshots []TrainingSnapshotRecord) {

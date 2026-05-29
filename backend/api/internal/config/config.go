@@ -8,40 +8,48 @@ import (
 )
 
 type Config struct {
-	ServiceName         string
-	Addr                string
-	AllowedOrigin       string
-	ScoringBaseURL      string
-	MethodologyVersion  string
-	DatabaseURL         string
-	DepsDevBaseURL      string
-	GitHubToken         string
-	ScorecardBaseURL    string
-	HTTPTimeout         time.Duration
-	UploadDir           string
-	TrainingDatasetPath string
-	TrainingRunsDir     string
-	WorkerPollInterval  time.Duration
-	RetryDelay          time.Duration
+	ServiceName               string
+	Addr                      string
+	AllowedOrigin             string
+	ScoringBaseURL            string
+	MethodologyVersion        string
+	DatabaseURL               string
+	DepsDevBaseURL            string
+	GitHubToken               string
+	ScorecardBaseURL          string
+	HTTPTimeout               time.Duration
+	UploadDir                 string
+	TrainingDatasetPath       string
+	TrainingRunsDir           string
+	TrainingSeedDatasetPath   string
+	TrainingSeedRunsDir       string
+	TrainingSeedLatestRunPath string
+	TrainingSeedMergeExisting bool
+	WorkerPollInterval        time.Duration
+	RetryDelay                time.Duration
 }
 
 func Load() Config {
 	return Config{
-		ServiceName:         getEnv("API_SERVICE_NAME", "oss-risk-radar-api"),
-		Addr:                getEnv("API_ADDR", ":8080"),
-		AllowedOrigin:       getEnv("API_ALLOWED_ORIGIN", "http://localhost:3000"),
-		ScoringBaseURL:      getEnv("SCORING_SERVICE_URL", getEnv("SCORING_BASE_URL", "http://localhost:8090")),
-		MethodologyVersion:  getEnv("METHODOLOGY_VERSION", "heuristic-v1"),
-		DatabaseURL:         os.Getenv("DATABASE_URL"),
-		DepsDevBaseURL:      getEnv("DEPSDEV_BASE_URL", "https://api.deps.dev/v3alpha"),
-		GitHubToken:         os.Getenv("GITHUB_TOKEN"),
-		ScorecardBaseURL:    getEnv("SCORECARD_BASE_URL", "https://api.securityscorecards.dev/projects"),
-		HTTPTimeout:         durationEnv("API_HTTP_TIMEOUT_SECONDS", 10*time.Second),
-		UploadDir:           getEnv("UPLOAD_DIR", "tmp/uploads"),
-		TrainingDatasetPath: getEnv("TRAINING_DATASET_PATH", "tmp/training/snapshots.json"),
-		TrainingRunsDir:     getEnv("TRAINING_RUNS_DIR", "tmp/training/runs"),
-		WorkerPollInterval:  durationEnv("WORKER_POLL_INTERVAL_SECONDS", 3*time.Second),
-		RetryDelay:          durationEnv("JOB_RETRY_DELAY_SECONDS", 30*time.Second),
+		ServiceName:               getEnv("API_SERVICE_NAME", "oss-risk-radar-api"),
+		Addr:                      getEnv("API_ADDR", ":8080"),
+		AllowedOrigin:             getEnv("API_ALLOWED_ORIGIN", "http://localhost:3000"),
+		ScoringBaseURL:            getEnv("SCORING_SERVICE_URL", getEnv("SCORING_BASE_URL", "http://localhost:8090")),
+		MethodologyVersion:        getEnv("METHODOLOGY_VERSION", "heuristic-v1"),
+		DatabaseURL:               os.Getenv("DATABASE_URL"),
+		DepsDevBaseURL:            getEnv("DEPSDEV_BASE_URL", "https://api.deps.dev/v3alpha"),
+		GitHubToken:               os.Getenv("GITHUB_TOKEN"),
+		ScorecardBaseURL:          getEnv("SCORECARD_BASE_URL", "https://api.securityscorecards.dev/projects"),
+		HTTPTimeout:               durationEnv("API_HTTP_TIMEOUT_SECONDS", 10*time.Second),
+		UploadDir:                 getEnv("UPLOAD_DIR", "tmp/uploads"),
+		TrainingDatasetPath:       getEnv("TRAINING_DATASET_PATH", "tmp/training/snapshots.json"),
+		TrainingRunsDir:           getEnv("TRAINING_RUNS_DIR", "tmp/training/runs"),
+		TrainingSeedDatasetPath:   os.Getenv("TRAINING_SEED_DATASET_PATH"),
+		TrainingSeedRunsDir:       os.Getenv("TRAINING_SEED_RUNS_DIR"),
+		TrainingSeedLatestRunPath: os.Getenv("TRAINING_SEED_LATEST_RUN_PATH"),
+		TrainingSeedMergeExisting: boolEnv("TRAINING_SEED_MERGE_EXISTING", true),
+		WorkerPollInterval:        durationEnv("WORKER_POLL_INTERVAL_SECONDS", 3*time.Second),
+		RetryDelay:                durationEnv("JOB_RETRY_DELAY_SECONDS", 30*time.Second),
 	}
 }
 
@@ -63,4 +71,19 @@ func durationEnv(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func boolEnv(key string, fallback bool) bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if raw == "" {
+		return fallback
+	}
+	switch raw {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
+	}
 }

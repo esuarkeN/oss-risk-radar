@@ -9,5 +9,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api ./cmd/api
 FROM alpine:3.23
 WORKDIR /app
 COPY --from=build /out/api /app/api
+COPY deployment/training /app/seed/training
 EXPOSE 8080
 CMD ["/app/api"]

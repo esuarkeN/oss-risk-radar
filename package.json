@@ -23,6 +23,7 @@
     "ml:bootstrap:foundation": "node scripts/ml/bootstrap-training.mjs --generate-foundation-seed --foundation-target-repositories 2000",
     "ml:bootstrap:real-projects": "node scripts/ml/bootstrap-training.mjs --seed-file scripts/ml/real-project-foundation-seed.csv --sample-limit-per-ecosystem 500 --minimum-repositories 40 --minimum-inactive-repositories 8",
     "ml:bootstrap:force": "node scripts/ml/bootstrap-training.mjs --force",
+    "ml:stage-training": "node scripts/ml/stage-training-artifacts.mjs",
     "thesis:build": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/build.ps1",
     "thesis:watch": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/build.ps1 -Watch",
     "thesis:clean": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/clean.ps1",

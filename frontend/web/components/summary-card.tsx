@@ -8,10 +8,14 @@ interface SummaryCardProps {
 
 export function SummaryCard({ label, value, caption }: SummaryCardProps) {
   return (
-    <Card className="space-y-2 border-line/80 bg-[linear-gradient(180deg,hsl(var(--panel))_0%,hsl(var(--panel-alt))_100%)]">
-      <p className="text-xs uppercase tracking-[0.24em] text-muted">{label}</p>
-      <p className="text-3xl font-semibold tracking-tight text-foreground">{value}</p>
-      <p className="text-sm text-muted">{caption}</p>
+    <Card className="min-h-40 border-line bg-panel p-5">
+      <div className="flex h-full flex-col justify-between gap-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
+        <div>
+          <p className="text-5xl font-semibold leading-none tracking-tight text-foreground">{value}</p>
+          <p className="mt-3 text-sm leading-6 text-muted">{caption}</p>
+        </div>
+      </div>
     </Card>
   );
 }

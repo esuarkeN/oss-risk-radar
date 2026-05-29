@@ -142,3 +142,85 @@ func (m *trainingRunArtifactManager) readLatest() (*TrainingRunArtifact, error) 
 	}
 	return &run, nil
 }
+
+func (m *trainingRunArtifactManager) BootstrapFromSeed(seedRunsDir string, seedLatestPath string, mergeExisting bool) (bool, error) {
+	if m == nil || m.runsDir == "" {
+		return false, nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	seeded := false
+	if seedRunsDir != "" {
+		entries, err := os.ReadDir(seedRunsDir)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return false, err
+			}
+		} else {
+			if !mergeExisting {
+				if err := os.RemoveAll(m.runsDir); err != nil {
+					return false, err
+				}
+			}
+			if err := os.MkdirAll(m.runsDir, 0o755); err != nil {
+				return false, err
+			}
+			for _, entry := range entries {
+				if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+					continue
+				}
+				source := filepath.Join(seedRunsDir, entry.Name())
+				target := filepath.Join(m.runsDir, entry.Name())
+				if mergeExisting {
+					if _, err := os.Stat(target); err == nil {
+						continue
+					} else if !os.IsNotExist(err) {
+						return false, err
+					}
+				}
+				if err := copyFile(source, target); err != nil {
+					return false, err
+				}
+				seeded = true
+			}
+		}
+	}
+
+	if seedLatestPath != "" && m.latestPath != "" {
+		if _, err := os.Stat(seedLatestPath); err == nil {
+			if !mergeExisting {
+				if err := os.Remove(m.latestPath); err != nil && !os.IsNotExist(err) {
+					return false, err
+				}
+			}
+			if _, err := os.Stat(m.latestPath); os.IsNotExist(err) || !mergeExisting {
+				if err := os.MkdirAll(filepath.Dir(m.latestPath), 0o755); err != nil {
+					return false, err
+				}
+				if err := copyFile(seedLatestPath, m.latestPath); err != nil {
+					return false, err
+				}
+				seeded = true
+			} else if err != nil {
+				return false, err
+			}
+		} else if !os.IsNotExist(err) {
+			return false, err
+		}
+	}
+
+	return seeded, nil
+}
+
+func copyFile(source string, target string) error {
+	payload, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, payload, 0o644)
+}

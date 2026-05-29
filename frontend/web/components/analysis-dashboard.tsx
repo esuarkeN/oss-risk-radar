@@ -161,59 +161,62 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
 
   return (
     <div className="space-y-6">
-      <Card className="space-y-5 overflow-hidden border-line bg-[linear-gradient(135deg,#081120_0%,#12314a_56%,#164a55_100%)] text-white">
-        <div className="grid gap-6 lg:grid-cols-[1.55fr_1fr]">
+      <section className="grid gap-5 rounded-lg border border-line bg-panel p-5 lg:grid-cols-[1.45fr_0.55fr] lg:p-6">
+        <div className="flex min-h-64 flex-col justify-between gap-6">
           <div className="space-y-4">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Analysis Overview</p>
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight">
-                {analysis.submission.repositoryUrl ?? analysis.submission.artifactName ?? "Demo analysis"}
-              </h1>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Analysis Overview</p>
               <Badge tone={analysis.status === "completed" ? "low" : analysis.status === "failed" ? "critical" : "medium"}>
                 {titleCase(analysis.status)}
               </Badge>
             </div>
-            <p className="max-w-2xl text-sm text-slate-200">
-              One repository, one dependency inventory, one evidence trail. The page keeps the triage signal visible without over-explaining every panel.
-            </p>
-            <div className="flex flex-wrap gap-3 text-sm text-slate-200">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2">
-                <ShieldCheck className="h-4 w-4" /> Conservative triage framing
-              </span>
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2">
-                <DatabaseZap className="h-4 w-4" /> Provider and upload provenance visible
-              </span>
-            </div>
+            <h1 className="max-w-5xl break-words text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
+              {analysis.submission.repositoryUrl ?? analysis.submission.artifactName ?? "Demo analysis"}
+            </h1>
             {analysisStatusActive ? (
-              <p className="text-sm text-amber-100">
+              <p className="max-w-2xl text-sm text-warning">
                 This analysis is still processing. The dashboard refreshes automatically while parsing, enrichment, and scoring complete.
               </p>
             ) : null}
           </div>
-          <div className="rounded-[1.5rem] border border-white/10 bg-white/10 p-5 backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Freshness and scope</p>
-            <div className="mt-4 space-y-3">
-              <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
-                Created {formatDate(analysis.createdAt)}
-              </div>
-              <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
-                Updated {formatDate(analysis.updatedAt)}
-              </div>
-              <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
-                Submission mode {titleCase(analysis.submission.kind.replaceAll("_", " "))}
-              </div>
-              {analysis.methodologyVersion ? (
-                <div className="rounded-[1.1rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-100">
-                  Methodology {analysis.methodologyVersion}
-                </div>
-              ) : null}
-            </div>
-            <Link href="/methodology" className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-white transition hover:text-sky-200">
-              Review methodology <ArrowRight className="h-4 w-4" />
-            </Link>
+
+          <div className="flex flex-wrap gap-2 text-sm text-muted">
+            <span className="inline-flex items-center gap-2 rounded-md border border-line bg-panelAlt px-3 py-2">
+              <ShieldCheck className="h-4 w-4 text-accent" /> Conservative triage
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-md border border-line bg-panelAlt px-3 py-2">
+              <DatabaseZap className="h-4 w-4 text-accent" /> Provenance visible
+            </span>
           </div>
         </div>
-      </Card>
+
+        <aside className="rounded-lg border border-line bg-foreground p-4 text-background">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-background/60">Freshness and scope</p>
+          <div className="mt-5 divide-y divide-background/15 border-y border-background/15">
+            <div className="flex justify-between gap-4 py-3 text-sm">
+              <span className="text-background/60">Created</span>
+              <span className="text-right font-medium">{formatDate(analysis.createdAt)}</span>
+            </div>
+            <div className="flex justify-between gap-4 py-3 text-sm">
+              <span className="text-background/60">Updated</span>
+              <span className="text-right font-medium">{formatDate(analysis.updatedAt)}</span>
+            </div>
+            <div className="flex justify-between gap-4 py-3 text-sm">
+              <span className="text-background/60">Mode</span>
+              <span className="text-right font-medium">{titleCase(analysis.submission.kind.replaceAll("_", " "))}</span>
+            </div>
+            {analysis.methodologyVersion ? (
+              <div className="flex justify-between gap-4 py-3 text-sm">
+                <span className="text-background/60">Method</span>
+                <span className="text-right font-medium">{analysis.methodologyVersion}</span>
+              </div>
+            ) : null}
+          </div>
+          <Link href="/methodology" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-background transition hover:text-accent">
+            Review methodology <ArrowRight className="h-4 w-4" />
+          </Link>
+        </aside>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label={dependencySummaryLabel} value={analysis.summary.dependencyCount} caption={dependencySummaryCaption} />
@@ -235,15 +238,15 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
         />
         <Card className="space-y-5">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Focused review</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Focused review</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
               {selectedDependency
                 ? selectedIsRepositoryProfile
                   ? (selectedDependency.repository?.fullName ?? selectedDependency.packageName)
                   : `${selectedDependency.packageName}@${selectedDependency.packageVersion}`
                 : "Select a profile"}
             </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-2 text-sm leading-6 text-muted">
               {selectedIsRepositoryProfile
                 ? "Focus the repository-level rating for the submitted project."
                 : "Focus the path panel on one package and jump into the evidence view when needed."}
@@ -260,25 +263,25 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
                 </Badge>
                 {selectedDependency.parsedFromUploadId ? <Badge tone="neutral">Upload provenance attached</Badge> : null}
               </div>
-              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              <div className="rounded-lg border border-line bg-panelAlt px-4 py-4 text-sm text-muted">
                 <p>
-                  Repository: <span className="font-semibold text-slate-950">{selectedDependency.repository?.fullName ?? "Not mapped yet"}</span>
+                  Repository: <span className="font-semibold text-foreground">{selectedDependency.repository?.fullName ?? "Not mapped yet"}</span>
                 </p>
                 <p className="mt-2">
-                  Latest action cue: <span className="font-semibold text-slate-950">{titleCase(selectedDependency.riskProfile?.actionLevel ?? "monitor")}</span>
+                  Latest action cue: <span className="font-semibold text-foreground">{titleCase(selectedDependency.riskProfile?.actionLevel ?? "monitor")}</span>
                 </p>
                 <p className="mt-2">{selectedIsRepositoryProfile ? "Scope: repository-level profile" : `Path length: ${selectedDependency.dependencyPath.length} nodes`}</p>
                 <p className="mt-2">Graph nodes available: {graphNodeCount}</p>
               </div>
               <Link
                 href={`/analyses/${selectedDependency.analysisId}/dependencies/${selectedDependency.id}`}
-                className="inline-flex items-center gap-2 text-sm font-medium text-sky-700 transition hover:text-sky-900"
+                className="inline-flex items-center gap-2 text-sm font-medium text-accent transition hover:text-foreground"
               >
                 Open detailed evidence view <ArrowRight className="h-4 w-4" />
               </Link>
             </>
           ) : (
-            <div className="rounded-[1.5rem] border border-dashed border-slate-300 px-4 py-8 text-sm text-slate-500">
+            <div className="rounded-lg border border-dashed border-line px-4 py-8 text-sm text-muted">
               No dependency records were attached to this analysis yet.
             </div>
           )}
@@ -294,13 +297,13 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
       {analysis.uploads?.length ? (
         <Card className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Uploaded artifacts</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">Registered analysis inputs</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Uploaded artifacts</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">Registered analysis inputs</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {analysis.uploads.map((upload) => (
-              <div key={upload.id} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                <p className="font-semibold text-slate-950">{upload.fileName}</p>
+              <div key={upload.id} className="rounded-lg border border-line bg-panelAlt px-4 py-4 text-sm text-muted">
+                <p className="font-semibold text-foreground">{upload.fileName}</p>
                 <p className="mt-2">Status {titleCase(upload.status)}</p>
                 <p className="mt-2">Uploaded {formatDate(upload.uploadedAt)}</p>
                 {upload.parseError ? <p className="mt-2 text-rose-700">Parse error: {upload.parseError}</p> : null}

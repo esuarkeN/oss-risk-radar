@@ -8,16 +8,24 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getTrainingDatasetSummary, listAnalyses } from "@/lib/api";
 import { formatConfidence, formatDate, formatOutlookScore, formatRiskScore } from "@/lib/format";
-import type { AnalysisRecord, DependencyRecord, TrainingDatasetSummary } from "@/lib/types";
+import type { AnalysisRecord, DependencyRecord, TrainingDatasetRepositorySummary, TrainingDatasetSummary } from "@/lib/types";
 
 interface RepositoryRollup {
   key: string;
   label: string;
   url?: string;
+  source: "analysis" | "training";
+  trainingRank?: number;
   archived: boolean;
   packageCount: number;
   analysisCount: number;
+  snapshotCount?: number;
+  labeledSnapshotCount?: number;
+  inactiveLabelCount?: number;
+  inactiveRate?: number;
   lastPushAt?: string;
+  lastPushAgeDays?: number;
+  lastObservedAt?: string;
   avgOutlook12m: number;
   avgRisk: number;
   avgSecurity: number;
@@ -85,12 +93,23 @@ function repositoryActivityStatus(repository: RepositoryRollup, timeframeDays: n
     return "inactive";
   }
 
-  const ageDays = daysSince(repository.lastPushAt);
+  const ageDays = repositoryAgeDays(repository);
   if (ageDays === null) {
     return "unknown";
   }
 
   return ageDays > timeframeDays ? "inactive" : "active";
+}
+
+function repositoryAgeDays(repository: RepositoryRollup) {
+  return repository.lastPushAgeDays ?? daysSince(repository.lastPushAt);
+}
+
+function trainingInactiveRate(repository: TrainingDatasetRepositorySummary) {
+  if (repository.labeledSnapshotCount <= 0) {
+    return 0;
+  }
+  return repository.inactiveLabelCount / repository.labeledSnapshotCount;
 }
 
 export function RepositoryRadar() {
@@ -117,7 +136,7 @@ export function RepositoryRadar() {
           return;
         }
 
-        setAnalyses(analysisResponse.analyses.filter((analysis) => analysis.status === "completed"));
+        setAnalyses(analysisResponse.analyses.filter((analysis) => analysis.status === "completed" && analysis.submission.kind !== "demo"));
         setDataset(datasetSummary);
         setError(null);
       } catch (loadError) {
@@ -136,7 +155,7 @@ export function RepositoryRadar() {
 
   const dependencies = useMemo(() => analyses.flatMap((analysis) => analysis.dependencies ?? []), [analyses]);
 
-  const repositoryRows = useMemo<RepositoryRollup[]>(() => {
+  const analysisRepositoryRows = useMemo<RepositoryRollup[]>(() => {
     const buckets = new Map<string, DependencyRecord[]>();
     for (const dependency of dependencies) {
       if (!dependency.repository?.fullName) {
@@ -166,6 +185,7 @@ export function RepositoryRadar() {
           key,
           label: repository?.fullName ?? key,
           url: repository?.url,
+          source: "analysis",
           archived: repository?.archived ?? false,
           packageCount,
           analysisCount,
@@ -180,6 +200,55 @@ export function RepositoryRadar() {
       })
       .sort((left, right) => left.avgOutlook12m - right.avgOutlook12m);
   }, [dependencies]);
+
+  const trainingRepositoryRows = useMemo<RepositoryRollup[]>(() => {
+    return (dataset?.repositories ?? []).map((repository) => {
+      const inactiveRate = trainingInactiveRate(repository);
+      const labeledCoverage = repository.snapshotCount > 0 ? repository.labeledSnapshotCount / repository.snapshotCount : 0;
+
+      return {
+        key: repository.url || repository.fullName,
+        label: repository.fullName || repository.url,
+        url: repository.url,
+        source: "training",
+        trainingRank: repository.rank,
+        archived: repository.archived,
+        packageCount: repository.packageCount,
+        analysisCount: repository.analysisCount,
+        snapshotCount: repository.snapshotCount,
+        labeledSnapshotCount: repository.labeledSnapshotCount,
+        inactiveLabelCount: repository.inactiveLabelCount,
+        inactiveRate,
+        lastPushAgeDays: repository.lastPushAgeDays,
+        lastObservedAt: repository.lastObservedAt,
+        avgOutlook12m: Math.max(0, 100 - inactiveRate * 100),
+        avgRisk: inactiveRate * 100,
+        avgSecurity: 0,
+        avgConfidence: Math.round(Math.min(100, Math.max(35, 45 + labeledCoverage * 45))),
+        recentContributors90d: repository.recentContributors90d
+      } satisfies RepositoryRollup;
+    });
+  }, [dataset?.repositories]);
+
+  const repositoryRows = useMemo<RepositoryRollup[]>(() => {
+    const rowsByKey = new Map<string, RepositoryRollup>();
+    for (const row of trainingRepositoryRows) {
+      rowsByKey.set(row.key, row);
+    }
+    for (const row of analysisRepositoryRows) {
+      const existing = rowsByKey.get(row.key);
+      rowsByKey.set(row.key, existing ? { ...existing, ...row, source: "analysis" } : row);
+    }
+    return [...rowsByKey.values()].sort((left, right) => {
+      if (left.source !== right.source) {
+        return left.source === "analysis" ? -1 : 1;
+      }
+      if ((left.trainingRank ?? 0) !== (right.trainingRank ?? 0)) {
+        return (left.trainingRank ?? Number.MAX_SAFE_INTEGER) - (right.trainingRank ?? Number.MAX_SAFE_INTEGER);
+      }
+      return left.avgOutlook12m - right.avgOutlook12m;
+    });
+  }, [analysisRepositoryRows, trainingRepositoryRows]);
 
   const packageRows = useMemo<PackageRollup[]>(() => {
     const buckets = new Map<string, DependencyRecord[]>();
@@ -332,16 +401,16 @@ export function RepositoryRadar() {
 
   return (
     <div className="space-y-6">
-      <Card className="space-y-5 overflow-hidden border-line bg-[linear-gradient(135deg,#081120_0%,#12314a_58%,#164a55_100%)] text-white">
+      <Card className="space-y-5 overflow-hidden border-line bg-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-300">Repository radar</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-white">Rank OSS projects, packages, and dependency signals against the captured base.</h1>
-            <p className="max-w-3xl text-sm text-slate-200">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Repository radar</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground lg:text-5xl">Rank OSS projects, packages, and dependency signals against the captured base.</h1>
+            <p className="max-w-3xl text-sm leading-6 text-muted">
               Search once, choose the slice you care about, and compare a newly scored repository with the training-base context nearby.
             </p>
           </div>
-          <div className="rounded-[1.35rem] border border-white/10 bg-white/10 px-4 py-3 text-sm text-slate-200 backdrop-blur">
+          <div className="rounded-lg border border-line bg-foreground px-4 py-3 text-sm text-background">
             {repositoryRows.length} repos / {packageRows.length} packages / {filteredDependencyRows.length} dependency rows in the current filter
           </div>
         </div>
@@ -352,7 +421,7 @@ export function RepositoryRadar() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search repo, package, or ecosystem"
-              className="border-white/10 bg-white text-slate-950 placeholder:text-slate-500"
+              className="bg-panel"
             />
             <div className="flex flex-wrap gap-2">
               {(["repositories", "packages", "dependencies"] as const).map((view) => (
@@ -360,10 +429,10 @@ export function RepositoryRadar() {
                   key={view}
                   type="button"
                   onClick={() => setActiveView(view)}
-                  className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                  className={`rounded-md border px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
                     activeView === view
-                      ? "border-white/30 bg-white/15 text-white"
-                      : "border-white/10 bg-transparent text-slate-200 hover:border-white/20 hover:bg-white/10"
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-line bg-panelAlt text-muted hover:border-accent/30 hover:text-foreground"
                   }`}
                 >
                   {view}
@@ -377,10 +446,10 @@ export function RepositoryRadar() {
                 key={option}
                 type="button"
                 onClick={() => setTimeframeDays(option)}
-                className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                className={`rounded-md border px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${
                   timeframeDays === option
-                    ? "border-white/30 bg-white/15 text-white"
-                    : "border-white/10 bg-transparent text-slate-200 hover:border-white/20 hover:bg-white/10"
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-line bg-panelAlt text-muted hover:border-accent/30 hover:text-foreground"
                 }`}
               >
                 {option}d window
@@ -394,12 +463,12 @@ export function RepositoryRadar() {
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Tracked repos</p>
           <p className="text-4xl font-semibold tracking-tight text-foreground">{repositoryRows.length}</p>
-          <p className="text-sm text-muted">Mapped source repositories across completed analyses</p>
+          <p className="text-sm text-muted">Mapped source repositories from live analyses and the real training base</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Tracked packages</p>
-          <p className="text-4xl font-semibold tracking-tight text-foreground">{packageRows.length}</p>
-          <p className="text-sm text-muted">Distinct package rows in the current captured base</p>
+          <p className="text-4xl font-semibold tracking-tight text-foreground">{dataset?.uniquePackages || packageRows.length}</p>
+          <p className="text-sm text-muted">Distinct package rows available to the training and analysis surfaces</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Inactive in {timeframeDays}d</p>
@@ -409,7 +478,7 @@ export function RepositoryRadar() {
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Training snapshots</p>
           <p className="text-4xl font-semibold tracking-tight text-foreground">{dataset?.totalSnapshots ?? 0}</p>
-          <p className="text-sm text-muted">{dataset?.lastUpdatedAt ? `Updated ${formatDate(dataset.lastUpdatedAt)}` : "Waiting for completed analyses."}</p>
+          <p className="text-sm text-muted">{dataset?.lastUpdatedAt ? `Updated ${formatDate(dataset.lastUpdatedAt)}` : "Waiting for the real historical dataset."}</p>
         </Card>
       </section>
 
@@ -450,16 +519,18 @@ export function RepositoryRadar() {
                 </thead>
                 <tbody>
                   {sortedRepositories.map((repository) => {
-                    const ageDays = daysSince(repository.lastPushAt);
+                    const ageDays = repositoryAgeDays(repository);
                     const activityStatus = repositoryActivityStatus(repository, timeframeDays);
+                    const isTrainingBase = repository.source === "training";
 
                     return (
                       <tr key={repository.key} className="border-b border-line/70 align-top">
                         <td className="py-4 pr-4">
                           <p className="font-semibold text-foreground">{repository.label}</p>
                           <p className="mt-1 text-xs text-muted">
-                            {repository.scorecardScore ? `Scorecard ${repository.scorecardScore.toFixed(1)} / ` : ""}
-                            Security {formatRiskScore(repository.avgSecurity)}
+                            {isTrainingBase
+                              ? `Training base #${repository.trainingRank ?? "-"} / ${repository.snapshotCount ?? 0} snapshots`
+                              : `${repository.scorecardScore ? `Scorecard ${repository.scorecardScore.toFixed(1)} / ` : ""}Security ${formatRiskScore(repository.avgSecurity)}`}
                           </p>
                         </td>
                         <td className="py-4 pr-4">
@@ -468,12 +539,20 @@ export function RepositoryRadar() {
                           </Badge>
                           <p className="mt-2 text-xs text-muted">{repository.archived ? "Archived" : ageDays !== null ? `${ageDays} days since push` : "No push date from enrichment"}</p>
                         </td>
-                        <td className="py-4 pr-4 font-semibold text-foreground">{formatOutlookScore(repository.avgOutlook12m)}</td>
-                        <td className="py-4 pr-4 font-semibold text-foreground">{formatRiskScore(repository.avgRisk)}</td>
+                        <td className="py-4 pr-4 font-semibold text-foreground">
+                          {isTrainingBase ? `${Math.round(repository.avgOutlook12m)}% historical active` : formatOutlookScore(repository.avgOutlook12m)}
+                        </td>
+                        <td className="py-4 pr-4 font-semibold text-foreground">
+                          {isTrainingBase ? `${Math.round((repository.inactiveRate ?? 0) * 100)}% inactive labels` : formatRiskScore(repository.avgRisk)}
+                        </td>
                         <td className="py-4 pr-4 text-foreground">{formatConfidence(repository.avgConfidence)}</td>
                         <td className="py-4 pr-4 text-muted">
                           <p>{repository.packageCount} packages</p>
-                          <p className="mt-1 text-xs">{repository.analysisCount} analyses / {repository.recentContributors90d ?? 0} recent contributors</p>
+                          <p className="mt-1 text-xs">
+                            {isTrainingBase
+                              ? `${repository.labeledSnapshotCount ?? 0} labeled / ${repository.recentContributors90d ?? 0} recent contributors`
+                              : `${repository.analysisCount} analyses / ${repository.recentContributors90d ?? 0} recent contributors`}
+                          </p>
                         </td>
                       </tr>
                     );
@@ -566,7 +645,7 @@ export function RepositoryRadar() {
             </>
           ) : null}
 
-          {activeView === "repositories" && !filteredRepositories.length ? <p className="text-sm text-muted">No mapped repositories match the current view.</p> : null}
+          {activeView === "repositories" && !filteredRepositories.length ? <p className="text-sm text-muted">No repositories match the current view. Add the historical snapshot export to the API training dataset or run a repository analysis.</p> : null}
           {activeView === "packages" && !filteredPackages.length ? <p className="text-sm text-muted">No package rows match the current view.</p> : null}
           {activeView === "dependencies" && !filteredDependencyRows.length ? <p className="text-sm text-muted">No dependency rows match the current search.</p> : null}
         </Card>
@@ -594,7 +673,7 @@ export function RepositoryRadar() {
             <p className="text-sm text-muted">
               {dataset?.autoCaptureEnabled === false
                 ? "Training auto-capture is disabled for this API instance."
-                : "Completed analyses are converted into snapshot rows automatically, then new repository searches are scored with the same OSS signals."}
+                : "The historical snapshot export is the main training base; completed live analyses can add newer rows without replacing it."}
             </p>
           </Card>
 
@@ -623,7 +702,7 @@ export function RepositoryRadar() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted">No training repositories have been captured yet.</p>
+              <p className="text-sm text-muted">No real training repositories are available yet. Seed the API training dataset with the generated historical snapshot export.</p>
             )}
           </Card>
 

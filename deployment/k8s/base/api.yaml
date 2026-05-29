@@ -83,6 +83,14 @@ spec:
               value: /app/tmp/training/snapshots.json
             - name: TRAINING_RUNS_DIR
               value: /app/tmp/training/runs
+            - name: TRAINING_SEED_DATASET_PATH
+              value: /app/seed/training/snapshots.json
+            - name: TRAINING_SEED_RUNS_DIR
+              value: /app/seed/training/runs
+            - name: TRAINING_SEED_LATEST_RUN_PATH
+              value: /app/seed/training/latest-run.json
+            - name: TRAINING_SEED_MERGE_EXISTING
+              value: "true"
           readinessProbe:
             httpGet:
               path: /ready

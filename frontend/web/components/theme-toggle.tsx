@@ -37,12 +37,11 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={handleToggle}
-      className="inline-flex h-11 items-center gap-2 rounded-full border border-line bg-panel/90 px-4 text-sm font-medium text-foreground transition hover:border-accent/60 hover:bg-accent/10"
+      className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-line bg-panel text-foreground transition hover:border-accent/60 hover:bg-accent/10"
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
       {isDark ? <SunMedium className="h-4 w-4" /> : <MoonStar className="h-4 w-4" />}
-      <span>{isDark ? "Light" : "Dark"}</span>
     </button>
   );
 }

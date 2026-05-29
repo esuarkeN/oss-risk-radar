@@ -46,6 +46,18 @@ class TrainingRunResult:
     note: str
 
 
+SUPPORTED_ALGORITHMS = {"logistic-regression-baseline", "logistic_regression", "logistic-regression"}
+
+
+def _validate_algorithm(algorithm: str) -> None:
+    if algorithm not in SUPPORTED_ALGORITHMS:
+        raise ValueError(
+            "unsupported model_name: "
+            f"{algorithm}. Current runtime training supports logistic-regression-baseline only; "
+            "XGBoost, neural-network, and ensemble scoring are planned thesis model tracks."
+        )
+
+
 def _load_snapshots(config: TrainingRunConfig) -> list[TrainingSnapshotInput]:
     if config.snapshots:
         return [
@@ -71,6 +83,7 @@ def _assert_disjoint_splits(split: DatasetSplit) -> None:
 
 
 def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
+    _validate_algorithm(config.algorithm)
     snapshots = _load_snapshots(config)
     dataset = build_dataset(snapshots)
     summary = summarize_dataset(dataset)

@@ -365,8 +365,10 @@ func (s *Service) processNextJob(ctx context.Context) {
 		s.logger.Error("failed to persist completed analysis", "analysis_id", result.ID, "job_id", job.ID, "error", err)
 		return
 	}
-	if err := s.trainingDataset.UpsertAnalysisSnapshots(result); err != nil {
-		s.logger.Warn("failed to refresh training dataset", "analysis_id", result.ID, "dataset_path", s.trainingDataset.path, "error", err)
+	if result.Submission.Kind != SubmissionDemo {
+		if err := s.trainingDataset.UpsertAnalysisSnapshots(result); err != nil {
+			s.logger.Warn("failed to refresh training dataset", "analysis_id", result.ID, "dataset_path", s.trainingDataset.path, "error", err)
+		}
 	}
 }
 

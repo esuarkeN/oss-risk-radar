@@ -26,14 +26,14 @@ const config: Config = {
         ink: "hsl(var(--foreground) / <alpha-value>)"
       },
       boxShadow: {
-        soft: "0 18px 50px rgba(5, 15, 25, 0.12)",
-        panel: "0 18px 50px rgba(5, 15, 25, 0.18)"
+        soft: "0 18px 42px -34px rgba(0, 0, 0, 0.55)",
+        panel: "0 24px 54px -38px rgba(0, 0, 0, 0.62)"
       },
       backgroundImage: {
-        mesh: "radial-gradient(circle at top left, rgba(54, 110, 255, 0.18), transparent 35%), radial-gradient(circle at top right, rgba(18, 214, 135, 0.12), transparent 30%), linear-gradient(180deg, rgba(255,255,255,0.96), rgba(244,248,252,0.98))"
+        mesh: "linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--panel-alt)) 100%)"
       },
       fontFamily: {
-        sans: ["Space Grotesk", "Segoe UI", "sans-serif"],
+        sans: ["Inter", "Space Grotesk", "Segoe UI", "sans-serif"],
         mono: ["IBM Plex Mono", "Consolas", "monospace"]
       }
     }

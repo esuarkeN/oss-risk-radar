@@ -55,6 +55,14 @@ func main() {
 		RetryDelay:          cfg.RetryDelay,
 		Logger:              logger,
 	})
+	if err := service.BootstrapTrainingArtifacts(
+		cfg.TrainingSeedDatasetPath,
+		cfg.TrainingSeedRunsDir,
+		cfg.TrainingSeedLatestRunPath,
+		cfg.TrainingSeedMergeExisting,
+	); err != nil {
+		logger.Warn("training seed artifacts could not be loaded", "error", err)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

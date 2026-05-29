@@ -2,32 +2,32 @@
 @config "../tailwind.config.ts";
 
 :root {
-  --background: 205 44% 97%;
-  --foreground: 217 41% 10%;
+  --background: 0 0% 96%;
+  --foreground: 0 0% 8%;
   --card: 0 0% 100%;
   --panel: 0 0% 100%;
-  --panel-alt: 210 40% 96%;
-  --muted: 215 16% 47%;
-  --border: 210 30% 89%;
-  --accent: 211 92% 56%;
+  --panel-alt: 70 12% 93%;
+  --muted: 0 0% 39%;
+  --border: 0 0% 84%;
+  --accent: 145 67% 29%;
   --success: 160 84% 39%;
-  --warning: 38 92% 50%;
-  --danger: 0 84% 60%;
+  --warning: 34 93% 46%;
+  --danger: 352 76% 50%;
   color-scheme: light;
 }
 
 .dark {
-  --background: 223 47% 8%;
-  --foreground: 210 40% 96%;
-  --card: 223 31% 12%;
-  --panel: 223 31% 12%;
-  --panel-alt: 220 26% 17%;
-  --muted: 215 20% 72%;
-  --border: 217 20% 24%;
-  --accent: 199 95% 63%;
-  --success: 160 84% 44%;
-  --warning: 41 95% 58%;
-  --danger: 0 85% 67%;
+  --background: 60 4% 9%;
+  --foreground: 78 22% 94%;
+  --card: 60 5% 12%;
+  --panel: 60 5% 12%;
+  --panel-alt: 78 7% 17%;
+  --muted: 70 9% 70%;
+  --border: 70 5% 25%;
+  --accent: 79 100% 63%;
+  --success: 151 72% 52%;
+  --warning: 40 95% 57%;
+  --danger: 352 90% 67%;
   color-scheme: dark;
 }
 
@@ -42,20 +42,22 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: hsl(var(--background));
   background-image:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 24%),
-    radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 28%),
-    linear-gradient(180deg, rgba(250, 252, 255, 0.98), rgba(238, 244, 250, 0.98));
+    linear-gradient(hsl(var(--border) / 0.26) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / 0.22) 1px, transparent 1px),
+    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--panel-alt)) 100%);
+  background-attachment: fixed;
+  background-color: hsl(var(--background));
+  background-size: 44px 44px, 44px 44px, 100% 100%;
   color: hsl(var(--foreground));
   transition: background-color 220ms ease, color 220ms ease, background-image 220ms ease;
 }
 
 .dark body {
   background-image:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 24%),
-    radial-gradient(circle at top right, rgba(45, 212, 191, 0.14), transparent 28%),
-    linear-gradient(180deg, rgba(9, 13, 24, 0.98), rgba(15, 23, 42, 0.98));
+    linear-gradient(hsl(var(--border) / 0.28) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / 0.22) 1px, transparent 1px),
+    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(78 7% 12%) 100%);
 }
 
 button,
@@ -71,7 +73,7 @@ a {
 }
 
 ::selection {
-  background: rgba(37, 99, 235, 0.18);
+  background: hsl(var(--accent) / 0.22);
 }
 
 .dark .text-slate-950,
