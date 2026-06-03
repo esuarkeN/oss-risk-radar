@@ -8,13 +8,14 @@
 \usepackage{setspace}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{amsmath}
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage{xcolor}
 \usepackage{listings}
 \usepackage{caption}
 \usepackage{subcaption}
-\usepackage{acronym}
+\usepackage[nohyperlinks]{acronym}
 \usepackage[
   backend=biber,
   style=ieee,
@@ -46,5 +47,13 @@
   numberstyle=\tiny,
   tabsize=2,
   showstringspaces=false
+}
+\lstdefinelanguage{JavaScript}{
+  keywords={break,const,continue,else,for,function,if,import,let,return,var,while},
+  sensitive=true,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]",
+  morestring=[b]'
 }
 \lstset{style=thesiscode}

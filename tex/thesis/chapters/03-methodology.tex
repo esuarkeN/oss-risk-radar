@@ -1,5 +1,262 @@
 \chapter{Methodology}
+\label{chap:methodology}
 
-Describe the selected data sources, risk dimensions, scoring approach, and
-evaluation method. Keep assumptions explicit so the later evaluation can check
-whether they hold.
+This chapter describes the methodological design used to answer the research question. The thesis follows a Design Science Research-oriented approach, because the work develops and evaluates an artifact for a practical software engineering problem: an inactivity-risk scoring workflow for open-source dependencies \cite{hevner2004design,peffers2007design}. The artifact is implemented in OSS Risk Radar and combines dependency identification, repository mapping, historical data construction, feature engineering, supervised model training, and risk-oriented output for dependency triage.
+
+The empirical part of the method is based on historical supervised learning. For each repository, the dataset builder creates observation snapshots at defined points in time. Each snapshot contains features derived only from information available at or before the observation date \(t\). The label is derived from the following 12-month period \((t, t + 12\text{ months}]\). This design reflects the intended use case of predicting whether a repository is likely to become inactive after the observation date, rather than explaining inactivity after it has already happened.
+
+\section{Research Design}
+\label{sec:method-research-design}
+
+The research design consists of three connected parts. First, a historical dataset is constructed from real open-source repositories and public event data. Second, a supervised classification model is trained to predict 12-month inactivity. Third, the trained model is evaluated and interpreted as a decision-support signal for dependency triage.
+
+The artifact is not designed as a vulnerability scanner or as a definitive trust score. Instead, it provides a risk-oriented ranking based on observable maintenance and activity signals. This distinction is important because inactivity is only one aspect of dependency risk. A repository can be inactive without being insecure, and a repository can be active while still having security weaknesses. Therefore, the model output is interpreted as an operational triage signal, not as an automated replacement for expert judgement.
+
+\section{Definitions and Prediction Target}
+\label{sec:method-definitions}
+
+The central unit of analysis is a GitHub repository that can be associated with an open-source package or dependency candidate. A snapshot is defined by a repository, an optional package identity, and an observation date \(t\). The prediction task is binary classification:
+
+\begin{quote}
+Given the observable repository and package state at time \(t\), predict whether the repository becomes inactive within the following 12 months.
+\end{quote}
+
+The implemented training label is named \texttt{label\_inactive\_12m}. Internally, the dataset builder first computes a maintenance variable named \texttt{maintained\_12m}. The inactivity label is then derived as the inverse of this maintenance variable. If the future window is incomplete, the row remains unlabeled and is not used for supervised model training.
+
+Formally, the future label window is defined as:
+
+\[
+(t, t + 12\text{ months}]
+\]
+
+The current implementation treats a repository as maintained within the 12-month horizon if it is not archived or deleted by \(t + 12\text{ months}\) and if at least two future-window activity checks are fulfilled. These checks are:
+
+\begin{enumerate}
+    \item human commits occur in at least three distinct months,
+    \item at least two contributors are active,
+    \item at least one release or package version publication occurs,
+    \item at least two pull requests are merged.
+\end{enumerate}
+
+This definition deliberately avoids treating a single event as sufficient evidence of maintenance. At the same time, it remains operationally measurable from historical public data. The merged-pull-request condition is used as a practical proxy for broader maintainer interaction, because GH Archive data does not reliably distinguish all maintainer responses without additional issue-comment attribution logic.
+
+\section{Data Sources}
+\label{sec:method-data-sources}
+
+The dataset construction uses public and reproducible data sources wherever possible. GH Archive is used as the primary source for historical GitHub event data, because it provides public GitHub event streams as hourly archives \cite{gharchive}. The dataset builder parses these event files into normalized repository histories, including commits, issues, pull requests, releases, stars, and forks.
+
+The package-to-repository mapping is based on explicit seed fields where available. If the seed does not already contain a repository identity, the builder can resolve repository mappings through deps.dev and package registry metadata. deps.dev provides open-source package and dependency metadata across supported ecosystems \cite{depsdevApi}. GitHub metadata is used only for stable repository fields such as repository creation time, default branch, and fork state. Current GitHub totals for historical activity are avoided because they would leak present-day information into older observation snapshots.
+
+The repository also contains a deterministic real-project seed file:
+
+\begin{verbatim}
+scripts/ml/real-project-foundation-seed.csv
+\end{verbatim}
+
+This seed contains active, dormant, and retired project candidates. These categories are used only for candidate selection and are not used as labels. The final labels are derived exclusively from the historical future window.
+
+\section{Dataset Construction Workflow}
+\label{sec:method-dataset-construction}
+
+The historical dataset builder creates an inspectable dataset through a sequence of intermediate steps. The implemented workflow is summarized in Table~\ref{tab:method-dataset-flow}.
+
+\begin{table}[htbp]
+\centering
+\caption{Historical dataset construction workflow}
+\label{tab:method-dataset-flow}
+\begin{tabular}{p{0.08\textwidth} p{0.82\textwidth}}
+\hline
+\textbf{Step} & \textbf{Description} \\
+\hline
+1 & Load package or repository candidates from a seed file. \\
+2 & Stratify and sample candidates by ecosystem and popularity information where available. \\
+3 & Resolve repository mappings from explicit seed fields, deps.dev, or package registry metadata. \\
+4 & Enrich stable repository metadata through GitHub. \\
+5 & Parse GH Archive event files into normalized repository histories. \\
+6 & Build observation snapshots for the configured observation period. \\
+7 & Compute feature rows using only data available at or before the observation date \(t\). \\
+8 & Compute 12-month labels using only the future window \((t, t + 12\text{ months}]\). \\
+9 & Export the final training snapshot file for the existing model trainer. \\
+\hline
+\end{tabular}
+\end{table}
+
+The builder writes intermediate files under the configured output directory. These files make the dataset construction process auditable and allow the generated dataset to be inspected before training. The intermediate outputs include:
+
+\begin{itemize}
+    \item \texttt{repositories.jsonl}
+    \item \texttt{packages.jsonl}
+    \item \texttt{package\_repository\_links.jsonl}
+    \item \texttt{observation\_snapshots.jsonl}
+    \item \texttt{snapshot\_features.jsonl}
+    \item \texttt{snapshot\_labels.jsonl}
+    \item \texttt{training\_snapshots.json}
+\end{itemize}
+
+The final export follows the existing training snapshot contract used by OSS Risk Radar. This allows the historical dataset builder to feed the current training pipeline without requiring a separate model-training interface.
+
+\section{Observation Window and Historical Coverage}
+\label{sec:method-observation-window}
+
+The default observation period used by the project is:
+
+\begin{verbatim}
+observation_start = 2023-01-01
+observation_end   = 2024-01-01
+\end{verbatim}
+
+The label horizon is 12 months. The feature history can look back up to 730 days. Therefore, a complete GH Archive source range for the default setup should cover approximately:
+
+\begin{verbatim}
+2021-01-01 through 2025-01-01
+\end{verbatim}
+
+The first part of this range supports feature construction before the earliest observation date. The final part supports label construction after the latest observation date. If the GH Archive coverage does not include the full future label window for a snapshot, the builder marks the label as incomplete and does not use that row as a labeled training example.
+
+For local development, a smaller filtered GH Archive subset can be used to test the pipeline. However, sparse random hours are not sufficient for thesis-grade labels, because the absence of events would no longer be meaningful. For supervised training claims, all relevant hours in the selected historical period should be processed, at least for the repositories included in the seed set.
+
+\section{Feature Engineering}
+\label{sec:method-feature-engineering}
+
+The feature engineering step converts repository and package history before \(t\) into numeric variables. The implemented feature groups are shown in Table~\ref{tab:method-feature-groups}.
+
+\begin{table}[htbp]
+\centering
+\caption{Implemented historical feature groups}
+\label{tab:method-feature-groups}
+\begin{tabular}{p{0.25\textwidth} p{0.65\textwidth}}
+\hline
+\textbf{Feature group} & \textbf{Example features} \\
+\hline
+Commit activity &
+Commits in the last 30, 90, and 365 days; active commit months; days since last commit. \\
+Contributor activity &
+Contributors in the last 90 and 365 days; new contributors; contributor concentration. \\
+Issue activity &
+Opened and closed issues; issue closure ratio; issue backlog growth; stale open issues. \\
+Pull request activity &
+Opened, merged, and closed-unmerged pull requests; pull request merge ratio; stale open pull requests. \\
+Release activity &
+Releases in the last 365 days; days since last release; versions published in the last 365 days. \\
+Age and popularity proxies &
+Package age; repository age; stars and forks observed in the available GH Archive history. \\
+Risk proxy features &
+Activity drop; contributor drop; release gap risk; concentration risk score. \\
+Repository state &
+Archive status at observation time. \\
+\hline
+\end{tabular}
+\end{table}
+
+Some variables are practical proxies rather than complete measurements. For example, stars and forks are reconstructed from the provided GH Archive window and therefore represent lower-bound proxies if the archive window starts after the repository was created. Similarly, issue backlog growth and pull-request response features are reconstructed from available event data and should not be interpreted as canonical CHAOSS metrics. This limitation is documented because repository health metrics can be context-dependent and should not be interpreted as universal sustainability indicators \cite{yehudi2023contextfree}.
+
+\section{Leakage Prevention}
+\label{sec:method-leakage-prevention}
+
+Temporal leakage is a central threat in historical prediction tasks. The dataset builder applies the following rules to reduce leakage:
+
+\begin{enumerate}
+    \item Observation-time features are derived only from timestamps \( \leq t \).
+    \item Labels are derived only from timestamps in \( (t, t + 12\text{ months}] \).
+    \item Rows with incomplete future-window coverage remain unlabeled.
+    \item Live GitHub enrichment is limited to stable metadata such as creation time, default branch, and fork state.
+    \item Historical activity totals are not taken from current GitHub API totals.
+\end{enumerate}
+
+These rules are necessary because the model is intended to simulate a real prediction setting. At observation time \(t\), future activity is unknown. Therefore, any information from after \(t\) must be excluded from feature construction and used only for label derivation.
+
+\section{Model Training}
+\label{sec:method-model-training}
+
+The current runtime training pipeline supports a logistic-regression baseline model. Logistic regression is suitable as an initial supervised baseline because it produces probability-like outputs and is more interpretable than many complex non-linear models \cite{james2021islr}. More complex tabular models, such as gradient boosting or ensemble methods, are treated as possible extensions unless they are implemented and evaluated before the final thesis submission.
+
+Training uses a time-aware split with the default ratio:
+
+\[
+75\% \text{ training}, \quad 15\% \text{ validation}, \quad 10\% \text{ test}
+\]
+
+Rows are ordered by observation date before splitting. The model is fitted on the earliest training slice. The validation slice is used for calibration and threshold selection. The final test slice is held out for reporting evaluation results. This design avoids a random split that could mix earlier and later observation periods in a way that does not match the intended forecasting use case.
+
+The implemented pipeline fits the logistic-regression model, predicts validation probabilities, fits a histogram-based calibrator on validation predictions, selects a decision threshold from the validation data, and then evaluates calibrated predictions on the test data. Calibration is relevant because the output should support risk triage as a probability-like score, not only as a binary classification result \cite{niculescu2005probabilities}.
+
+\section{Evaluation Plan}
+\label{sec:method-evaluation-plan}
+
+The evaluation focuses on whether the model provides a useful inactivity-risk signal for dependency triage. The implemented training pipeline reports:
+
+\begin{itemize}
+    \item sample count,
+    \item positive label rate,
+    \item accuracy,
+    \item precision,
+    \item recall,
+    \item F1 score,
+    \item Brier score,
+    \item log loss,
+    \item ROC-AUC,
+    \item model quality score.
+\end{itemize}
+
+ROC-AUC measures the model's ability to rank inactive repositories above maintained repositories. Precision, recall, and F1 score evaluate the binary decisions after threshold selection. The Brier score evaluates the quality of predicted probabilities and is therefore relevant for calibrated risk scoring \cite{niculescu2005probabilities}. If the inactive class is strongly imbalanced, precision-recall analysis should additionally be reported, because precision-recall curves can be more informative than ROC curves for imbalanced binary classification problems \cite{saito2015precision}.
+
+The model is compared against simple baseline reasoning during interpretation. In particular, features such as days since last commit or days since last release are expected to be strong signals because the label itself is related to future activity. The machine-learning model is useful only if it provides value beyond such simple recency-based indicators.
+
+\section{Reproducibility}
+\label{sec:method-reproducibility}
+
+The dataset builder and training pipeline are executed through npm scripts from the repository root. For the deterministic real-project seed, the dataset can be built with:
+
+\begin{verbatim}
+npm run ml:dataset:real-projects -- `
+  --gharchive-source .\tmp\gharchive `
+  --output-dir .\tmp\training\oss-maintenance `
+  --training-output-path .\tmp\training\snapshots.json
+\end{verbatim}
+
+The combined build-and-train workflow can be executed with:
+
+\begin{verbatim}
+npm run ml:bootstrap:real-projects -- `
+  --gharchive-source .\tmp\gharchive `
+  --output-dir .\tmp\training\oss-maintenance `
+  --training-output-path .\tmp\training\snapshots.json
+\end{verbatim}
+
+For the final thesis evaluation, the executed command, GH Archive coverage period, seed file version, generated intermediate files, number of repositories, number of snapshots, number of labeled rows, inactive label rate, and model artifact timestamp should be documented.
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset and training run documentation template}
+\label{tab:method-run-documentation}
+\begin{tabular}{p{0.35\textwidth} p{0.55\textwidth}}
+\hline
+\textbf{Item} & \textbf{Value} \\
+\hline
+Seed file & \texttt{scripts/ml/real-project-foundation-seed.csv} \\
+GH Archive source range & TODO: add final range \\
+Observation start & TODO: add final value \\
+Observation end & TODO: add final value \\
+Label horizon & 12 months \\
+Feature lookback & TODO: add final value \\
+Number of repositories & TODO: add after final run \\
+Number of snapshots & TODO: add after final run \\
+Number of labeled snapshots & TODO: add after final run \\
+Inactive label rate & TODO: add after final run \\
+Training command & TODO: add final command \\
+Model artifact & TODO: add path or timestamp \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Methodological Limitations}
+\label{sec:method-limitations}
+
+The method has several limitations. First, it depends on the completeness of the provided GH Archive files. If relevant event hours are missing, repository histories may be incomplete. Second, public GitHub activity does not capture all possible maintenance activity. Some projects may move development to other platforms, publish releases outside GitHub, or maintain stable software with little visible activity. Third, package-to-repository mappings can be ambiguous, especially when packages move repositories or when metadata is incomplete. Fourth, the inactivity label is a proxy for elevated maintenance risk and not a definitive statement that a project is abandoned or insecure.
+
+These limitations are addressed through conservative interpretation. The model output is not treated as proof that a dependency is unsafe. Instead, it is used as a prioritization signal that can support manual dependency review and monitoring.
+
+\section{Summary}
+\label{sec:method-summary}
+
+This chapter described the methodological design of the thesis. The approach constructs a historical supervised dataset from real repositories, derives observation-time features without future leakage, labels snapshots using a 12-month future window, and trains a logistic-regression baseline with time-aware validation and testing. The next chapter describes the implementation of OSS Risk Radar and explains how the dataset builder, scoring service, backend, and frontend are integrated into the overall artifact.
