@@ -124,15 +124,19 @@ class GHArchiveAdapter:
         if event_type == "IssuesEvent":
             action = str(body.get("action", ""))
             issue = body.get("issue", {}) if isinstance(body.get("issue"), dict) else {}
-            issue_id = str(issue.get("id") or issue.get("number") or "")
+            issue_id = str(issue.get("number") or issue.get("id") or "")
             if not issue_id:
                 return None
+            issue_author = None
+            if isinstance(issue.get("user"), dict):
+                issue_author = issue["user"].get("login")
             if action == "opened":
                 return NormalizedEvent(
                     repo_full_name=repo_name,
                     kind="issue_opened",
                     occurred_at=created_at,
                     actor=actor_login,
+                    item_author=issue_author,
                     item_id=issue_id,
                     item_created_at=parse_datetime(issue.get("created_at")) or created_at,
                 )
@@ -142,7 +146,9 @@ class GHArchiveAdapter:
                     kind="issue_closed",
                     occurred_at=created_at,
                     actor=actor_login,
+                    item_author=issue_author,
                     item_id=issue_id,
+                    item_created_at=parse_datetime(issue.get("created_at")),
                     item_closed_at=parse_datetime(issue.get("closed_at")) or created_at,
                 )
             return None
@@ -150,7 +156,7 @@ class GHArchiveAdapter:
         if event_type == "PullRequestEvent":
             action = str(body.get("action", ""))
             pr = body.get("pull_request", {}) if isinstance(body.get("pull_request"), dict) else {}
-            pr_id = str(pr.get("id") or pr.get("number") or body.get("number") or "")
+            pr_id = str(pr.get("number") or body.get("number") or pr.get("id") or "")
             if not pr_id:
                 return None
             created = parse_datetime(pr.get("created_at")) or created_at
@@ -160,12 +166,82 @@ class GHArchiveAdapter:
             if isinstance(pr.get("user"), dict):
                 author = pr["user"].get("login")
             if action == "opened":
-                return NormalizedEvent(repo_full_name=repo_name, kind="pr_opened", occurred_at=created_at, actor=actor_login, item_id=pr_id, item_created_at=created, count=1)
+                return NormalizedEvent(repo_full_name=repo_name, kind="pr_opened", occurred_at=created_at, actor=actor_login, item_author=author, item_id=pr_id, item_created_at=created, count=1)
             if action == "closed" and merged is not None:
-                return NormalizedEvent(repo_full_name=repo_name, kind="pr_merged", occurred_at=created_at, actor=actor_login, item_id=pr_id, item_created_at=created, item_closed_at=closed or created_at, item_merged_at=merged)
+                return NormalizedEvent(repo_full_name=repo_name, kind="pr_merged", occurred_at=created_at, actor=actor_login, item_author=author, item_id=pr_id, item_created_at=created, item_closed_at=closed or created_at, item_merged_at=merged)
             if action == "closed":
-                return NormalizedEvent(repo_full_name=repo_name, kind="pr_closed_unmerged", occurred_at=created_at, actor=actor_login, item_id=pr_id, item_created_at=created, item_closed_at=closed or created_at)
+                return NormalizedEvent(repo_full_name=repo_name, kind="pr_closed_unmerged", occurred_at=created_at, actor=actor_login, item_author=author, item_id=pr_id, item_created_at=created, item_closed_at=closed or created_at)
             return None
+
+        if event_type == "IssueCommentEvent":
+            action = str(body.get("action", ""))
+            if action and action != "created":
+                return None
+            issue = body.get("issue", {}) if isinstance(body.get("issue"), dict) else {}
+            comment = body.get("comment", {}) if isinstance(body.get("comment"), dict) else {}
+            issue_id = str(issue.get("number") or issue.get("id") or "")
+            if not issue_id:
+                return None
+            issue_author = None
+            if isinstance(issue.get("user"), dict):
+                issue_author = issue["user"].get("login")
+            occurred_at = parse_datetime(comment.get("created_at")) or created_at
+            kind = "pr_response" if isinstance(issue.get("pull_request"), dict) else "issue_response"
+            return NormalizedEvent(
+                repo_full_name=repo_name,
+                kind=kind,
+                occurred_at=occurred_at,
+                actor=actor_login,
+                item_author=issue_author,
+                item_id=issue_id,
+                item_created_at=parse_datetime(issue.get("created_at")),
+            )
+
+        if event_type == "PullRequestReviewEvent":
+            action = str(body.get("action", ""))
+            if action and action not in {"submitted", "edited"}:
+                return None
+            pr = body.get("pull_request", {}) if isinstance(body.get("pull_request"), dict) else {}
+            review = body.get("review", {}) if isinstance(body.get("review"), dict) else {}
+            pr_id = str(pr.get("number") or body.get("number") or pr.get("id") or "")
+            if not pr_id:
+                return None
+            author = None
+            if isinstance(pr.get("user"), dict):
+                author = pr["user"].get("login")
+            occurred_at = parse_datetime(review.get("submitted_at")) or created_at
+            return NormalizedEvent(
+                repo_full_name=repo_name,
+                kind="pr_response",
+                occurred_at=occurred_at,
+                actor=actor_login,
+                item_author=author,
+                item_id=pr_id,
+                item_created_at=parse_datetime(pr.get("created_at")),
+            )
+
+        if event_type == "PullRequestReviewCommentEvent":
+            action = str(body.get("action", ""))
+            if action and action != "created":
+                return None
+            pr = body.get("pull_request", {}) if isinstance(body.get("pull_request"), dict) else {}
+            comment = body.get("comment", {}) if isinstance(body.get("comment"), dict) else {}
+            pr_id = str(pr.get("number") or body.get("number") or pr.get("id") or "")
+            if not pr_id:
+                return None
+            author = None
+            if isinstance(pr.get("user"), dict):
+                author = pr["user"].get("login")
+            occurred_at = parse_datetime(comment.get("created_at")) or created_at
+            return NormalizedEvent(
+                repo_full_name=repo_name,
+                kind="pr_response",
+                occurred_at=occurred_at,
+                actor=actor_login,
+                item_author=author,
+                item_id=pr_id,
+                item_created_at=parse_datetime(pr.get("created_at")),
+            )
 
         if event_type == "ReleaseEvent":
             release = body.get("release", {}) if isinstance(body.get("release"), dict) else {}
@@ -193,34 +269,64 @@ class GHArchiveAdapter:
             history.commits.append(CommitEvent(occurred_at=event.occurred_at, actor=event.actor, count=event.count))
             return
         if event.kind == "issue_opened" and event.item_id:
-            history.issues[event.item_id] = IssueState(issue_id=event.item_id, created_at=event.item_created_at or event.occurred_at)
+            existing = history.issues.get(event.item_id)
+            history.issues[event.item_id] = IssueState(
+                issue_id=event.item_id,
+                created_at=event.item_created_at or event.occurred_at,
+                author=event.item_author if event.item_author else (existing.author if existing else event.actor),
+                closed_at=existing.closed_at if existing else None,
+                first_response_at=existing.first_response_at if existing else None,
+            )
             return
         if event.kind == "issue_closed" and event.item_id:
             issue = history.issues.get(event.item_id)
             if issue is None:
-                issue = IssueState(issue_id=event.item_id, created_at=event.item_created_at or event.occurred_at)
+                issue = IssueState(issue_id=event.item_id, created_at=event.item_created_at or event.occurred_at, author=event.item_author)
                 history.issues[event.item_id] = issue
+            elif event.item_author and issue.author is None:
+                issue.author = event.item_author
             issue.closed_at = event.item_closed_at or event.occurred_at
+            return
+        if event.kind == "issue_response" and event.item_id:
+            issue = history.issues.get(event.item_id)
+            if issue is None:
+                issue = IssueState(issue_id=event.item_id, created_at=event.item_created_at or event.occurred_at, author=event.item_author)
+                history.issues[event.item_id] = issue
+            elif event.item_author and issue.author is None:
+                issue.author = event.item_author
+            self._record_issue_response(issue, event)
             return
         if event.kind == "pr_opened" and event.item_id:
             existing = history.pull_requests.get(event.item_id)
-            author = event.actor
+            author = event.item_author or event.actor
             history.pull_requests[event.item_id] = PullRequestState(
                 pr_id=event.item_id,
                 created_at=event.item_created_at or event.occurred_at,
                 author=author if author else (existing.author if existing else None),
                 closed_at=existing.closed_at if existing else None,
                 merged_at=existing.merged_at if existing else None,
+                first_response_at=existing.first_response_at if existing else None,
             )
             return
         if event.kind in {"pr_merged", "pr_closed_unmerged"} and event.item_id:
             pr = history.pull_requests.get(event.item_id)
             if pr is None:
-                pr = PullRequestState(pr_id=event.item_id, created_at=event.item_created_at or event.occurred_at, author=event.actor)
+                pr = PullRequestState(pr_id=event.item_id, created_at=event.item_created_at or event.occurred_at, author=event.item_author or event.actor)
                 history.pull_requests[event.item_id] = pr
+            elif event.item_author and pr.author is None:
+                pr.author = event.item_author
             pr.closed_at = event.item_closed_at or event.occurred_at
             if event.kind == "pr_merged":
                 pr.merged_at = event.item_merged_at or pr.closed_at
+            return
+        if event.kind == "pr_response" and event.item_id:
+            pr = history.pull_requests.get(event.item_id)
+            if pr is None:
+                pr = PullRequestState(pr_id=event.item_id, created_at=event.item_created_at or event.occurred_at, author=event.item_author)
+                history.pull_requests[event.item_id] = pr
+            elif event.item_author and pr.author is None:
+                pr.author = event.item_author
+            self._record_pr_response(pr, event)
             return
         if event.kind == "release":
             history.releases.append(event.occurred_at)
@@ -230,3 +336,24 @@ class GHArchiveAdapter:
             return
         if event.kind == "fork":
             history.forks.append(event.occurred_at)
+
+    def _record_issue_response(self, issue: IssueState, event: NormalizedEvent) -> None:
+        if not self._is_external_response(issue.author, issue.created_at, event):
+            return
+        if issue.first_response_at is None or event.occurred_at < issue.first_response_at:
+            issue.first_response_at = event.occurred_at
+
+    def _record_pr_response(self, pr: PullRequestState, event: NormalizedEvent) -> None:
+        if not self._is_external_response(pr.author, pr.created_at, event):
+            return
+        if pr.first_response_at is None or event.occurred_at < pr.first_response_at:
+            pr.first_response_at = event.occurred_at
+
+    def _is_external_response(self, author: str | None, created_at: datetime, event: NormalizedEvent) -> bool:
+        if event.occurred_at <= created_at:
+            return False
+        if not is_human_actor(event.actor):
+            return False
+        if author and event.actor and author.strip().lower() == event.actor.strip().lower():
+            return False
+        return True

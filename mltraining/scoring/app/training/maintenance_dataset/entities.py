@@ -186,6 +186,7 @@ class NormalizedEvent:
     kind: str
     occurred_at: datetime
     actor: str | None = None
+    item_author: str | None = None
     count: int = 1
     item_id: str | None = None
     item_created_at: datetime | None = None
@@ -204,7 +205,9 @@ class CommitEvent:
 class IssueState:
     issue_id: str
     created_at: datetime
+    author: str | None = None
     closed_at: datetime | None = None
+    first_response_at: datetime | None = None
 
 
 @dataclass(slots=True)
@@ -214,6 +217,7 @@ class PullRequestState:
     author: str | None = None
     closed_at: datetime | None = None
     merged_at: datetime | None = None
+    first_response_at: datetime | None = None
 
 
 @dataclass(slots=True)

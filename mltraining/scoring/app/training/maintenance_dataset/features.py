@@ -273,10 +273,10 @@ def _popularity_tier_from_history(stars_total_at_obs: int, forks_total_at_obs: i
 def _pr_response_median_days(history: RepositoryHistory, start, end) -> float | None:
     samples = []
     for pr in history.pull_requests.values():
-        closed_at = pr.merged_at or pr.closed_at
-        if closed_at is None or not (start < closed_at <= end):
+        response_at = pr.first_response_at or pr.merged_at or pr.closed_at
+        if response_at is None or not (start < response_at <= end):
             continue
-        samples.append((closed_at - pr.created_at).total_seconds() / 86_400)
+        samples.append((response_at - pr.created_at).total_seconds() / 86_400)
     if not samples:
         return None
     return round(float(median(samples)), 6)

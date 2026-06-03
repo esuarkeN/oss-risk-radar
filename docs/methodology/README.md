@@ -35,3 +35,5 @@ The first release should ship explainable heuristics. A future model can be laye
 ## Historical dataset builder
 
 For the thesis dataset pipeline, see `docs/methodology/historical-dataset-builder.md`. It documents the new historical ingestion flow, intermediate tables, label definition, and leakage controls.
+
+For the operational GH Archive download and retraining workflow, see `docs/methodology/training-operations.md`.

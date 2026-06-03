@@ -84,3 +84,54 @@ def test_build_snapshot_features_calculates_chaoss_style_proxies() -> None:
     assert row.open_issues_total_at_obs == 2
     assert row.release_cadence_days is not None
     assert row.pr_response_median_days is not None
+
+
+def test_build_snapshot_features_prefers_first_pr_response_for_response_time() -> None:
+    observed_at = datetime(2024, 1, 1, tzinfo=UTC)
+    repository = RepositoryRecord(
+        repository_id="acme__project",
+        full_name="acme/project",
+        url="https://github.com/acme/project",
+        default_branch="main",
+        created_at=datetime(2022, 1, 1, tzinfo=UTC),
+    )
+    package = PackageRecord(
+        package_id="github:acme/project",
+        ecosystem="github",
+        package_name="acme/project",
+        selected_version="repository-snapshot",
+        repository_url=repository.url,
+        repository_full_name=repository.full_name,
+        popularity_tier="medium",
+        downloads_30d=None,
+        direct_dependents_count=None,
+        version_history=[],
+    )
+    history = RepositoryHistory(
+        repository_full_name=repository.full_name,
+        pull_requests={
+            "1": PullRequestState(
+                pr_id="1",
+                created_at=datetime(2023, 12, 1, tzinfo=UTC),
+                author="alice",
+                first_response_at=datetime(2023, 12, 2, tzinfo=UTC),
+                closed_at=datetime(2023, 12, 20, tzinfo=UTC),
+                merged_at=datetime(2023, 12, 20, tzinfo=UTC),
+            )
+        },
+        coverage_start=datetime(2023, 1, 1, tzinfo=UTC),
+    )
+    snapshot = ObservationSnapshot(
+        snapshot_id="acme__project:2024-01-01",
+        repository_id=repository.repository_id,
+        package_id=package.package_id,
+        ecosystem=package.ecosystem,
+        observed_at=observed_at,
+        feature_window_start=datetime(2023, 1, 1, tzinfo=UTC),
+        previous_window_start=datetime(2022, 1, 1, tzinfo=UTC),
+        label_window_end=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+
+    row = build_snapshot_features(snapshot, repository, package, history)
+
+    assert row.pr_response_median_days == 1.0

@@ -15,6 +15,8 @@ The builder lives in `mltraining/scoring/app/training/maintenance_dataset` and i
 
 The project intentionally does not ship a fake training corpus. For thesis-grade claims, build the dataset from real repositories and real historical observations, then train only from that exported snapshot file.
 
+For the GH Archive coverage plan, filtered downloader commands, and continuous retraining policy, see `docs/methodology/training-operations.md`.
+
 ## Data flow
 
 1. Load package or repository candidates from a CSV, JSON, or JSONL seed file.
