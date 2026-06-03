@@ -37,10 +37,17 @@ func (fakeRouterScorer) Score(_ context.Context, _ string, dependencies []analys
 
 func (fakeRouterScorer) Ready(context.Context) error { return nil }
 
-func (fakeRouterScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
+func (fakeRouterScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord, modelName string) (analysis.TrainingRunArtifact, error) {
+	if modelName == "" {
+		modelName = "xgboost-baseline"
+	}
+	algorithm := "xgboost"
+	if modelName == "logistic-regression-baseline" {
+		algorithm = "logistic_regression"
+	}
 	return analysis.TrainingRunArtifact{
 		Status:       "completed",
-		ModelName:    "logistic-regression-baseline",
+		ModelName:    modelName,
 		ModelVersion: "0.2.0",
 		TrainedAt:    time.Now().UTC().Format(time.RFC3339Nano),
 		DatasetSummary: &analysis.TrainingRunDatasetSummary{
@@ -51,11 +58,12 @@ func (fakeRouterScorer) TrainModel(_ context.Context, snapshots []analysis.Train
 		},
 		CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.2, EmpiricalRate: 0.1}},
 		ModelArtifact: &analysis.TrainingRunModelArtifact{
-			ModelName:      "logistic-regression-baseline",
+			ModelName:      modelName,
 			ModelVersion:   "0.2.0",
 			FeatureVersion: "feature-set-v1",
 			TrainedAt:      time.Now().UTC().Format(time.RFC3339Nano),
 			Threshold:      0.5,
+			Algorithm:      algorithm,
 			FeatureNames:   []string{"repository_archived"},
 			Coefficients:   []float64{0.7},
 			Intercept:      0,
@@ -63,6 +71,10 @@ func (fakeRouterScorer) TrainModel(_ context.Context, snapshots []analysis.Train
 				Means:  []float64{0},
 				Scales: []float64{1},
 			},
+			BoosterJSON:     "fixture",
+			TreeCount:       1,
+			MaxDepth:        2,
+			LearningRate:    0.08,
 			CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.2, EmpiricalRate: 0.1}},
 		},
 		Message: "fixture",
@@ -201,6 +213,71 @@ func TestCreateAnalysisEndpointReusesExistingRepositoryAnalysis(t *testing.T) {
 	}
 }
 
+func TestCreateAnalysisEndpointForceBypassesExistingRepositoryAnalysis(t *testing.T) {
+	ctx := context.Background()
+	store := storage.NewMemoryStore()
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion: "heuristic-v1",
+		Store:              store,
+		Scorer:             fakeRouterScorer{},
+		UploadDir:          t.TempDir(),
+	})
+
+	now := time.Now().UTC()
+	existing := analysis.AnalysisRecord{
+		ID:         "analysis_existing",
+		Status:     analysis.AnalysisStatusCompleted,
+		CreatedAt:  now.Add(-time.Hour),
+		UpdatedAt:  now,
+		Submission: analysis.AnalysisSubmission{Kind: analysis.SubmissionRepositoryURL, RepositoryURL: "https://github.com/vercel/next.js"},
+		Dependencies: []analysis.DependencyRecord{
+			{ID: "dep_existing", AnalysisID: "analysis_existing", PackageName: "next", PackageVersion: "15.5.14", Ecosystem: "npm", Direct: true, DependencyPath: []string{"next"}},
+		},
+		LatestJobID: "job_existing",
+	}
+	job := analysis.JobRecord{
+		ID:         "job_existing",
+		AnalysisID: existing.ID,
+		Type:       "analysis",
+		Status:     analysis.JobStatusCompleted,
+		CreatedAt:  existing.CreatedAt,
+		UpdatedAt:  existing.UpdatedAt,
+		Message:    "completed",
+	}
+	if err := store.CreateAnalysisJob(ctx, existing, job); err != nil {
+		t.Fatalf("CreateAnalysisJob returned error: %v", err)
+	}
+	if err := store.SaveAnalysisResult(ctx, existing, job); err != nil {
+		t.Fatalf("SaveAnalysisResult returned error: %v", err)
+	}
+
+	router := NewRouter(config.Config{ServiceName: "oss-risk-radar-api", AllowedOrigin: "http://localhost:3000"}, slog.Default(), service)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/analyses", strings.NewReader(`{"force":true,"submission":{"kind":"repository_url","repositoryUrl":"https://github.com/vercel/next.js/"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusCreated {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("expected 201, got %d: %s", response.Code, string(body))
+	}
+
+	var payload analysis.CreateAnalysisResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if payload.ReusedExistingAnalysis {
+		t.Fatalf("expected fresh analysis, got reused response %#v", payload)
+	}
+	if payload.Analysis.ID == existing.ID {
+		t.Fatalf("expected new analysis id, got existing id %s", payload.Analysis.ID)
+	}
+	if payload.Analysis.Status != analysis.AnalysisStatusPending {
+		t.Fatalf("expected pending rerun analysis, got %#v", payload.Analysis)
+	}
+}
+
 func TestTriggerTrainingRunEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -254,6 +331,9 @@ func TestTriggerTrainingRunEndpoint(t *testing.T) {
 	}
 	if payload.Run.ArtifactPath == "" {
 		t.Fatalf("expected cached artifact path, got %#v", payload)
+	}
+	if len(payload.Runs) != 2 {
+		t.Fatalf("expected both default model runs, got %#v", payload.Runs)
 	}
 }
 

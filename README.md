@@ -17,7 +17,7 @@ This repository now contains a working phase-2 vertical slice with:
 - manifest parsing for direct and transitive dependencies where the artifact supports it
 - durable analysis jobs with retryable lifecycle state in PostgreSQL
 - dependency enrichment through pluggable deps.dev, GitHub, and OpenSSF Scorecard adapters
-- explainable heuristic scoring plus ML-ready feature extraction and training utilities
+- explainable heuristic scoring plus calibrated logistic-regression and XGBoost training/scoring utilities
 - a historical dataset builder that exports quarter-based OSS maintenance training snapshots for the existing ML pipeline
 - dependency overview, richer filtering, raw signal display, path exploration, and graph context in the frontend
 
@@ -86,8 +86,12 @@ Internal scoring endpoints:
 - `GET /health`
 - `GET /ready`
 - `POST /score/heuristic`
+- `POST /score/model`
 - `POST /features/extract`
 - `POST /models/train`
+
+`POST /api/v1/training/runs` accepts an optional `modelName`; the default is `all`, which trains logistic regression and XGBoost and returns both artifacts. Use `logistic-regression-baseline` or `xgboost-baseline` to refresh only one model.
+Analysis submissions may also include `modelName`; when omitted, runtime scoring uses every cached model artifact available for the latest training dataset and exposes per-model outputs alongside the ensemble score.
 
 ## Important positioning
 

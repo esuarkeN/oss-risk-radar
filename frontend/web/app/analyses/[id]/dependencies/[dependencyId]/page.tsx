@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getDependencies, getDependency, getDependencyGraph } from "@/lib/api";
 import { formatConfidence, formatDate, formatOutlookScore, formatScore, titleCase } from "@/lib/format";
+import { formatTrainingMetric } from "@/lib/ml-evaluation";
 
 export default async function DependencyDetailPage({
   params
@@ -24,6 +25,7 @@ export default async function DependencyDetailPage({
     const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
     const graphEdgeCount = graph?.edges?.length ?? 0;
     const missingSignals = dependency.riskProfile?.missingSignals ?? [];
+    const modelResults = dependency.riskProfile?.modelResults ?? [];
 
     return (
       <div className="space-y-6">
@@ -123,6 +125,38 @@ export default async function DependencyDetailPage({
         </div>
 
         <DependencyPathExplorer dependency={dependency} dependencies={dependencies} graph={graph} />
+
+        {modelResults.length ? (
+          <Card className="space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Model Outputs</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">Side-by-side scoring for this dependency</h2>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {modelResults.map((result) => (
+                <div key={result.modelName} className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-950">{result.modelName}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{result.algorithm || "model"} {result.modelVersion ?? ""}</p>
+                    </div>
+                    <Badge tone={result.riskBucket}>{result.riskBucket}</Badge>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-slate-600">
+                    <p>Risk <span className="font-semibold text-slate-950">{formatScore(result.inactivityRiskScore)}</span></p>
+                    <p>Outlook <span className="font-semibold text-slate-950">{formatOutlookScore(result.maintenanceOutlook12mScore)}</span></p>
+                    <p>Security <span className="font-semibold text-slate-950">{formatScore(result.securityPostureScore)}</span></p>
+                    <p>Confidence <span className="font-semibold text-slate-950">{formatConfidence(result.confidenceScore)}</span></p>
+                    <p>AUROC <span className="font-semibold text-slate-950">{formatTrainingMetric(result.rocAuc)}</span></p>
+                    <p>Brier <span className="font-semibold text-slate-950">{formatTrainingMetric(result.brierScore)}</span></p>
+                    <p>ECE <span className="font-semibold text-slate-950">{formatTrainingMetric(result.expectedCalibrationError)}</span></p>
+                    <p>Samples <span className="font-semibold text-slate-950">{result.sampleCount || "Pending"}</span></p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
 
         <div className="grid gap-4 xl:grid-cols-2">
           <FactorList dependency={dependency} />

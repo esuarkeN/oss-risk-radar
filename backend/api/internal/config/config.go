@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ type Config struct {
 	UploadDir                 string
 	TrainingDatasetPath       string
 	TrainingRunsDir           string
+	TrainingModelName         string
 	TrainingSeedDatasetPath   string
 	TrainingSeedRunsDir       string
 	TrainingSeedLatestRunPath string
@@ -35,15 +37,16 @@ func Load() Config {
 		Addr:                      getEnv("API_ADDR", ":8080"),
 		AllowedOrigin:             getEnv("API_ALLOWED_ORIGIN", "http://localhost:3000"),
 		ScoringBaseURL:            getEnv("SCORING_SERVICE_URL", getEnv("SCORING_BASE_URL", "http://localhost:8090")),
-		MethodologyVersion:        getEnv("METHODOLOGY_VERSION", "heuristic-v1"),
+		MethodologyVersion:        getEnv("METHODOLOGY_VERSION", "inactivity-risk-v1"),
 		DatabaseURL:               os.Getenv("DATABASE_URL"),
 		DepsDevBaseURL:            getEnv("DEPSDEV_BASE_URL", "https://api.deps.dev/v3alpha"),
 		GitHubToken:               os.Getenv("GITHUB_TOKEN"),
 		ScorecardBaseURL:          getEnv("SCORECARD_BASE_URL", "https://api.securityscorecards.dev/projects"),
 		HTTPTimeout:               durationEnv("API_HTTP_TIMEOUT_SECONDS", 10*time.Second),
 		UploadDir:                 getEnv("UPLOAD_DIR", "tmp/uploads"),
-		TrainingDatasetPath:       getEnv("TRAINING_DATASET_PATH", "tmp/training/snapshots.json"),
-		TrainingRunsDir:           getEnv("TRAINING_RUNS_DIR", "tmp/training/runs"),
+		TrainingDatasetPath:       getEnv("TRAINING_DATASET_PATH", defaultWorkspacePath("tmp/training/snapshots.json")),
+		TrainingRunsDir:           getEnv("TRAINING_RUNS_DIR", defaultWorkspacePath("tmp/training/runs")),
+		TrainingModelName:         getEnv("TRAINING_MODEL_NAME", "all"),
 		TrainingSeedDatasetPath:   os.Getenv("TRAINING_SEED_DATASET_PATH"),
 		TrainingSeedRunsDir:       os.Getenv("TRAINING_SEED_RUNS_DIR"),
 		TrainingSeedLatestRunPath: os.Getenv("TRAINING_SEED_LATEST_RUN_PATH"),
@@ -51,6 +54,38 @@ func Load() Config {
 		WorkerPollInterval:        durationEnv("WORKER_POLL_INTERVAL_SECONDS", 3*time.Second),
 		RetryDelay:                durationEnv("JOB_RETRY_DELAY_SECONDS", 30*time.Second),
 	}
+}
+
+func defaultWorkspacePath(relativePath string) string {
+	cleanPath := filepath.FromSlash(relativePath)
+	if filepath.IsAbs(cleanPath) {
+		return cleanPath
+	}
+
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return cleanPath
+	}
+	for dir := workingDir; dir != ""; dir = filepath.Dir(dir) {
+		if isWorkspaceRoot(dir) {
+			return filepath.Join(dir, cleanPath)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+	}
+	return cleanPath
+}
+
+func isWorkspaceRoot(path string) bool {
+	if _, err := os.Stat(filepath.Join(path, "package.json")); err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(path, "compose.yaml")); err != nil {
+		return false
+	}
+	return true
 }
 
 func getEnv(key string, fallback string) string {

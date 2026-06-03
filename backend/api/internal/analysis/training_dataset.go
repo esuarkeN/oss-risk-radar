@@ -60,11 +60,23 @@ func (m *trainingDatasetManager) Summary() (TrainingDatasetSummary, error) {
 	uniqueAnalyses := map[string]struct{}{}
 	uniqueRepositories := map[string]struct{}{}
 	uniquePackages := map[string]struct{}{}
+	labeledSnapshots := 0
+	inactiveLabelCount := 0
+	realProjectLabeledSnapshots := 0
 	repositoryAggregates := map[string]*trainingRepositoryAggregate{}
 	for _, snapshot := range dataset.Snapshots {
 		uniqueAnalyses[snapshot.AnalysisID] = struct{}{}
 		packageKey := snapshot.Dependency.Ecosystem + "|" + snapshot.Dependency.PackageName
 		uniquePackages[packageKey] = struct{}{}
+		if snapshot.LabelInactive12M != nil {
+			labeledSnapshots++
+			if *snapshot.LabelInactive12M {
+				inactiveLabelCount++
+			}
+			if hasTrainingSnapshotRepositoryIdentity(snapshot) {
+				realProjectLabeledSnapshots++
+			}
+		}
 		if snapshot.Dependency.Repository != nil && snapshot.Dependency.Repository.URL != "" {
 			repository := snapshot.Dependency.Repository
 			repositoryKey := repository.URL
@@ -120,14 +132,17 @@ func (m *trainingDatasetManager) Summary() (TrainingDatasetSummary, error) {
 	}
 
 	return TrainingDatasetSummary{
-		DatasetPath:        m.path,
-		TotalSnapshots:     len(dataset.Snapshots),
-		UniqueAnalyses:     len(uniqueAnalyses),
-		UniqueRepositories: len(uniqueRepositories),
-		UniquePackages:     len(uniquePackages),
-		LastUpdatedAt:      lastUpdatedAt,
-		AutoCaptureEnabled: true,
-		Repositories:       rankedTrainingRepositories(repositoryAggregates),
+		DatasetPath:                 m.path,
+		TotalSnapshots:              len(dataset.Snapshots),
+		LabeledSnapshots:            labeledSnapshots,
+		InactiveLabelCount:          inactiveLabelCount,
+		RealProjectLabeledSnapshots: realProjectLabeledSnapshots,
+		UniqueAnalyses:              len(uniqueAnalyses),
+		UniqueRepositories:          len(uniqueRepositories),
+		UniquePackages:              len(uniquePackages),
+		LastUpdatedAt:               lastUpdatedAt,
+		AutoCaptureEnabled:          true,
+		Repositories:                rankedTrainingRepositories(repositoryAggregates),
 	}, nil
 }
 

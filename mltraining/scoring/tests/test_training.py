@@ -1,3 +1,7 @@
+import importlib.util
+
+import pytest
+
 from app.training.calibration import fit_histogram_calibrator
 from app.training.evaluation import compute_binary_classification_metrics
 from app.modeling.baseline import fit_logistic_regression, predict_probabilities
@@ -21,6 +25,7 @@ def test_binary_classification_metrics_handles_perfect_predictions() -> None:
     assert metrics.accuracy == 1.0
     assert metrics.roc_auc == 1.0
     assert metrics.brier_score < 0.001
+    assert metrics.expected_calibration_error < 0.02
     assert metrics.model_quality_score > 0.99
 
 
@@ -49,8 +54,31 @@ def test_training_pipeline_returns_completed_result(training_snapshots: list[dic
     assert result.dataset_summary is not None
     assert result.split_summary is not None
     assert result.metrics is not None
+    assert result.metrics.expected_calibration_error >= 0
     assert len(result.calibration_bins) == 5
     assert result.artifact is not None
     assert result.artifact.feature_version == "feature-set-v1"
     assert result.artifact.model_version == "0.3.0"
     assert len(result.artifact.feature_names) == len(result.artifact.coefficients)
+
+
+@pytest.mark.skipif(importlib.util.find_spec("xgboost") is None, reason="xgboost is not installed")
+def test_training_pipeline_supports_xgboost(training_snapshots: list[dict[str, object]]) -> None:
+    result = run_training_pipeline(
+        TrainingRunConfig(
+            algorithm="xgboost-baseline",
+            snapshots=training_snapshots,
+            train_ratio=0.5,
+            validation_ratio=0.25,
+            calibration_bins=5,
+        )
+    )
+
+    assert result.status == "completed"
+    assert result.model_name == "xgboost-baseline"
+    assert result.artifact is not None
+    assert result.artifact.algorithm == "xgboost"
+    assert result.artifact.booster_json
+    assert result.artifact.tree_count > 0
+    assert result.artifact.feature_importances
+    assert result.artifact.feature_importances[0].importance >= 0

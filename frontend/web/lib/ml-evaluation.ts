@@ -1,4 +1,4 @@
-import type { TrainingRunArtifact } from "@/lib/types";
+import type { AnalysisRecord, ScoringMethodSummary, TrainingRunArtifact } from "@/lib/types";
 
 export interface CalibrationPoint {
   label: string;
@@ -14,6 +14,7 @@ export interface ModelMetric {
   precision: number;
   recall: number;
   brier: number;
+  ece?: number;
   note: string;
 }
 
@@ -22,10 +23,31 @@ export interface LogisticCoefficient {
   weight: number;
 }
 
+export interface XGBoostFeatureImpact {
+  feature: string;
+  gain: number;
+  importance: number;
+}
+
 export interface TrainingMetricHistoryPoint {
   label: string;
   auroc: number;
   brier: number;
+  ece?: number;
+}
+
+export interface ScoringMethodOverview {
+  label: string;
+  method: string;
+  role: string;
+  modelVersion?: string;
+  algorithm?: string;
+  dependencyCount: number;
+  sampleCount?: number;
+  auroc?: number;
+  brier?: number;
+  ece?: number;
+  quality?: number;
 }
 
 export function formatTrainingMetric(value?: number, digits = 3) {
@@ -84,6 +106,7 @@ export function metricHistoryFromRuns(runs: TrainingRunArtifact[]): TrainingMetr
       label: `Run ${index + 1}`,
       auroc: run.metrics?.rocAuc ?? 0,
       brier: run.metrics?.brierScore ?? 0,
+      ece: run.metrics?.expectedCalibrationError,
     }));
 }
 
@@ -98,23 +121,112 @@ export function modelMetricsFromRuns(runs: TrainingRunArtifact[]): ModelMetric[]
       precision: run.metrics?.precision ?? 0,
       recall: run.metrics?.recall ?? 0,
       brier: run.metrics?.brierScore ?? 0,
+      ece: run.metrics?.expectedCalibrationError,
       note: run.message,
     }));
 }
 
+export function scoringMethodsFromAnalysis(analysis: AnalysisRecord | null): ScoringMethodOverview[] {
+  const methods = analysis?.summary?.scoringMethods ?? [];
+  return methods.map((method) => ({
+    label: scoringMethodLabel(method),
+    method: method.method,
+    role: method.role,
+    modelVersion: method.modelVersion,
+    algorithm: method.algorithm,
+    dependencyCount: method.dependencyCount,
+    sampleCount: method.sampleCount,
+    auroc: method.rocAuc,
+    brier: method.brierScore,
+    ece: method.expectedCalibrationError,
+    quality: method.qualityScore,
+  }));
+}
+
+export function runtimeScoringLabel(methods: ScoringMethodOverview[]) {
+  if (methods.some((method) => method.method === "model_ensemble")) {
+    const memberNames = methods
+      .filter((method) => method.role === "ensemble_member")
+      .map((method) => compactModelName(method.label));
+    return `ML ensemble: ${memberNames.length ? memberNames.join(" + ") : "available models"}`;
+  }
+  const primaryModel = methods.find((method) => method.method === "model");
+  if (primaryModel) {
+    return `ML model: ${compactModelName(primaryModel.label)}`;
+  }
+  if (methods.some((method) => method.method === "failsafe")) {
+    return "Failsafe fallback";
+  }
+  if (methods.some((method) => method.method === "heuristic")) {
+    return "Heuristic fallback";
+  }
+  return "Pending";
+}
+
+export function latestCompletedRunForModel(runs: TrainingRunArtifact[], modelName: string) {
+  return sortTrainingRuns(runs).find((run) => run.status === "completed" && run.modelName === modelName) ?? null;
+}
+
 export function logisticCoefficientsFromRun(run: TrainingRunArtifact | null, limit = 12): LogisticCoefficient[] {
   const artifact = run?.modelArtifact;
-  if (!artifact?.featureNames.length || artifact.featureNames.length !== artifact.coefficients.length) {
+  const coefficients = artifact?.coefficients;
+  if (!artifact?.featureNames.length || !coefficients?.length || artifact.featureNames.length !== coefficients.length) {
     return [];
   }
 
   return artifact.featureNames
     .map((feature, index) => ({
       feature: formatFeatureName(feature),
-      weight: artifact.coefficients[index] ?? 0,
+      weight: coefficients[index] ?? 0,
     }))
     .sort((left, right) => Math.abs(right.weight) - Math.abs(left.weight))
     .slice(0, limit);
+}
+
+export function xgboostFeatureImportancesFromRun(run: TrainingRunArtifact | null, limit = 12): XGBoostFeatureImpact[] {
+  const importances = run?.modelArtifact?.featureImportances;
+  if (!importances?.length) {
+    return [];
+  }
+
+  return importances
+    .map((importance) => ({
+      feature: formatFeatureName(importance.feature),
+      gain: importance.gain,
+      importance: importance.importance,
+    }))
+    .sort((left, right) => right.importance - left.importance)
+    .slice(0, limit);
+}
+
+function scoringMethodLabel(method: ScoringMethodSummary) {
+  if (method.modelName) {
+    return formatModelName(method.modelName);
+  }
+  if (method.method === "model_ensemble") {
+    return "Model ensemble";
+  }
+  if (method.method === "failsafe") {
+    return "Failsafe";
+  }
+  if (method.method === "heuristic") {
+    return "Heuristic";
+  }
+  return formatFeatureName(method.method);
+}
+
+function formatModelName(modelName: string) {
+  if (modelName === "xgboost-baseline") {
+    return "XGBoost";
+  }
+  if (modelName === "logistic-regression-baseline") {
+    return "Logistic regression";
+  }
+  return modelName.replace(/[-_]/g, " ");
+}
+
+function compactModelName(modelName: string) {
+  return modelName.replace(" regression", "");
 }
 
 export function formatFeatureName(feature: string) {

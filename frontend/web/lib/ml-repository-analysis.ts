@@ -156,16 +156,23 @@ export function repositoryModelAnalysis(
   dependency: DependencyRecord,
   artifact?: TrainingRunModelArtifact | null,
 ): RepositoryModelAnalysis | null {
-  if (!artifact?.featureNames.length || artifact.featureNames.length !== artifact.coefficients.length) {
+  const coefficients = artifact?.coefficients;
+  const standardization = artifact?.standardization;
+  if (
+    !artifact?.featureNames.length ||
+    !coefficients?.length ||
+    !standardization ||
+    artifact.featureNames.length !== coefficients.length
+  ) {
     return null;
   }
 
   const featureValues = repositoryFeatureValues(dependency, artifact.featureNames);
   const impacts = artifact.featureNames.map((feature, index) => {
     const value = featureValues[feature] ?? 0;
-    const scale = artifact.standardization.scales[index] || 1;
-    const standardizedValue = (value - (artifact.standardization.means[index] ?? 0)) / scale;
-    const coefficient = artifact.coefficients[index] ?? 0;
+    const scale = standardization.scales[index] || 1;
+    const standardizedValue = (value - (standardization.means[index] ?? 0)) / scale;
+    const coefficient = coefficients[index] ?? 0;
 
     return {
       feature,
@@ -177,7 +184,7 @@ export function repositoryModelAnalysis(
     };
   });
 
-  const linearTerm = artifact.intercept + impacts.reduce((total, impact) => total + impact.impact, 0);
+  const linearTerm = (artifact.intercept ?? 0) + impacts.reduce((total, impact) => total + impact.impact, 0);
   const rawProbability = sigmoid(linearTerm);
 
   return {

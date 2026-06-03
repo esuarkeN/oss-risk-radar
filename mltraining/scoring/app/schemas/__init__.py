@@ -6,9 +6,11 @@ from .score import (
     EvaluationMetrics,
     EvidenceItem,
     ExplanationFactor,
+    FeatureImportance,
     ExtractedFeatureRow,
     FeaturesExtractResponse,
     LogisticRegressionModelArtifact,
+    ModelArtifact,
     ModelTrainRequest,
     ModelTrainResponse,
     RiskProfileResponse,
@@ -18,6 +20,7 @@ from .score import (
     ScoreResult,
     StandardizationProfileArtifact,
     TrainingSnapshotInput,
+    XGBoostModelArtifact,
 )
 
 __all__ = [
@@ -28,9 +31,11 @@ __all__ = [
     "EvaluationMetrics",
     "EvidenceItem",
     "ExplanationFactor",
+    "FeatureImportance",
     "ExtractedFeatureRow",
     "FeaturesExtractResponse",
     "LogisticRegressionModelArtifact",
+    "ModelArtifact",
     "ModelTrainRequest",
     "ModelTrainResponse",
     "RiskProfileResponse",
@@ -40,4 +45,5 @@ __all__ = [
     "ScoreResult",
     "StandardizationProfileArtifact",
     "TrainingSnapshotInput",
+    "XGBoostModelArtifact",
 ]

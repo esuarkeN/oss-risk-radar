@@ -1,8 +1,22 @@
 from __future__ import annotations
 
-from app.modeling import deserialize_logistic_regression_model, extract_feature_values, predict_probabilities
+from app.modeling import (
+    deserialize_logistic_regression_model,
+    deserialize_xgboost_model,
+    extract_feature_values,
+    predict_probabilities,
+    predict_xgboost_probabilities,
+)
 from app.modeling.features import FEATURE_VERSION
-from app.schemas.score import CalibrationBin, DependencySignalPayload, LogisticRegressionModelArtifact, RiskProfileResponse, ScoreResult
+from app.schemas.score import (
+    CalibrationBin,
+    DependencySignalPayload,
+    LogisticRegressionModelArtifact,
+    ModelArtifact,
+    RiskProfileResponse,
+    ScoreResult,
+    XGBoostModelArtifact,
+)
 from app.scoring.explanations import factor
 from app.scoring.heuristic import clamp, derive_maintenance_outlook_12m_score, determine_action_level, determine_bucket, score_dependency
 from app.training.calibration import CalibrationBinSummary, HistogramCalibrator
@@ -27,14 +41,21 @@ def _build_calibrator(calibration_bins: list[CalibrationBin]) -> HistogramCalibr
 
 def score_dependency_with_model(
     payload: DependencySignalPayload,
-    artifact: LogisticRegressionModelArtifact,
+    artifact: ModelArtifact,
 ) -> ScoreResult:
     heuristic_result = score_dependency(payload)
     heuristic_profile = heuristic_result.risk_profile
     feature_values, missing_signals = extract_feature_values(payload)
-    model = deserialize_logistic_regression_model(artifact)
     matrix = [[feature_values[name] for name in artifact.feature_names]]
-    raw_probability = predict_probabilities(model, matrix)[0]
+
+    if isinstance(artifact, XGBoostModelArtifact):
+        model = deserialize_xgboost_model(artifact)
+        raw_probability = predict_xgboost_probabilities(model, matrix)[0]
+    elif isinstance(artifact, LogisticRegressionModelArtifact):
+        model = deserialize_logistic_regression_model(artifact)
+        raw_probability = predict_probabilities(model, matrix)[0]
+    else:
+        raise ValueError(f"unsupported model artifact: {artifact.model_name}")
 
     calibrator = _build_calibrator(artifact.calibration_bins)
     calibrated_probability = raw_probability

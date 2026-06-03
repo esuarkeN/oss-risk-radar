@@ -8,6 +8,7 @@ app/modeling/__init__.py
 app/modeling/baseline.py
 app/modeling/features.py
 app/modeling/registry.py
+app/modeling/xgboost_model.py
 app/schemas/__init__.py
 app/schemas/score.py
 app/scoring/__init__.py

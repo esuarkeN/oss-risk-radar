@@ -9,6 +9,7 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 function parseArgs(argv) {
   const args = {
     force: false,
+    modelName: process.env.TRAINING_MODEL_NAME ?? null,
     datasetArgs: [],
     minimumValidationRows: null,
     minimumTestRows: null,
@@ -20,6 +21,14 @@ function parseArgs(argv) {
     const next = argv[index + 1];
     if (current === "--force") {
       args.force = true;
+      continue;
+    }
+    if (current === "--model-name") {
+      if (!next) {
+        throw new Error("--model-name requires a value");
+      }
+      args.modelName = next;
+      index += 1;
       continue;
     }
     if (current === "--minimum-validation-rows") {
@@ -98,12 +107,12 @@ function runNodeScript(scriptPath, args) {
   });
 }
 
-async function triggerTraining(force) {
+async function triggerTraining(force, modelName) {
   const apiBaseUrl = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api/v1").replace(/\/$/, "");
   const response = await fetch(`${apiBaseUrl}/training/runs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ force }),
+    body: JSON.stringify({ force, ...(modelName ? { modelName } : {}) }),
   });
 
   if (!response.ok) {
@@ -189,7 +198,7 @@ async function main() {
   const buildScriptPath = path.join(__dirname, "build-dataset.mjs");
   await runNodeScript(buildScriptPath, ["build-all", ...args.datasetArgs]);
 
-  const training = await triggerTraining(args.force);
+  const training = await triggerTraining(args.force, args.modelName);
   const latestRun = await fetchLatestRun(training.apiBaseUrl);
   const verifiedRun = verifyTrainingRun(latestRun ?? training.run, args);
   const verification = verifyHostArtifacts(verifiedRun);

@@ -49,7 +49,10 @@ def score_heuristic(request: ScoreHeuristicRequest) -> ScoreHeuristicResponse:
 
 @router.post("/score/model", response_model=ScoreHeuristicResponse)
 def score_model(request: ScoreModelRequest) -> ScoreHeuristicResponse:
-    results = [score_dependency_with_model(dependency, request.model_artifact) for dependency in request.dependencies]
+    try:
+        results = [score_dependency_with_model(dependency, request.model_artifact) for dependency in request.dependencies]
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ScoreHeuristicResponse(
         analysis_id=request.analysis_id,
         scoring_version=request.scoring_version,

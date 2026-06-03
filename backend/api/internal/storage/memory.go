@@ -218,6 +218,7 @@ func summarize(dependencies []analysis.DependencyRecord) analysis.AnalysisSummar
 		HighRiskCount:          0,
 		MappedRepositoryCount:  0,
 		ScoreAvailabilityCount: 0,
+		ScoringMethods:         analysis.SummarizeScoringMethods(dependencies),
 	}
 	for _, dependency := range dependencies {
 		summary.EcosystemBreakdown[dependency.Ecosystem]++

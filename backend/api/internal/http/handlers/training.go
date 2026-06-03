@@ -42,10 +42,14 @@ func (h *Handler) TriggerTrainingRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, reused, err := h.service.TriggerTrainingRun(r.Context(), request.Force)
+	runs, reused, err := h.service.TriggerTrainingRunsForModel(r.Context(), request.Force, request.ModelName)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, analysis.TriggerTrainingRunResponse{Run: run, ReusedCachedRun: reused})
+	if len(runs) == 0 {
+		writeError(w, http.StatusBadRequest, "training did not produce any model artifacts")
+		return
+	}
+	writeJSON(w, http.StatusOK, analysis.TriggerTrainingRunResponse{Run: analysis.BestTrainingRun(runs), Runs: runs, ReusedCachedRun: reused})
 }

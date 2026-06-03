@@ -236,10 +236,21 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
                     </p>
                     {dependency.riskProfile?.scoringMethod ? (
                       <p className="mt-1 text-xs text-muted">
-                        {dependency.riskProfile.scoringMethod === "model"
+                        {dependency.riskProfile.scoringMethod === "model_ensemble"
+                          ? `ML ensemble (${dependency.riskProfile.modelResults?.length ?? 0})`
+                          : dependency.riskProfile.scoringMethod === "model"
                           ? `ML ${dependency.riskProfile.scoringModel ?? ""}`.trim()
                           : titleCase(dependency.riskProfile.scoringMethod)}
                       </p>
+                    ) : null}
+                    {dependency.riskProfile?.modelResults?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {dependency.riskProfile.modelResults.map((result) => (
+                          <Badge key={result.modelName} tone={result.riskBucket}>
+                            {result.modelName.replace("-baseline", "")}: {formatRiskScore(result.inactivityRiskScore)}
+                          </Badge>
+                        ))}
+                      </div>
                     ) : null}
                   </td>
                   <td className="px-4 py-4 align-top font-medium text-foreground">

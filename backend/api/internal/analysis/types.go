@@ -44,12 +44,14 @@ type AnalysisSubmission struct {
 	RepositoryURL                 string         `json:"repositoryUrl,omitempty"`
 	ArtifactName                  string         `json:"artifactName,omitempty"`
 	UploadID                      string         `json:"uploadId,omitempty"`
+	ModelName                     string         `json:"modelName,omitempty"`
 	IncludeTransitiveDependencies bool           `json:"includeTransitiveDependencies,omitempty"`
 	DemoProfile                   string         `json:"demoProfile,omitempty"`
 }
 
 type CreateAnalysisRequest struct {
 	Submission AnalysisSubmission `json:"submission"`
+	Force      bool               `json:"force,omitempty"`
 }
 
 type UploadArtifact struct {
@@ -69,12 +71,27 @@ type CreateUploadResponse struct {
 }
 
 type AnalysisSummary struct {
-	DependencyCount        int            `json:"dependencyCount"`
-	HighRiskCount          int            `json:"highRiskCount"`
-	MappedRepositoryCount  int            `json:"mappedRepositoryCount"`
-	ScoreAvailabilityCount int            `json:"scoreAvailabilityCount"`
-	RiskDistribution       map[string]int `json:"riskDistribution"`
-	EcosystemBreakdown     map[string]int `json:"ecosystemBreakdown"`
+	DependencyCount        int                    `json:"dependencyCount"`
+	HighRiskCount          int                    `json:"highRiskCount"`
+	MappedRepositoryCount  int                    `json:"mappedRepositoryCount"`
+	ScoreAvailabilityCount int                    `json:"scoreAvailabilityCount"`
+	RiskDistribution       map[string]int         `json:"riskDistribution"`
+	EcosystemBreakdown     map[string]int         `json:"ecosystemBreakdown"`
+	ScoringMethods         []ScoringMethodSummary `json:"scoringMethods"`
+}
+
+type ScoringMethodSummary struct {
+	Method                   string   `json:"method"`
+	ModelName                string   `json:"modelName,omitempty"`
+	ModelVersion             string   `json:"modelVersion,omitempty"`
+	Algorithm                string   `json:"algorithm,omitempty"`
+	Role                     string   `json:"role"`
+	DependencyCount          int      `json:"dependencyCount"`
+	SampleCount              int      `json:"sampleCount,omitempty"`
+	RocAuc                   *float64 `json:"rocAuc,omitempty"`
+	BrierScore               *float64 `json:"brierScore,omitempty"`
+	ExpectedCalibrationError *float64 `json:"expectedCalibrationError,omitempty"`
+	QualityScore             *float64 `json:"qualityScore,omitempty"`
 }
 
 type ScorecardCheck struct {
@@ -137,6 +154,24 @@ func NewRawSignal(key string, value any, source string, observedAt *time.Time) R
 	return RawSignalItem{Key: key, Value: json.RawMessage(encoded), Source: source, ObservedAt: observedAt}
 }
 
+type ModelRiskProfile struct {
+	ModelName                  string      `json:"modelName"`
+	ModelVersion               string      `json:"modelVersion,omitempty"`
+	Algorithm                  string      `json:"algorithm,omitempty"`
+	TrainedAt                  string      `json:"trainedAt,omitempty"`
+	SampleCount                int         `json:"sampleCount,omitempty"`
+	RocAuc                     *float64    `json:"rocAuc,omitempty"`
+	BrierScore                 *float64    `json:"brierScore,omitempty"`
+	ExpectedCalibrationError   *float64    `json:"expectedCalibrationError,omitempty"`
+	QualityScore               *float64    `json:"qualityScore,omitempty"`
+	InactivityRiskScore        float64     `json:"inactivityRiskScore"`
+	MaintenanceOutlook12MScore float64     `json:"maintenanceOutlook12mScore"`
+	SecurityPostureScore       float64     `json:"securityPostureScore"`
+	ConfidenceScore            float64     `json:"confidenceScore"`
+	RiskBucket                 RiskBucket  `json:"riskBucket"`
+	ActionLevel                ActionLevel `json:"actionLevel"`
+}
+
 type RiskProfile struct {
 	InactivityRiskScore        float64             `json:"inactivityRiskScore"`
 	MaintenanceOutlook12MScore float64             `json:"maintenanceOutlook12mScore"`
@@ -146,6 +181,7 @@ type RiskProfile struct {
 	ActionLevel                ActionLevel         `json:"actionLevel"`
 	ScoringMethod              string              `json:"scoringMethod,omitempty"`
 	ScoringModel               string              `json:"scoringModel,omitempty"`
+	ModelResults               []ModelRiskProfile  `json:"modelResults,omitempty"`
 	Caveats                    []string            `json:"caveats"`
 	MissingSignals             []string            `json:"missingSignals"`
 	ExplanationFactors         []ExplanationFactor `json:"explanationFactors"`

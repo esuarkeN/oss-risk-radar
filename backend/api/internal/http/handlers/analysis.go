@@ -24,7 +24,17 @@ func (h *Handler) CreateAnalysis(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	analysisRecord, jobRecord, reusedExisting, err := h.service.CreateOrReuseAnalysis(r.Context(), request.Submission)
+	var (
+		analysisRecord analysis.AnalysisRecord
+		jobRecord      analysis.JobRecord
+		reusedExisting bool
+		err            error
+	)
+	if request.Force {
+		analysisRecord, jobRecord, err = h.service.CreateAnalysis(r.Context(), request.Submission)
+	} else {
+		analysisRecord, jobRecord, reusedExisting, err = h.service.CreateOrReuseAnalysis(r.Context(), request.Submission)
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

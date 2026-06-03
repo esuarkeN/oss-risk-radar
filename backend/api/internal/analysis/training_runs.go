@@ -103,7 +103,11 @@ func (m *trainingRunArtifactManager) Save(run TrainingRunArtifact) (TrainingRunA
 		case run.DatasetHash != "":
 			shortHash = run.DatasetHash
 		}
-		run.ArtifactPath = filepath.Join(m.runsDir, stamp+"-"+shortHash+".json")
+		modelSlug := slugForTrainingArtifact(run.ModelName)
+		if modelSlug != "" {
+			modelSlug = "-" + modelSlug
+		}
+		run.ArtifactPath = filepath.Join(m.runsDir, stamp+modelSlug+"-"+shortHash+".json")
 	}
 
 	payload, err := json.MarshalIndent(run, "", "  ")
@@ -119,6 +123,23 @@ func (m *trainingRunArtifactManager) Save(run TrainingRunArtifact) (TrainingRunA
 		}
 	}
 	return run, nil
+}
+
+func (m *trainingRunArtifactManager) MarkLatest(run TrainingRunArtifact) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m == nil || m.latestPath == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(m.latestPath), 0o755); err != nil {
+		return err
+	}
+	payload, err := json.MarshalIndent(run, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(m.latestPath, payload, 0o644)
 }
 
 func (m *trainingRunArtifactManager) readLatest() (*TrainingRunArtifact, error) {
@@ -141,6 +162,11 @@ func (m *trainingRunArtifactManager) readLatest() (*TrainingRunArtifact, error) 
 		return nil, err
 	}
 	return &run, nil
+}
+
+func slugForTrainingArtifact(value string) string {
+	replacer := strings.NewReplacer("_", "-", "/", "-", "\\", "-", " ", "-")
+	return strings.Trim(replacer.Replace(strings.ToLower(strings.TrimSpace(value))), "-")
 }
 
 func (m *trainingRunArtifactManager) BootstrapFromSeed(seedRunsDir string, seedLatestPath string, mergeExisting bool) (bool, error) {

@@ -1,3 +1,6 @@
+import importlib.util
+
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -144,4 +147,40 @@ def test_model_scoring_endpoint_uses_trained_artifact(
     result = body["results"][0]["risk_profile"]
     assert 0 <= result["maintenance_outlook_12m_score"] <= 100
     assert result["action_level"] in {"monitor", "review", "replace_candidate"}
+    assert any(factor["label"] == "12-month outlook model" for factor in result["explanation_factors"])
+
+
+@pytest.mark.skipif(importlib.util.find_spec("xgboost") is None, reason="xgboost is not installed")
+def test_xgboost_training_and_scoring_endpoint(
+    make_dependency_payload,
+    training_snapshots: list[dict[str, object]],
+) -> None:
+    train_response = client.post(
+        "/models/train",
+        json={
+            "model_name": "xgboost-baseline",
+            "snapshots": training_snapshots,
+            "train_ratio": 0.5,
+            "validation_ratio": 0.25,
+            "calibration_bins": 5,
+        },
+    )
+
+    assert train_response.status_code == 200
+    artifact = train_response.json()["artifact"]
+    assert artifact["algorithm"] == "xgboost"
+    assert artifact["booster_json"]
+
+    response = client.post(
+        "/score/model",
+        json={
+            "analysis_id": "analysis_xgb_score_001",
+            "dependencies": [make_dependency_payload(dependency_id="dep_xgb")],
+            "model_artifact": artifact,
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()["results"][0]["risk_profile"]
+    assert 0 <= result["inactivity_risk_score"] <= 100
     assert any(factor["label"] == "12-month outlook model" for factor in result["explanation_factors"])

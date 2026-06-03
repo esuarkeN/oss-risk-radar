@@ -19,28 +19,30 @@ export function EcosystemBreakdownChart({ breakdown }: EcosystemBreakdownChartPr
   const data = Object.entries(breakdown).map(([name, value]) => ({ name, value }));
 
   return (
-    <Card className="h-[320px]">
-      <div className="mb-4">
+    <Card className="flex h-[320px] flex-col">
+      <div className="mb-4 shrink-0">
         <h3 className="text-lg font-semibold text-foreground">Ecosystem Mix</h3>
         <p className="text-sm text-muted">Direct and transitive packages grouped by ecosystem.</p>
       </div>
-      <ResponsiveContainer width="100%" height="82%">
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={62} outerRadius={96} paddingAngle={3}>
-            {data.map((entry, index) => (
-              <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{
-              borderRadius: 18,
-              borderColor: "hsl(var(--border))",
-              backgroundColor: "hsl(var(--panel))",
-              color: "hsl(var(--foreground))"
-            }}
-          />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className="min-h-0 min-w-0 flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" innerRadius={62} outerRadius={96} paddingAngle={3}>
+              {data.map((entry, index) => (
+                <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                borderRadius: 18,
+                borderColor: "hsl(var(--border))",
+                backgroundColor: "hsl(var(--panel))",
+                color: "hsl(var(--foreground))"
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
     </Card>
   );
 }

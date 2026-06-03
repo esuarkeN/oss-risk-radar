@@ -12,6 +12,7 @@ export interface AnalysisSubmission {
   repositoryUrl?: string;
   uploadId?: string;
   artifactName?: string;
+  modelName?: "all" | "logistic-regression-baseline" | "xgboost-baseline" | string;
   includeTransitiveDependencies?: boolean;
   demoProfile?: string;
 }
@@ -23,6 +24,21 @@ export interface AnalysisSummary {
   scoreAvailabilityCount: number;
   riskDistribution: Record<RiskBucket, number>;
   ecosystemBreakdown: Record<string, number>;
+  scoringMethods?: ScoringMethodSummary[];
+}
+
+export interface ScoringMethodSummary {
+  method: string;
+  modelName?: string;
+  modelVersion?: string;
+  algorithm?: string;
+  role: string;
+  dependencyCount: number;
+  sampleCount?: number;
+  rocAuc?: number;
+  brierScore?: number;
+  expectedCalibrationError?: number;
+  qualityScore?: number;
 }
 
 export interface EvidenceItem {
@@ -56,10 +72,29 @@ export interface RiskProfile {
   actionLevel: ActionLevel;
   scoringMethod?: "model" | "heuristic" | "failsafe" | string;
   scoringModel?: string;
+  modelResults?: ModelRiskProfile[];
   caveats: string[];
   missingSignals: string[];
   explanationFactors: ExplanationFactor[];
   evidence: EvidenceItem[];
+}
+
+export interface ModelRiskProfile {
+  modelName: string;
+  modelVersion?: string;
+  algorithm?: string;
+  trainedAt?: string;
+  sampleCount?: number;
+  rocAuc?: number;
+  brierScore?: number;
+  expectedCalibrationError?: number;
+  qualityScore?: number;
+  inactivityRiskScore: number;
+  maintenanceOutlook12mScore: number;
+  securityPostureScore: number;
+  confidenceScore: number;
+  riskBucket: RiskBucket;
+  actionLevel: ActionLevel;
 }
 
 export interface RepositorySnapshot {
@@ -146,6 +181,7 @@ export interface JobRecord {
 
 export interface CreateAnalysisRequest {
   submission: AnalysisSubmission;
+  force?: boolean;
 }
 
 export interface CreateAnalysisResponse {
@@ -195,6 +231,9 @@ export interface DependencyFilterState {
 export interface TrainingDatasetSummary {
   datasetPath: string;
   totalSnapshots: number;
+  labeledSnapshots: number;
+  inactiveLabelCount: number;
+  realProjectLabeledSnapshots: number;
   uniqueAnalyses: number;
   uniqueRepositories: number;
   uniquePackages: number;
@@ -255,6 +294,7 @@ export interface TrainingRunMetrics {
   brierScore: number;
   logLoss: number;
   rocAuc: number;
+  expectedCalibrationError?: number;
   qualityScore: number;
 }
 
@@ -277,11 +317,25 @@ export interface TrainingRunModelArtifact {
   featureVersion: string;
   trainedAt: string;
   threshold: number;
+  algorithm?: "logistic_regression" | "xgboost" | string;
   featureNames: string[];
-  coefficients: number[];
-  intercept: number;
-  standardization: TrainingRunStandardizationProfile;
+  coefficients?: number[];
+  intercept?: number;
+  standardization?: TrainingRunStandardizationProfile;
+  boosterJson?: string;
+  treeCount?: number;
+  maxDepth?: number;
+  learningRate?: number;
+  objective?: string;
+  xgboostVersion?: string;
+  featureImportances?: TrainingRunFeatureImportance[];
   calibrationBins: TrainingCalibrationBin[];
+}
+
+export interface TrainingRunFeatureImportance {
+  feature: string;
+  gain: number;
+  importance: number;
 }
 
 export interface TrainingRunArtifact {
@@ -311,9 +365,11 @@ export interface ListTrainingRunsResponse {
 
 export interface TriggerTrainingRunRequest {
   force?: boolean;
+  modelName?: string;
 }
 
 export interface TriggerTrainingRunResponse {
   run: TrainingRunArtifact;
+  runs?: TrainingRunArtifact[];
   reusedCachedRun: boolean;
 }

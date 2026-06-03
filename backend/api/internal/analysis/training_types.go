@@ -3,14 +3,17 @@ package analysis
 import "time"
 
 type TrainingDatasetSummary struct {
-	DatasetPath        string                             `json:"datasetPath"`
-	TotalSnapshots     int                                `json:"totalSnapshots"`
-	UniqueAnalyses     int                                `json:"uniqueAnalyses"`
-	UniqueRepositories int                                `json:"uniqueRepositories"`
-	UniquePackages     int                                `json:"uniquePackages"`
-	LastUpdatedAt      *time.Time                         `json:"lastUpdatedAt,omitempty"`
-	AutoCaptureEnabled bool                               `json:"autoCaptureEnabled"`
-	Repositories       []TrainingDatasetRepositorySummary `json:"repositories"`
+	DatasetPath                 string                             `json:"datasetPath"`
+	TotalSnapshots              int                                `json:"totalSnapshots"`
+	LabeledSnapshots            int                                `json:"labeledSnapshots"`
+	InactiveLabelCount          int                                `json:"inactiveLabelCount"`
+	RealProjectLabeledSnapshots int                                `json:"realProjectLabeledSnapshots"`
+	UniqueAnalyses              int                                `json:"uniqueAnalyses"`
+	UniqueRepositories          int                                `json:"uniqueRepositories"`
+	UniquePackages              int                                `json:"uniquePackages"`
+	LastUpdatedAt               *time.Time                         `json:"lastUpdatedAt,omitempty"`
+	AutoCaptureEnabled          bool                               `json:"autoCaptureEnabled"`
+	Repositories                []TrainingDatasetRepositorySummary `json:"repositories"`
 }
 
 type TrainingDatasetRepositorySummary struct {
@@ -56,17 +59,18 @@ type TrainingRunSplitSummary struct {
 }
 
 type TrainingRunMetrics struct {
-	Threshold    float64 `json:"threshold"`
-	SampleCount  int     `json:"sampleCount"`
-	PositiveRate float64 `json:"positiveRate"`
-	Accuracy     float64 `json:"accuracy"`
-	Precision    float64 `json:"precision"`
-	Recall       float64 `json:"recall"`
-	F1Score      float64 `json:"f1Score"`
-	BrierScore   float64 `json:"brierScore"`
-	LogLoss      float64 `json:"logLoss"`
-	RocAuc       float64 `json:"rocAuc"`
-	QualityScore float64 `json:"qualityScore"`
+	Threshold                float64  `json:"threshold"`
+	SampleCount              int      `json:"sampleCount"`
+	PositiveRate             float64  `json:"positiveRate"`
+	Accuracy                 float64  `json:"accuracy"`
+	Precision                float64  `json:"precision"`
+	Recall                   float64  `json:"recall"`
+	F1Score                  float64  `json:"f1Score"`
+	BrierScore               float64  `json:"brierScore"`
+	LogLoss                  float64  `json:"logLoss"`
+	RocAuc                   float64  `json:"rocAuc"`
+	ExpectedCalibrationError *float64 `json:"expectedCalibrationError,omitempty"`
+	QualityScore             float64  `json:"qualityScore"`
 }
 
 type TrainingCalibrationBin struct {
@@ -82,17 +86,31 @@ type TrainingRunStandardizationProfile struct {
 	Scales []float64 `json:"scales"`
 }
 
+type TrainingRunFeatureImportance struct {
+	Feature    string  `json:"feature"`
+	Gain       float64 `json:"gain"`
+	Importance float64 `json:"importance"`
+}
+
 type TrainingRunModelArtifact struct {
-	ModelName       string                            `json:"modelName"`
-	ModelVersion    string                            `json:"modelVersion"`
-	FeatureVersion  string                            `json:"featureVersion"`
-	TrainedAt       string                            `json:"trainedAt"`
-	Threshold       float64                           `json:"threshold"`
-	FeatureNames    []string                          `json:"featureNames"`
-	Coefficients    []float64                         `json:"coefficients"`
-	Intercept       float64                           `json:"intercept"`
-	Standardization TrainingRunStandardizationProfile `json:"standardization"`
-	CalibrationBins []TrainingCalibrationBin          `json:"calibrationBins"`
+	ModelName          string                            `json:"modelName"`
+	ModelVersion       string                            `json:"modelVersion"`
+	FeatureVersion     string                            `json:"featureVersion"`
+	TrainedAt          string                            `json:"trainedAt"`
+	Threshold          float64                           `json:"threshold"`
+	Algorithm          string                            `json:"algorithm,omitempty"`
+	FeatureNames       []string                          `json:"featureNames"`
+	Coefficients       []float64                         `json:"coefficients,omitempty"`
+	Intercept          float64                           `json:"intercept,omitempty"`
+	Standardization    TrainingRunStandardizationProfile `json:"standardization,omitempty"`
+	BoosterJSON        string                            `json:"boosterJson,omitempty"`
+	TreeCount          int                               `json:"treeCount,omitempty"`
+	MaxDepth           int                               `json:"maxDepth,omitempty"`
+	LearningRate       float64                           `json:"learningRate,omitempty"`
+	Objective          string                            `json:"objective,omitempty"`
+	XGBoostVersion     string                            `json:"xgboostVersion,omitempty"`
+	FeatureImportances []TrainingRunFeatureImportance    `json:"featureImportances,omitempty"`
+	CalibrationBins    []TrainingCalibrationBin          `json:"calibrationBins"`
 }
 
 type TrainingRunArtifact struct {
@@ -121,12 +139,14 @@ type ListTrainingRunsResponse struct {
 }
 
 type TriggerTrainingRunRequest struct {
-	Force bool `json:"force"`
+	Force     bool   `json:"force"`
+	ModelName string `json:"modelName,omitempty"`
 }
 
 type TriggerTrainingRunResponse struct {
-	Run             TrainingRunArtifact `json:"run"`
-	ReusedCachedRun bool                `json:"reusedCachedRun"`
+	Run             TrainingRunArtifact   `json:"run"`
+	Runs            []TrainingRunArtifact `json:"runs,omitempty"`
+	ReusedCachedRun bool                  `json:"reusedCachedRun"`
 }
 
 type TrainingScorecardCheckSnapshot struct {

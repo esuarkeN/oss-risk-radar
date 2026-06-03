@@ -51,6 +51,7 @@ func main() {
 		UploadDir:           cfg.UploadDir,
 		TrainingDatasetPath: cfg.TrainingDatasetPath,
 		TrainingRunsDir:     cfg.TrainingRunsDir,
+		TrainingModelName:   cfg.TrainingModelName,
 		WorkerPollInterval:  cfg.WorkerPollInterval,
 		RetryDelay:          cfg.RetryDelay,
 		Logger:              logger,

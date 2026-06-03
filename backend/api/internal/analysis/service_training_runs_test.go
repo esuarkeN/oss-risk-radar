@@ -16,6 +16,7 @@ import (
 type fakeTrainingScorer struct {
 	calls             int
 	lastSnapshotCount int
+	lastModelName     string
 }
 
 func (f *fakeTrainingScorer) Score(_ context.Context, _ string, dependencies []analysis.DependencyRecord) (map[string]analysis.RiskProfile, error) {
@@ -28,12 +29,21 @@ func (f *fakeTrainingScorer) Score(_ context.Context, _ string, dependencies []a
 
 func (*fakeTrainingScorer) Ready(context.Context) error { return nil }
 
-func (f *fakeTrainingScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
+func (f *fakeTrainingScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord, modelName string) (analysis.TrainingRunArtifact, error) {
 	f.calls++
 	f.lastSnapshotCount = len(snapshots)
+	f.lastModelName = modelName
+	if modelName == "" {
+		modelName = "xgboost-baseline"
+	}
+	algorithm := "xgboost"
+	if modelName == "logistic-regression-baseline" {
+		algorithm = "logistic_regression"
+	}
+	ece := 0.064
 	return analysis.TrainingRunArtifact{
 		Status:       "completed",
-		ModelName:    "logistic-regression-baseline",
+		ModelName:    modelName,
 		ModelVersion: "0.2.0",
 		TrainedAt:    time.Now().UTC().Format(time.RFC3339Nano),
 		DatasetSummary: &analysis.TrainingRunDatasetSummary{
@@ -44,24 +54,27 @@ func (f *fakeTrainingScorer) TrainModel(_ context.Context, snapshots []analysis.
 		},
 		SplitSummary: &analysis.TrainingRunSplitSummary{TrainRows: 2, ValidationRows: 1, TestRows: 1},
 		Metrics: &analysis.TrainingRunMetrics{
-			Threshold:    0.5,
-			SampleCount:  4,
-			PositiveRate: 0.25,
-			Accuracy:     0.75,
-			Precision:    0.8,
-			Recall:       0.5,
-			F1Score:      0.615,
-			BrierScore:   0.188,
-			LogLoss:      0.433,
-			RocAuc:       0.801,
+			Threshold:                0.5,
+			SampleCount:              4,
+			PositiveRate:             0.25,
+			Accuracy:                 0.75,
+			Precision:                0.8,
+			Recall:                   0.5,
+			F1Score:                  0.615,
+			BrierScore:               0.188,
+			LogLoss:                  0.433,
+			RocAuc:                   0.801,
+			ExpectedCalibrationError: &ece,
+			QualityScore:             0.69,
 		},
 		CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.21, EmpiricalRate: 0.1}},
 		ModelArtifact: &analysis.TrainingRunModelArtifact{
-			ModelName:      "logistic-regression-baseline",
+			ModelName:      modelName,
 			ModelVersion:   "0.2.0",
 			FeatureVersion: "feature-set-v1",
 			TrainedAt:      time.Now().UTC().Format(time.RFC3339Nano),
 			Threshold:      0.5,
+			Algorithm:      algorithm,
 			FeatureNames:   []string{"repository_archived", "release_cadence_days"},
 			Coefficients:   []float64{0.8, -0.3},
 			Intercept:      -0.1,
@@ -69,6 +82,10 @@ func (f *fakeTrainingScorer) TrainModel(_ context.Context, snapshots []analysis.
 				Means:  []float64{0.2, 120},
 				Scales: []float64{0.4, 25},
 			},
+			BoosterJSON:     "fixture",
+			TreeCount:       1,
+			MaxDepth:        2,
+			LearningRate:    0.08,
 			CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.21, EmpiricalRate: 0.1}},
 		},
 		Message: "fixture training run",
@@ -108,8 +125,8 @@ func TestTriggerTrainingRunCachesLatestArtifact(t *testing.T) {
 	if reused {
 		t.Fatal("expected first training run not to be reused")
 	}
-	if scorer.calls != 1 {
-		t.Fatalf("expected one training call, got %d", scorer.calls)
+	if scorer.calls != 2 {
+		t.Fatalf("expected both default models to train, got %d calls", scorer.calls)
 	}
 	if firstRun.ArtifactPath == "" || firstRun.DatasetHash == "" {
 		t.Fatalf("expected cached artifact metadata, got %#v", firstRun)
@@ -125,7 +142,7 @@ func TestTriggerTrainingRunCachesLatestArtifact(t *testing.T) {
 	if !reused {
 		t.Fatal("expected second training run to reuse cache")
 	}
-	if scorer.calls != 1 {
+	if scorer.calls != 2 {
 		t.Fatalf("expected cached reuse without extra training call, got %d calls", scorer.calls)
 	}
 	if secondRun.ArtifactPath != firstRun.ArtifactPath {
@@ -155,8 +172,40 @@ func TestTriggerTrainingRunCachesLatestArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTrainingRuns returned error: %v", err)
 	}
-	if len(history) != 2 {
-		t.Fatalf("expected two cached training artifacts, got %d", len(history))
+	if len(history) != 4 {
+		t.Fatalf("expected four cached training artifacts after force rerun, got %d", len(history))
+	}
+}
+
+func TestTriggerTrainingRunCanTrainSingleRequestedModel(t *testing.T) {
+	ctx := context.Background()
+	tempDir := t.TempDir()
+	datasetPath := filepath.Join(tempDir, "training", "snapshots.json")
+	scorer := &fakeTrainingScorer{}
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion:  "heuristic-v1",
+		Store:               storage.NewMemoryStore(),
+		Scorer:              scorer,
+		UploadDir:           filepath.Join(tempDir, "uploads"),
+		TrainingDatasetPath: datasetPath,
+		TrainingRunsDir:     filepath.Join(tempDir, "training", "runs"),
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
+	})
+	writeLabeledTrainingDataset(t, datasetPath)
+
+	run, reused, err := service.TriggerTrainingRunForModel(ctx, false, "logistic-regression-baseline")
+	if err != nil {
+		t.Fatalf("TriggerTrainingRunForModel returned error: %v", err)
+	}
+	if reused {
+		t.Fatal("expected first single-model training run not to reuse cache")
+	}
+	if scorer.calls != 1 {
+		t.Fatalf("expected one training call, got %d", scorer.calls)
+	}
+	if run.ModelName != "logistic-regression-baseline" {
+		t.Fatalf("expected logistic model, got %#v", run.ModelName)
 	}
 }
 

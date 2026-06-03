@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { formatTrainingMetric, formatTrainingRate } from "@/lib/ml-evaluation";
 import { repositoryModelAnalysis, type RepositoryVariableImpact } from "@/lib/ml-repository-analysis";
-import type { DependencyRecord } from "@/lib/types";
+import type { DependencyRecord, ModelRiskProfile } from "@/lib/types";
 import { useMlEvaluationState } from "@/lib/use-ml-evaluation-state";
 
 function MetricFigure({
@@ -51,6 +51,17 @@ function impactDirection(impact: RepositoryVariableImpact) {
   return "Neutral";
 }
 
+function averageModelMetric(
+  results: ModelRiskProfile[],
+  selector: (result: ModelRiskProfile) => number | undefined,
+) {
+  const values = (results ?? []).map(selector).filter((value): value is number => value !== undefined);
+  if (!values.length) {
+    return undefined;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
 export function RepositoryMlAnalysisPanel({ dependency }: { dependency: DependencyRecord | null }) {
   const { latestRun, loading } = useMlEvaluationState();
   const modelAnalysis = useMemo(
@@ -62,12 +73,22 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
     return null;
   }
 
+  const modelResults = dependency.riskProfile?.modelResults ?? [];
+  const analysisAuroc = averageModelMetric(modelResults, (result) => result.rocAuc);
+  const analysisBrier = averageModelMetric(modelResults, (result) => result.brierScore);
+  const analysisEce = averageModelMetric(modelResults, (result) => result.expectedCalibrationError);
+  const analysisQuality = averageModelMetric(modelResults, (result) => result.qualityScore);
+  const analysisSampleCount = modelResults.reduce((maximum, result) => Math.max(maximum, result.sampleCount ?? 0), 0);
   const topImpacts = modelAnalysis?.impacts.slice(0, 8) ?? [];
-  const modelName = latestRun?.modelArtifact
-    ? `${latestRun.modelArtifact.modelName} ${latestRun.modelArtifact.modelVersion}`
-    : latestRun?.modelName
-      ? `${latestRun.modelName} ${latestRun.modelVersion}`
-      : "No cached model";
+  const modelName = modelResults.length > 1
+    ? `ML ensemble ${modelResults.map((result) => result.modelName.replace("-baseline", "")).join(" + ")}`
+    : modelResults[0]
+      ? `${modelResults[0].modelName} ${modelResults[0].modelVersion ?? ""}`.trim()
+      : latestRun?.modelArtifact
+        ? `${latestRun.modelArtifact.modelName} ${latestRun.modelArtifact.modelVersion}`
+        : latestRun?.modelName
+          ? `${latestRun.modelName} ${latestRun.modelVersion}`
+          : "No cached model";
 
   return (
     <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -78,7 +99,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{dependency.repository.fullName}</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge tone={modelAnalysis ? "low" : "neutral"}>{modelAnalysis ? "Model ready" : loading ? "Loading" : "No artifact"}</Badge>
+            <Badge tone={modelResults.length || modelAnalysis ? "low" : "neutral"}>{modelResults.length ? "Analysis scored" : modelAnalysis ? "Model ready" : loading ? "Loading" : "No artifact"}</Badge>
             <Badge tone="neutral">{modelName}</Badge>
           </div>
         </div>
@@ -87,14 +108,14 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
           <MetricFigure
             icon={<BarChart3 className="size-4" aria-hidden="true" />}
             label="AUROC"
-            value={formatTrainingMetric(latestRun?.metrics?.rocAuc)}
-            detail={`${latestRun?.metrics?.sampleCount ?? 0} held-out samples`}
+            value={formatTrainingMetric(analysisAuroc ?? latestRun?.metrics?.rocAuc)}
+            detail={`${analysisSampleCount || (latestRun?.metrics?.sampleCount ?? 0)} held-out samples`}
           />
           <MetricFigure
             icon={<Gauge className="size-4" aria-hidden="true" />}
             label="Quality"
-            value={formatTrainingMetric(latestRun?.metrics?.qualityScore)}
-            detail={`Brier ${formatTrainingMetric(latestRun?.metrics?.brierScore)}`}
+            value={formatTrainingMetric(analysisQuality ?? latestRun?.metrics?.qualityScore)}
+            detail={`Brier ${formatTrainingMetric(analysisBrier ?? latestRun?.metrics?.brierScore)} / ECE ${formatTrainingMetric(analysisEce ?? latestRun?.metrics?.expectedCalibrationError)}`}
           />
           <MetricFigure
             icon={<BrainCircuit className="size-4" aria-hidden="true" />}
@@ -138,37 +159,39 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
         </div>
       </Card>
 
-      <Card className="h-[470px]">
-        <div className="mb-4 space-y-1">
+      <Card className="flex h-[470px] flex-col">
+        <div className="mb-4 shrink-0 space-y-1">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Variable Impact</p>
           <h2 className="text-xl font-semibold tracking-tight text-foreground">Coefficient impact for this repo</h2>
           <p className="text-sm text-muted">Positive values push the model toward inactivity risk; negative values pull it down.</p>
         </div>
         {topImpacts.length ? (
-          <ResponsiveContainer width="100%" height="80%">
-            <BarChart data={topImpacts} layout="vertical" margin={{ left: 18, right: 18 }}>
-              <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.6)" />
-              <XAxis type="number" tickLine={false} axisLine={false} stroke="hsl(var(--muted))" tickFormatter={(value) => Number(value).toFixed(1)} />
-              <YAxis dataKey="label" type="category" width={150} tickLine={false} axisLine={false} stroke="hsl(var(--muted))" />
-              <Tooltip
-                formatter={(value) => formatImpact(Number(value ?? 0))}
-                labelFormatter={(label) => String(label)}
-                contentStyle={{
-                  borderRadius: 18,
-                  borderColor: "hsl(var(--border))",
-                  backgroundColor: "hsl(var(--panel))",
-                  color: "hsl(var(--foreground))",
-                }}
-              />
-              <Bar dataKey="impact" name="Local impact" radius={[8, 8, 8, 8]}>
-                {topImpacts.map((impact) => (
-                  <Cell key={impact.feature} fill={impact.impact >= 0 ? "hsl(var(--danger))" : "hsl(var(--success))"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="min-h-0 min-w-0 flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topImpacts} layout="vertical" margin={{ left: 18, right: 18 }}>
+                <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.6)" />
+                <XAxis type="number" tickLine={false} axisLine={false} stroke="hsl(var(--muted))" tickFormatter={(value) => Number(value).toFixed(1)} />
+                <YAxis dataKey="label" type="category" width={150} tickLine={false} axisLine={false} stroke="hsl(var(--muted))" />
+                <Tooltip
+                  formatter={(value) => formatImpact(Number(value ?? 0))}
+                  labelFormatter={(label) => String(label)}
+                  contentStyle={{
+                    borderRadius: 18,
+                    borderColor: "hsl(var(--border))",
+                    backgroundColor: "hsl(var(--panel))",
+                    color: "hsl(var(--foreground))",
+                  }}
+                />
+                <Bar dataKey="impact" name="Local impact" radius={[8, 8, 8, 8]}>
+                  {topImpacts.map((impact) => (
+                    <Cell key={impact.feature} fill={impact.impact >= 0 ? "hsl(var(--danger))" : "hsl(var(--success))"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         ) : (
-          <div className="flex h-[320px] items-center justify-center rounded-[1.25rem] border border-dashed border-line bg-panelAlt/70 px-4 text-center text-sm text-muted">
+          <div className="flex min-h-0 flex-1 items-center justify-center rounded-[1.25rem] border border-dashed border-line bg-panelAlt/70 px-4 text-center text-sm text-muted">
             No coefficient impact is available for the selected repository yet.
           </div>
         )}

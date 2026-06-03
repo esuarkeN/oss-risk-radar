@@ -144,6 +144,7 @@ class EvaluationMetrics(BaseModel):
     brier_score: float = Field(ge=0, le=1)
     log_loss: float = Field(ge=0)
     roc_auc: float = Field(ge=0, le=1)
+    expected_calibration_error: float = Field(ge=0, le=1)
     model_quality_score: float = Field(ge=0, le=1)
 
 
@@ -166,12 +167,19 @@ class StandardizationProfileArtifact(BaseModel):
         return self
 
 
+class FeatureImportance(BaseModel):
+    feature: str
+    gain: float = Field(ge=0)
+    importance: float = Field(ge=0, le=1)
+
+
 class LogisticRegressionModelArtifact(BaseModel):
     model_name: str
     model_version: str
     feature_version: str
     trained_at: str
     threshold: float = Field(ge=0, le=1)
+    algorithm: Literal["logistic_regression"] = "logistic_regression"
     feature_names: list[str] = Field(default_factory=list)
     coefficients: list[float] = Field(default_factory=list)
     intercept: float
@@ -188,6 +196,35 @@ class LogisticRegressionModelArtifact(BaseModel):
         if feature_count != len(self.standardization.means):
             raise ValueError("standardization profile must match the feature count")
         return self
+
+
+class XGBoostModelArtifact(BaseModel):
+    model_name: str
+    model_version: str
+    feature_version: str
+    trained_at: str
+    threshold: float = Field(ge=0, le=1)
+    algorithm: Literal["xgboost"] = "xgboost"
+    feature_names: list[str] = Field(default_factory=list)
+    booster_json: str
+    tree_count: int = Field(ge=1)
+    max_depth: int = Field(ge=1)
+    learning_rate: float = Field(gt=0)
+    objective: str = "binary:logistic"
+    xgboost_version: str = ""
+    feature_importances: list[FeatureImportance] = Field(default_factory=list)
+    calibration_bins: list[CalibrationBin] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_dimensions(self) -> "XGBoostModelArtifact":
+        if not self.feature_names:
+            raise ValueError("model artifact must include feature names")
+        if not self.booster_json.strip():
+            raise ValueError("XGBoost model artifact must include booster_json")
+        return self
+
+
+ModelArtifact = LogisticRegressionModelArtifact | XGBoostModelArtifact
 
 
 class ModelTrainRequest(BaseModel):
@@ -212,7 +249,7 @@ class ScoreModelRequest(BaseModel):
     analysis_id: str
     scoring_version: str = "model-v1"
     dependencies: list[DependencySignalPayload]
-    model_artifact: LogisticRegressionModelArtifact
+    model_artifact: ModelArtifact
 
 
 class ModelTrainResponse(BaseModel):
@@ -224,5 +261,5 @@ class ModelTrainResponse(BaseModel):
     split_summary: DatasetSplitSummary | None = None
     metrics: EvaluationMetrics | None = None
     calibration_bins: list[CalibrationBin] = Field(default_factory=list)
-    artifact: LogisticRegressionModelArtifact | None = None
+    artifact: ModelArtifact | None = None
     message: str

@@ -52,6 +52,7 @@ type ServiceOptions struct {
 	UploadDir           string
 	TrainingDatasetPath string
 	TrainingRunsDir     string
+	TrainingModelName   string
 	WorkerPollInterval  time.Duration
 	RetryDelay          time.Duration
 	Logger              *slog.Logger
@@ -68,6 +69,7 @@ type Service struct {
 	uploadDir          string
 	trainingDataset    *trainingDatasetManager
 	trainingRuns       *trainingRunArtifactManager
+	trainingModelName  string
 	workerPollInterval time.Duration
 	retryDelay         time.Duration
 	logger             *slog.Logger
@@ -88,6 +90,9 @@ func NewServiceWithOptions(options ServiceOptions) *Service {
 	if options.TrainingRunsDir == "" {
 		options.TrainingRunsDir = filepath.Join("tmp", "training", "runs")
 	}
+	if strings.TrimSpace(options.TrainingModelName) == "" {
+		options.TrainingModelName = "all"
+	}
 	if options.WorkerPollInterval <= 0 {
 		options.WorkerPollInterval = 3 * time.Second
 	}
@@ -107,6 +112,7 @@ func NewServiceWithOptions(options ServiceOptions) *Service {
 		uploadDir:          options.UploadDir,
 		trainingDataset:    newTrainingDatasetManager(options.TrainingDatasetPath),
 		trainingRuns:       newTrainingRunArtifactManager(options.TrainingRunsDir),
+		trainingModelName:  strings.TrimSpace(options.TrainingModelName),
 		workerPollInterval: options.WorkerPollInterval,
 		retryDelay:         options.RetryDelay,
 		logger:             logger,
@@ -422,7 +428,7 @@ func (s *Service) executeAnalysis(ctx context.Context, queued AnalysisRecord) (A
 		dependencies = s.enrichDependencies(ctx, dependencies)
 	}
 
-	scores, err := s.scoreDependencies(ctx, queued.ID, dependencies)
+	scores, err := s.scoreDependencies(ctx, queued.ID, dependencies, queued.Submission.ModelName)
 	if err != nil {
 		return analysisRecord, err
 	}
@@ -444,36 +450,77 @@ func (s *Service) executeAnalysis(ctx context.Context, queued AnalysisRecord) (A
 	return analysisRecord, nil
 }
 
-func (s *Service) scoreDependencies(ctx context.Context, analysisID string, dependencies []DependencyRecord) (map[string]RiskProfile, error) {
+func (s *Service) scoreDependencies(ctx context.Context, analysisID string, dependencies []DependencyRecord, modelName string) (map[string]RiskProfile, error) {
+	modelFallbackReason := ""
 	if s.trainingRuns != nil {
-		latestRun, err := s.trainingRuns.Latest()
+		modelRuns, err := s.trainingRuns.List()
 		if err != nil {
-			s.logger.Warn("failed to read latest training artifact", "analysis_id", analysisID, "error", err)
-		} else if latestRun != nil && latestRun.Status == "completed" && latestRun.ModelArtifact != nil {
+			s.logger.Warn("failed to read training artifacts", "analysis_id", analysisID, "error", err)
+		} else {
 			modelScorer, ok := s.scorer.(modelCapableScorer)
-			if ok {
-				scores, scoreErr := modelScorer.ScoreModel(ctx, analysisID, dependencies, *latestRun.ModelArtifact)
-				if scoreErr == nil {
-					return completeRiskProfiles(dependencies, scores, "model", latestRun.ModelArtifact.ModelName), nil
+			requestedModelName := strings.TrimSpace(modelName)
+			if requestedModelName == "" {
+				requestedModelName = s.trainingModelName
+			}
+			selectedRuns := latestModelArtifactsForScoring(modelRuns, requestedModelName)
+			if ok && len(selectedRuns) > 0 {
+				scoreSets := make([]modelScoreSet, 0, len(selectedRuns))
+				failedModels := []string{}
+				for _, run := range selectedRuns {
+					scores, scoreErr := modelScorer.ScoreModel(ctx, analysisID, dependencies, *run.ModelArtifact)
+					if scoreErr == nil {
+						scoreSets = append(scoreSets, modelScoreSet{
+							run:    run,
+							scores: completeRiskProfiles(dependencies, scores, "model", run.ModelArtifact.ModelName),
+						})
+						continue
+					}
+					failedModels = append(failedModels, run.ModelName)
+					s.logger.Warn(
+						"model scoring failed, continuing with remaining model scorers",
+						"analysis_id", analysisID,
+						"model_name", run.ModelArtifact.ModelName,
+						"model_version", run.ModelArtifact.ModelVersion,
+						"error", scoreErr,
+					)
+				}
+				if len(scoreSets) > 0 {
+					return combineModelScoreSets(dependencies, scoreSets, failedModels), nil
 				}
 				s.logger.Warn(
-					"model scoring failed, falling back to heuristic scoring",
+					"all model scoring failed, falling back to heuristic scoring",
 					"analysis_id", analysisID,
-					"model_name", latestRun.ModelArtifact.ModelName,
-					"model_version", latestRun.ModelArtifact.ModelVersion,
-					"error", scoreErr,
+					"model_count", len(selectedRuns),
 				)
+				modelFallbackReason = "Cached model artifacts were available, but every model scorer failed; heuristic scoring was used."
+			} else if ok {
+				modelFallbackReason = "No trained Logistic/XGBoost model artifact is cached yet; heuristic scoring was used."
 			}
 		}
 	}
 
 	scores, err := s.scorer.Score(ctx, analysisID, dependencies)
 	if err == nil {
-		return completeRiskProfiles(dependencies, scores, "heuristic", ""), nil
+		completed := completeRiskProfiles(dependencies, scores, "heuristic", "")
+		if modelFallbackReason != "" {
+			return addRiskProfileCaveat(completed, modelFallbackReason), nil
+		}
+		return completed, nil
 	}
 
 	s.logger.Warn("heuristic scoring failed, using in-process failsafe scoring", "analysis_id", analysisID, "error", err)
 	return fallbackRiskProfiles(dependencies, err), nil
+}
+
+func addRiskProfileCaveat(scores map[string]RiskProfile, caveat string) map[string]RiskProfile {
+	if caveat == "" {
+		return scores
+	}
+	for dependencyID, profile := range scores {
+		profile.Caveats = uniqueStrings(append(profile.Caveats, caveat))
+		scores[dependencyID] = profile
+	}
+	return scores
 }
 
 func (s *Service) parseUpload(upload UploadArtifact) ([]DependencyRecord, error) {
@@ -825,6 +872,7 @@ func summarizeDependencies(dependencies []DependencyRecord) AnalysisSummary {
 			"critical": 0,
 		},
 		EcosystemBreakdown: map[string]int{},
+		ScoringMethods:     SummarizeScoringMethods(dependencies),
 	}
 	for _, dependency := range dependencies {
 		if dependency.Repository != nil {

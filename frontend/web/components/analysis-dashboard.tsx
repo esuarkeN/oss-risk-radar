@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, DatabaseZap, ShieldCheck } from "lucide-react";
+import { ArrowRight, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
 
 import { EcosystemBreakdownChart } from "@/components/charts/ecosystem-breakdown-chart";
 import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart";
@@ -13,9 +13,11 @@ import { RepositoryMlAnalysisPanel } from "@/components/repository-ml-analysis-p
 import { SummaryCard } from "@/components/summary-card";
 import { useToast } from "@/components/toast-provider";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getAnalysis, getDependencies, getDependencyGraph } from "@/lib/api";
+import { createAnalysis, getAnalysis, getDependencies, getDependencyGraph } from "@/lib/api";
 import { formatDate, titleCase } from "@/lib/format";
+import { formatTrainingMetric, runtimeScoringLabel, scoringMethodsFromAnalysis } from "@/lib/ml-evaluation";
 import { isRepositoryProfile } from "@/lib/repository-profile";
 import type { AnalysisRecord, DependencyGraphResponse, DependencyRecord } from "@/lib/types";
 
@@ -26,6 +28,7 @@ interface AnalysisDashboardProps {
 const ACTIVE_STATUSES = new Set(["pending", "running"]);
 
 export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
@@ -33,6 +36,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   const [graph, setGraph] = useState<DependencyGraphResponse | null>(null);
   const [selectedDependencyId, setSelectedDependencyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rerunning, setRerunning] = useState(false);
   const previousStatusRef = useRef<string | null>(null);
   const cacheToastShownRef = useRef(false);
 
@@ -143,6 +147,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   }
 
   const analysisStatusActive = ACTIVE_STATUSES.has(analysis.status);
+  const canRerunAnalysis = analysis.submission.kind === "repository_url" && !analysisStatusActive;
   const selectedIsRepositoryProfile = isRepositoryProfile(selectedDependency);
   const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
   const dependencySummaryLabel = analysis.submission.kind === "repository_url" ? "Profiles" : "Dependencies";
@@ -158,6 +163,33 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   const scoredCaption = analysis.submission.kind === "repository_url"
     ? "Profiles with current scoring and explanation evidence."
     : "Dependencies with current scoring and explanation evidence.";
+  const scoringMethods = scoringMethodsFromAnalysis(analysis);
+  const runtimeScoring = runtimeScoringLabel(scoringMethods);
+
+  async function handleRerunAnalysis() {
+    if (!analysis || !canRerunAnalysis) {
+      return;
+    }
+
+    setRerunning(true);
+    try {
+      const response = await createAnalysis({ submission: analysis.submission, force: true });
+      toast({
+        tone: "success",
+        title: "Fresh analysis queued",
+        description: "The cached result was bypassed and a new analysis job is opening now.",
+      });
+      router.push(`/analyses/${encodeURIComponent(response.analysis.id)}?rerun=1`);
+    } catch (rerunError) {
+      toast({
+        tone: "error",
+        title: "Rerun failed",
+        description: rerunError instanceof Error ? rerunError.message : "Failed to queue a fresh analysis.",
+      });
+    } finally {
+      setRerunning(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -177,6 +209,17 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
               <p className="max-w-2xl text-sm text-warning">
                 This analysis is still processing. The dashboard refreshes automatically while parsing, enrichment, and scoring complete.
               </p>
+            ) : null}
+            {reusedFromCache ? (
+              <p className="max-w-2xl text-sm text-muted">
+                This page opened an existing completed analysis. Queue a fresh run when you want updated provider enrichment and scoring.
+              </p>
+            ) : null}
+            {canRerunAnalysis ? (
+              <Button type="button" onClick={() => void handleRerunAnalysis()} disabled={rerunning} className="w-fit">
+                <RefreshCw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} />
+                {rerunning ? "Queuing fresh run..." : "Run fresh analysis"}
+              </Button>
             ) : null}
           </div>
 
@@ -205,10 +248,14 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
               <span className="text-background/60">Mode</span>
               <span className="text-right font-medium">{titleCase(analysis.submission.kind.replaceAll("_", " "))}</span>
             </div>
+            <div className="flex justify-between gap-4 py-3 text-sm">
+              <span className="text-background/60">Runtime scoring</span>
+              <span className="text-right font-medium">{runtimeScoring}</span>
+            </div>
             {analysis.methodologyVersion ? (
-              <div className="flex justify-between gap-4 py-3 text-sm">
-                <span className="text-background/60">Method</span>
-                <span className="text-right font-medium">{analysis.methodologyVersion}</span>
+              <div className="flex justify-between gap-4 py-3 text-xs">
+                <span className="text-background/50">Methodology</span>
+                <span className="text-right font-medium text-background/75">{analysis.methodologyVersion}</span>
               </div>
             ) : null}
           </div>
@@ -224,6 +271,44 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
         <SummaryCard label="Mapped Repos" value={analysis.summary.mappedRepositoryCount} caption={mappedCaption} />
         <SummaryCard label="Scored" value={analysis.summary.scoreAvailabilityCount} caption={scoredCaption} />
       </div>
+
+      {scoringMethods.length ? (
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Scoring methods</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{runtimeScoring}</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
+                  <th className="pb-3 pr-4">Method</th>
+                  <th className="pb-3 pr-4">Role</th>
+                  <th className="pb-3 pr-4">Coverage</th>
+                  <th className="pb-3 pr-4">AUROC</th>
+                  <th className="pb-3 pr-4">Brier</th>
+                  <th className="pb-3 pr-4">ECE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scoringMethods.map((method) => (
+                  <tr key={`${method.method}-${method.label}-${method.role}`} className="border-b border-line/70 last:border-b-0">
+                    <td className="py-3 pr-4 font-semibold text-foreground">
+                      {method.label}
+                      {method.modelVersion ? <span className="ml-2 text-xs font-medium text-muted">{method.modelVersion}</span> : null}
+                    </td>
+                    <td className="py-3 pr-4 text-muted">{titleCase(method.role.replaceAll("_", " "))}</td>
+                    <td className="py-3 pr-4 text-foreground">{method.dependencyCount}/{analysis.summary.scoreAvailabilityCount || analysis.summary.dependencyCount}</td>
+                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(method.auroc)}</td>
+                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(method.brier)}</td>
+                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(method.ece)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-2">
         <RiskDistributionChart distribution={analysis.summary.riskDistribution} />

@@ -33,6 +33,10 @@ export function MlTrainingDatasetView() {
 
   const featureNames = run?.datasetSummary?.featureNames ?? [];
   const trainingRepositories = useMemo(() => dataset?.repositories ?? [], [dataset?.repositories]);
+  const totalSnapshots = dataset?.totalSnapshots ?? 0;
+  const labeledSnapshots = dataset?.labeledSnapshots ?? 0;
+  const inactiveLabelCount = dataset?.inactiveLabelCount ?? 0;
+  const realProjectLabeledSnapshots = dataset?.realProjectLabeledSnapshots ?? 0;
   const starterSizedBase = (dataset?.uniqueRepositories ?? 0) > 0 && (dataset?.uniqueRepositories ?? 0) < 100;
   const filteredTrainingRepositories = useMemo(() => {
     const normalizedSearch = repositorySearch.trim().toLowerCase();
@@ -70,10 +74,19 @@ export function MlTrainingDatasetView() {
         </Card>
       ) : null}
 
+      {totalSnapshots > 0 && labeledSnapshots === 0 ? (
+        <Card className="border-amber-300/30 bg-amber-300/10">
+          <p className="text-sm font-semibold text-foreground">Snapshots are captured, labels are not</p>
+          <p className="mt-2 text-sm text-muted">
+            Runtime repository captures feed this file, but supervised training starts only after historical rows include label_inactive_12m.
+          </p>
+        </Card>
+      ) : null}
+
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Snapshots</p>
-          <p className="text-4xl font-semibold tracking-tight text-foreground">{dataset?.totalSnapshots ?? 0}</p>
+          <p className="text-4xl font-semibold tracking-tight text-foreground">{totalSnapshots}</p>
           <p className="text-sm text-muted">Current analysis-backed training base</p>
         </Card>
         <Card className="space-y-2">
@@ -83,13 +96,13 @@ export function MlTrainingDatasetView() {
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Labeled rows</p>
-          <p className="text-4xl font-semibold tracking-tight text-foreground">{run?.datasetSummary?.labeledRows ?? 0}</p>
-          <p className="text-sm text-muted">Coverage {formatCoverage(run?.datasetSummary?.labeledRows, run?.datasetSummary?.totalRows)}</p>
+          <p className="text-4xl font-semibold tracking-tight text-foreground">{labeledSnapshots}</p>
+          <p className="text-sm text-muted">Coverage {formatCoverage(labeledSnapshots, totalSnapshots)}</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Inactive 12m rate</p>
-          <p className="text-4xl font-semibold tracking-tight text-foreground">{formatTrainingRate(run?.metrics?.positiveRate)}</p>
-          <p className="text-sm text-muted">Held-out class balance proxy</p>
+          <p className="text-4xl font-semibold tracking-tight text-foreground">{formatTrainingRate(run?.metrics?.positiveRate ?? (labeledSnapshots ? inactiveLabelCount / labeledSnapshots : undefined))}</p>
+          <p className="text-sm text-muted">{run?.metrics ? "Held-out class balance proxy" : "Dataset label balance"}</p>
         </Card>
       </section>
 
@@ -103,6 +116,7 @@ export function MlTrainingDatasetView() {
             <DetailRow label="Dataset path" value={dataset?.datasetPath ?? "tmp/training/snapshots.json"} />
             <DetailRow label="Analyses represented" value={`${dataset?.uniqueAnalyses ?? 0}`} />
             <DetailRow label="Packages represented" value={`${dataset?.uniquePackages ?? 0}`} />
+            <DetailRow label="Real-project labels" value={`${realProjectLabeledSnapshots}/${labeledSnapshots}`} />
             <DetailRow label="Last updated" value={dataset?.lastUpdatedAt ? formatDate(dataset.lastUpdatedAt) : "Unknown"} />
             <DetailRow label="Observed window" value={observedWindow} />
             <DetailRow label="Time-aware split" value={formatTrainingSplit(run)} />
@@ -117,14 +131,14 @@ export function MlTrainingDatasetView() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge tone="neutral">{featureNames.length} features</Badge>
-              <Badge tone="neutral">{run?.datasetSummary?.unlabeledRows ?? 0} unlabeled rows</Badge>
+              <Badge tone="neutral">{run?.datasetSummary?.unlabeledRows ?? Math.max(0, totalSnapshots - labeledSnapshots)} unlabeled rows</Badge>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
               <p className="text-xs uppercase tracking-[0.18em] text-muted">Rows in artifact</p>
-              <p className="mt-2 text-lg font-semibold text-foreground">{run?.datasetSummary?.totalRows ?? 0}</p>
+              <p className="mt-2 text-lg font-semibold text-foreground">{run?.datasetSummary?.totalRows ?? totalSnapshots}</p>
             </div>
             <div className="rounded-[1.25rem] border border-line bg-panelAlt/80 px-4 py-3">
               <p className="text-xs uppercase tracking-[0.18em] text-muted">Evaluation sample</p>

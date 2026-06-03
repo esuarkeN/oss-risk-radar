@@ -20,8 +20,8 @@
 
 11. Add time-aware dataset construction.
 12. Add calibration and evaluation tooling.
-13. Add the first supervised baseline, currently logistic regression for calibrated 12-month inactivity probability.
-14. Add the thesis model family: logistic regression, gradient-boosted trees/XGBoost, and a small neural network trained on the same time-aware split.
+13. Add supervised baselines for calibrated 12-month inactivity probability, currently logistic regression and XGBoost.
+14. Add the rest of the thesis model family: a small neural network trained on the same time-aware split.
 15. Add an ensemble score that combines the calibrated model probabilities and records per-model disagreement for analyst review.
 16. Add benchmark datasets and reproducible experiments.
 

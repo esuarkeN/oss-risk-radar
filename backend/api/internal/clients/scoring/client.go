@@ -89,16 +89,30 @@ type standardizationInput struct {
 }
 
 type modelArtifactInput struct {
-	ModelName       string                 `json:"model_name"`
-	ModelVersion    string                 `json:"model_version"`
-	FeatureVersion  string                 `json:"feature_version"`
-	TrainedAt       string                 `json:"trained_at"`
-	Threshold       float64                `json:"threshold"`
-	FeatureNames    []string               `json:"feature_names"`
-	Coefficients    []float64              `json:"coefficients"`
-	Intercept       float64                `json:"intercept"`
-	Standardization standardizationInput   `json:"standardization"`
-	CalibrationBins []calibrationBinOutput `json:"calibration_bins"`
+	ModelName          string                    `json:"model_name"`
+	ModelVersion       string                    `json:"model_version"`
+	FeatureVersion     string                    `json:"feature_version"`
+	TrainedAt          string                    `json:"trained_at"`
+	Threshold          float64                   `json:"threshold"`
+	Algorithm          string                    `json:"algorithm,omitempty"`
+	FeatureNames       []string                  `json:"feature_names"`
+	Coefficients       []float64                 `json:"coefficients,omitempty"`
+	Intercept          float64                   `json:"intercept,omitempty"`
+	Standardization    standardizationInput      `json:"standardization,omitempty"`
+	BoosterJSON        string                    `json:"booster_json,omitempty"`
+	TreeCount          int                       `json:"tree_count,omitempty"`
+	MaxDepth           int                       `json:"max_depth,omitempty"`
+	LearningRate       float64                   `json:"learning_rate,omitempty"`
+	Objective          string                    `json:"objective,omitempty"`
+	XGBoostVersion     string                    `json:"xgboost_version,omitempty"`
+	FeatureImportances []featureImportanceOutput `json:"feature_importances,omitempty"`
+	CalibrationBins    []calibrationBinOutput    `json:"calibration_bins"`
+}
+
+type featureImportanceOutput struct {
+	Feature    string  `json:"feature"`
+	Gain       float64 `json:"gain"`
+	Importance float64 `json:"importance"`
 }
 
 type calibrationBinOutput struct {
@@ -155,30 +169,39 @@ type trainModelResponse struct {
 		TestRows       int `json:"test_rows"`
 	} `json:"split_summary"`
 	Metrics *struct {
-		Threshold    float64 `json:"threshold"`
-		SampleCount  int     `json:"sample_count"`
-		PositiveRate float64 `json:"positive_rate"`
-		Accuracy     float64 `json:"accuracy"`
-		Precision    float64 `json:"precision"`
-		Recall       float64 `json:"recall"`
-		F1Score      float64 `json:"f1_score"`
-		BrierScore   float64 `json:"brier_score"`
-		LogLoss      float64 `json:"log_loss"`
-		RocAuc       float64 `json:"roc_auc"`
-		QualityScore float64 `json:"model_quality_score"`
+		Threshold                float64  `json:"threshold"`
+		SampleCount              int      `json:"sample_count"`
+		PositiveRate             float64  `json:"positive_rate"`
+		Accuracy                 float64  `json:"accuracy"`
+		Precision                float64  `json:"precision"`
+		Recall                   float64  `json:"recall"`
+		F1Score                  float64  `json:"f1_score"`
+		BrierScore               float64  `json:"brier_score"`
+		LogLoss                  float64  `json:"log_loss"`
+		RocAuc                   float64  `json:"roc_auc"`
+		ExpectedCalibrationError *float64 `json:"expected_calibration_error"`
+		QualityScore             float64  `json:"model_quality_score"`
 	} `json:"metrics"`
 	CalibrationBins []calibrationBinOutput `json:"calibration_bins"`
 	Artifact        *struct {
-		ModelName       string                 `json:"model_name"`
-		ModelVersion    string                 `json:"model_version"`
-		FeatureVersion  string                 `json:"feature_version"`
-		TrainedAt       string                 `json:"trained_at"`
-		Threshold       float64                `json:"threshold"`
-		FeatureNames    []string               `json:"feature_names"`
-		Coefficients    []float64              `json:"coefficients"`
-		Intercept       float64                `json:"intercept"`
-		Standardization standardizationInput   `json:"standardization"`
-		CalibrationBins []calibrationBinOutput `json:"calibration_bins"`
+		ModelName          string                    `json:"model_name"`
+		ModelVersion       string                    `json:"model_version"`
+		FeatureVersion     string                    `json:"feature_version"`
+		TrainedAt          string                    `json:"trained_at"`
+		Threshold          float64                   `json:"threshold"`
+		Algorithm          string                    `json:"algorithm"`
+		FeatureNames       []string                  `json:"feature_names"`
+		Coefficients       []float64                 `json:"coefficients"`
+		Intercept          float64                   `json:"intercept"`
+		Standardization    standardizationInput      `json:"standardization"`
+		BoosterJSON        string                    `json:"booster_json"`
+		TreeCount          int                       `json:"tree_count"`
+		MaxDepth           int                       `json:"max_depth"`
+		LearningRate       float64                   `json:"learning_rate"`
+		Objective          string                    `json:"objective"`
+		XGBoostVersion     string                    `json:"xgboost_version"`
+		FeatureImportances []featureImportanceOutput `json:"feature_importances"`
+		CalibrationBins    []calibrationBinOutput    `json:"calibration_bins"`
 	} `json:"artifact"`
 	Message string `json:"message"`
 }
@@ -223,6 +246,7 @@ func (c *Client) ScoreModel(
 			FeatureVersion: artifact.FeatureVersion,
 			TrainedAt:      artifact.TrainedAt,
 			Threshold:      artifact.Threshold,
+			Algorithm:      artifact.Algorithm,
 			FeatureNames:   append([]string(nil), artifact.FeatureNames...),
 			Coefficients:   append([]float64(nil), artifact.Coefficients...),
 			Intercept:      artifact.Intercept,
@@ -230,7 +254,14 @@ func (c *Client) ScoreModel(
 				Means:  append([]float64(nil), artifact.Standardization.Means...),
 				Scales: append([]float64(nil), artifact.Standardization.Scales...),
 			},
-			CalibrationBins: toCalibrationBinOutputs(artifact.CalibrationBins),
+			BoosterJSON:        artifact.BoosterJSON,
+			TreeCount:          artifact.TreeCount,
+			MaxDepth:           artifact.MaxDepth,
+			LearningRate:       artifact.LearningRate,
+			Objective:          artifact.Objective,
+			XGBoostVersion:     artifact.XGBoostVersion,
+			FeatureImportances: toFeatureImportanceOutputs(artifact.FeatureImportances),
+			CalibrationBins:    toCalibrationBinOutputs(artifact.CalibrationBins),
 		},
 	}
 	for _, dependency := range dependencies {
@@ -239,8 +270,11 @@ func (c *Client) ScoreModel(
 	return c.score(ctx, "/score/model", payload)
 }
 
-func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
-	payload := trainModelRequest{ModelName: "logistic-regression-baseline", Snapshots: snapshots, TrainRatio: 0.75, ValidationRatio: 0.15}
+func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSnapshotRecord, modelName string) (analysis.TrainingRunArtifact, error) {
+	if strings.TrimSpace(modelName) == "" {
+		modelName = "xgboost-baseline"
+	}
+	payload := trainModelRequest{ModelName: modelName, Snapshots: snapshots, TrainRatio: 0.75, ValidationRatio: 0.15}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return analysis.TrainingRunArtifact{}, err
@@ -295,17 +329,18 @@ func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSn
 	}
 	if decoded.Metrics != nil {
 		run.Metrics = &analysis.TrainingRunMetrics{
-			Threshold:    decoded.Metrics.Threshold,
-			SampleCount:  decoded.Metrics.SampleCount,
-			PositiveRate: decoded.Metrics.PositiveRate,
-			Accuracy:     decoded.Metrics.Accuracy,
-			Precision:    decoded.Metrics.Precision,
-			Recall:       decoded.Metrics.Recall,
-			F1Score:      decoded.Metrics.F1Score,
-			BrierScore:   decoded.Metrics.BrierScore,
-			LogLoss:      decoded.Metrics.LogLoss,
-			RocAuc:       decoded.Metrics.RocAuc,
-			QualityScore: decoded.Metrics.QualityScore,
+			Threshold:                decoded.Metrics.Threshold,
+			SampleCount:              decoded.Metrics.SampleCount,
+			PositiveRate:             decoded.Metrics.PositiveRate,
+			Accuracy:                 decoded.Metrics.Accuracy,
+			Precision:                decoded.Metrics.Precision,
+			Recall:                   decoded.Metrics.Recall,
+			F1Score:                  decoded.Metrics.F1Score,
+			BrierScore:               decoded.Metrics.BrierScore,
+			LogLoss:                  decoded.Metrics.LogLoss,
+			RocAuc:                   decoded.Metrics.RocAuc,
+			ExpectedCalibrationError: decoded.Metrics.ExpectedCalibrationError,
+			QualityScore:             decoded.Metrics.QualityScore,
 		}
 	}
 	if decoded.Artifact != nil {
@@ -315,6 +350,7 @@ func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSn
 			FeatureVersion: decoded.Artifact.FeatureVersion,
 			TrainedAt:      decoded.Artifact.TrainedAt,
 			Threshold:      decoded.Artifact.Threshold,
+			Algorithm:      decoded.Artifact.Algorithm,
 			FeatureNames:   append([]string(nil), decoded.Artifact.FeatureNames...),
 			Coefficients:   append([]float64(nil), decoded.Artifact.Coefficients...),
 			Intercept:      decoded.Artifact.Intercept,
@@ -322,7 +358,14 @@ func (c *Client) TrainModel(ctx context.Context, snapshots []analysis.TrainingSn
 				Means:  append([]float64(nil), decoded.Artifact.Standardization.Means...),
 				Scales: append([]float64(nil), decoded.Artifact.Standardization.Scales...),
 			},
-			CalibrationBins: toTrainingCalibrationBins(decoded.Artifact.CalibrationBins),
+			BoosterJSON:        decoded.Artifact.BoosterJSON,
+			TreeCount:          decoded.Artifact.TreeCount,
+			MaxDepth:           decoded.Artifact.MaxDepth,
+			LearningRate:       decoded.Artifact.LearningRate,
+			Objective:          decoded.Artifact.Objective,
+			XGBoostVersion:     decoded.Artifact.XGBoostVersion,
+			FeatureImportances: toTrainingFeatureImportances(decoded.Artifact.FeatureImportances),
+			CalibrationBins:    toTrainingCalibrationBins(decoded.Artifact.CalibrationBins),
 		}
 	}
 
@@ -407,6 +450,30 @@ func toCalibrationBinOutputs(bins []analysis.TrainingCalibrationBin) []calibrati
 			Count:             bin.Count,
 			AveragePrediction: bin.AveragePrediction,
 			EmpiricalRate:     bin.EmpiricalRate,
+		})
+	}
+	return outputs
+}
+
+func toFeatureImportanceOutputs(importances []analysis.TrainingRunFeatureImportance) []featureImportanceOutput {
+	outputs := make([]featureImportanceOutput, 0, len(importances))
+	for _, importance := range importances {
+		outputs = append(outputs, featureImportanceOutput{
+			Feature:    importance.Feature,
+			Gain:       importance.Gain,
+			Importance: importance.Importance,
+		})
+	}
+	return outputs
+}
+
+func toTrainingFeatureImportances(importances []featureImportanceOutput) []analysis.TrainingRunFeatureImportance {
+	outputs := make([]analysis.TrainingRunFeatureImportance, 0, len(importances))
+	for _, importance := range importances {
+		outputs = append(outputs, analysis.TrainingRunFeatureImportance{
+			Feature:    importance.Feature,
+			Gain:       importance.Gain,
+			Importance: importance.Importance,
 		})
 	}
 	return outputs

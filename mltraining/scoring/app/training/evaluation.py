@@ -16,6 +16,7 @@ class BinaryClassificationMetrics:
     brier_score: float
     log_loss: float
     roc_auc: float
+    expected_calibration_error: float
     model_quality_score: float
 
 
@@ -42,6 +43,33 @@ def _roc_auc(predictions: list[float], labels: list[int]) -> float:
 
     total_pairs = len(positives) * len(negatives)
     return (concordant + (0.5 * ties)) / total_pairs
+
+
+def expected_calibration_error(predictions: list[float], labels: list[int], bin_count: int = 10) -> float:
+    if len(predictions) != len(labels):
+        raise ValueError("predictions and labels must have the same length")
+    if not predictions:
+        raise ValueError("predictions cannot be empty")
+    if bin_count <= 0:
+        raise ValueError("bin_count must be positive")
+
+    clipped = [max(0.0, min(1.0, prediction)) for prediction in predictions]
+    total = len(labels)
+    error = 0.0
+    for bin_index in range(bin_count):
+        lower = bin_index / bin_count
+        upper = (bin_index + 1) / bin_count
+        if bin_index == bin_count - 1:
+            member_indexes = [index for index, prediction in enumerate(clipped) if lower <= prediction <= upper]
+        else:
+            member_indexes = [index for index, prediction in enumerate(clipped) if lower <= prediction < upper]
+        if not member_indexes:
+            continue
+
+        average_prediction = sum(clipped[index] for index in member_indexes) / len(member_indexes)
+        empirical_rate = sum(labels[index] for index in member_indexes) / len(member_indexes)
+        error += (len(member_indexes) / total) * abs(average_prediction - empirical_rate)
+    return error
 
 
 def select_decision_threshold(predictions: list[float], labels: list[int]) -> float:
@@ -71,7 +99,7 @@ def select_decision_threshold(predictions: list[float], labels: list[int]) -> fl
 
 
 def compute_binary_classification_metrics(
-    predictions: list[float], labels: list[int], threshold: float = 0.5
+    predictions: list[float], labels: list[int], threshold: float = 0.5, calibration_bin_count: int = 10
 ) -> BinaryClassificationMetrics:
     if len(predictions) != len(labels):
         raise ValueError("predictions and labels must have the same length")
@@ -98,6 +126,7 @@ def compute_binary_classification_metrics(
         for prediction, label in zip(clipped, labels, strict=True)
     ) / len(labels)
     roc_auc = _roc_auc(clipped, labels)
+    ece = expected_calibration_error(clipped, labels, bin_count=calibration_bin_count)
 
     if positive_rate <= 0 or positive_rate >= 1:
         model_quality_score = 0.0
@@ -118,5 +147,6 @@ def compute_binary_classification_metrics(
         brier_score=brier_score,
         log_loss=log_loss,
         roc_auc=roc_auc,
+        expected_calibration_error=ece,
         model_quality_score=model_quality_score,
     )

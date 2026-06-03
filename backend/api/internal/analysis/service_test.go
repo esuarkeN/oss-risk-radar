@@ -3,6 +3,7 @@ package analysis_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,19 +93,42 @@ func (f *fakeModelScorer) ScoreModel(_ context.Context, _ string, dependencies [
 	return result, nil
 }
 
-func (f *fakeModelScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord) (analysis.TrainingRunArtifact, error) {
+func (f *fakeModelScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord, modelName string) (analysis.TrainingRunArtifact, error) {
 	f.trainCalls++
+	if modelName == "" {
+		modelName = "xgboost-baseline"
+	}
+	algorithm := "xgboost"
+	if modelName == "logistic-regression-baseline" {
+		algorithm = "logistic_regression"
+	}
+	ece := 0.07
 	return analysis.TrainingRunArtifact{
 		Status:       "completed",
-		ModelName:    "logistic-regression-baseline",
+		ModelName:    modelName,
 		ModelVersion: "0.2.0",
 		TrainedAt:    time.Now().UTC().Format(time.RFC3339Nano),
+		Metrics: &analysis.TrainingRunMetrics{
+			Threshold:                0.5,
+			SampleCount:              len(snapshots),
+			PositiveRate:             0.5,
+			Accuracy:                 0.75,
+			Precision:                0.8,
+			Recall:                   0.7,
+			F1Score:                  0.746,
+			BrierScore:               0.18,
+			LogLoss:                  0.44,
+			RocAuc:                   0.82,
+			ExpectedCalibrationError: &ece,
+			QualityScore:             0.72,
+		},
 		ModelArtifact: &analysis.TrainingRunModelArtifact{
-			ModelName:      "logistic-regression-baseline",
+			ModelName:      modelName,
 			ModelVersion:   "0.2.0",
 			FeatureVersion: "feature-set-v1",
 			TrainedAt:      time.Now().UTC().Format(time.RFC3339Nano),
 			Threshold:      0.5,
+			Algorithm:      algorithm,
 			FeatureNames:   []string{"has_repository_mapping"},
 			Coefficients:   []float64{1},
 			Intercept:      0,
@@ -112,6 +136,10 @@ func (f *fakeModelScorer) TrainModel(_ context.Context, snapshots []analysis.Tra
 				Means:  []float64{0},
 				Scales: []float64{1},
 			},
+			BoosterJSON:  "fixture",
+			TreeCount:    1,
+			MaxDepth:     2,
+			LearningRate: 0.08,
 		},
 		Message: "fixture training run",
 	}, nil
@@ -187,13 +215,15 @@ func TestCreateAnalysisFromUploadParsesManifest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tempDir := t.TempDir()
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
-		MethodologyVersion: "heuristic-v1",
-		Store:              storage.NewMemoryStore(),
-		Scorer:             fakeScorer{},
-		UploadDir:          t.TempDir(),
-		WorkerPollInterval: 10 * time.Millisecond,
-		RetryDelay:         10 * time.Millisecond,
+		MethodologyVersion:  "heuristic-v1",
+		Store:               storage.NewMemoryStore(),
+		Scorer:              fakeScorer{},
+		UploadDir:           tempDir,
+		TrainingDatasetPath: tempDir + "/snapshots.json",
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
 	})
 	service.Start(ctx)
 
@@ -327,6 +357,45 @@ func TestCreateOrReuseAnalysisReturnsCompletedRepositoryMatch(t *testing.T) {
 	}
 }
 
+func TestCreateAnalysisExplainsHeuristicFallbackWhenNoModelArtifactExists(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tempDir := t.TempDir()
+	scorer := &fakeModelScorer{}
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion:  "heuristic-v1",
+		Store:               storage.NewMemoryStore(),
+		Scorer:              scorer,
+		UploadDir:           tempDir,
+		TrainingDatasetPath: tempDir + "/snapshots.json",
+		TrainingRunsDir:     tempDir + "/runs",
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
+	})
+	service.Start(ctx)
+
+	created, _, err := service.CreateAnalysis(ctx, analysis.AnalysisSubmission{Kind: analysis.SubmissionDemo})
+	if err != nil {
+		t.Fatalf("CreateAnalysis returned error: %v", err)
+	}
+	completed := waitForAnalysis(t, ctx, service, created.ID)
+
+	if scorer.modelCalls != 0 {
+		t.Fatalf("expected no model scoring calls without cached artifacts, got %d", scorer.modelCalls)
+	}
+	if scorer.heuristicCalls == 0 {
+		t.Fatal("expected heuristic scoring to handle missing model artifacts")
+	}
+	if len(completed.Dependencies) == 0 || completed.Dependencies[0].RiskProfile == nil {
+		t.Fatalf("expected scored dependencies, got %#v", completed.Dependencies)
+	}
+	caveats := strings.Join(completed.Dependencies[0].RiskProfile.Caveats, " ")
+	if !strings.Contains(caveats, "No trained Logistic/XGBoost model artifact") {
+		t.Fatalf("expected missing model artifact caveat, got %#v", completed.Dependencies[0].RiskProfile.Caveats)
+	}
+}
+
 func TestCreateAnalysisUsesLatestTrainedModelWhenAvailable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -366,14 +435,24 @@ func TestCreateAnalysisUsesLatestTrainedModelWhenAvailable(t *testing.T) {
 	if scorer.modelCalls == 0 {
 		t.Fatal("expected model scoring to be used when a trained artifact is available")
 	}
-	if scorer.trainCalls != 1 {
-		t.Fatalf("expected one training run, got %d", scorer.trainCalls)
+	if scorer.trainCalls != 2 {
+		t.Fatalf("expected both default models to train, got %d", scorer.trainCalls)
 	}
 	if len(completed.Dependencies) == 0 || completed.Dependencies[0].RiskProfile == nil {
 		t.Fatalf("expected scored dependencies, got %#v", completed.Dependencies)
 	}
 	if completed.Dependencies[0].RiskProfile.MaintenanceOutlook12MScore != 89 {
 		t.Fatalf("expected model-backed maintenance outlook, got %#v", completed.Dependencies[0].RiskProfile)
+	}
+	if len(completed.Dependencies[0].RiskProfile.ModelResults) != 2 {
+		t.Fatalf("expected both model outputs on the risk profile, got %#v", completed.Dependencies[0].RiskProfile.ModelResults)
+	}
+	firstModelResult := completed.Dependencies[0].RiskProfile.ModelResults[0]
+	if firstModelResult.RocAuc == nil || *firstModelResult.RocAuc != 0.82 || firstModelResult.ExpectedCalibrationError == nil {
+		t.Fatalf("expected model metrics to be copied onto risk profile, got %#v", firstModelResult)
+	}
+	if len(completed.Summary.ScoringMethods) < 3 {
+		t.Fatalf("expected ensemble and per-model scoring summaries, got %#v", completed.Summary.ScoringMethods)
 	}
 }
 
@@ -547,6 +626,7 @@ func TestRepositorySubmissionFiltersInvalidScorecardChecks(t *testing.T) {
 	defer cancel()
 
 	now := time.Now().UTC()
+	tempDir := t.TempDir()
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
 		MethodologyVersion: "heuristic-v1",
 		Store:              storage.NewMemoryStore(),
@@ -596,9 +676,10 @@ func TestRepositorySubmissionFiltersInvalidScorecardChecks(t *testing.T) {
 				},
 			},
 		},
-		UploadDir:          t.TempDir(),
-		WorkerPollInterval: 10 * time.Millisecond,
-		RetryDelay:         10 * time.Millisecond,
+		UploadDir:           tempDir,
+		TrainingDatasetPath: tempDir + "/snapshots.json",
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
 	})
 	service.Start(ctx)
 

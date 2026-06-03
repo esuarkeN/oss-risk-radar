@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { RiskBadge } from "@/components/risk-badge";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getDependency } from "@/lib/api";
+import { formatTrainingMetric } from "@/lib/ml-evaluation";
 import { dependencyDisplayName, dependencyDisplayVersion, isRepositoryProfile } from "@/lib/repository-profile";
 import type { DependencyRecord } from "@/lib/types";
 import { formatConfidence, formatOutlookScore, formatRiskScore } from "@/lib/utils";
@@ -49,6 +51,7 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
   }
 
   const repositoryProfile = isRepositoryProfile(dependency);
+  const modelResults = dependency.riskProfile?.modelResults ?? [];
 
   return (
     <div className="space-y-6">
@@ -87,6 +90,62 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
           </Card>
         </div>
       </Card>
+
+      {modelResults.length ? (
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Model Outputs</p>
+            <h2 className="mt-2 text-lg font-semibold text-slate-950">Side-by-side ML scoring</h2>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {modelResults.map((result) => (
+              <div key={result.modelName} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-950">{result.modelName}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{result.algorithm || "model"} {result.modelVersion ?? ""}</p>
+                  </div>
+                  <Badge tone={result.riskBucket}>{result.riskBucket}</Badge>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-slate-500">Risk</p>
+                    <p className="font-semibold text-slate-950">{formatRiskScore(result.inactivityRiskScore)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">12m outlook</p>
+                    <p className="font-semibold text-slate-950">{formatOutlookScore(result.maintenanceOutlook12mScore)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Security</p>
+                    <p className="font-semibold text-slate-950">{formatRiskScore(result.securityPostureScore)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Confidence</p>
+                    <p className="font-semibold text-slate-950">{formatConfidence(result.confidenceScore)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">AUROC</p>
+                    <p className="font-semibold text-slate-950">{formatTrainingMetric(result.rocAuc)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Brier</p>
+                    <p className="font-semibold text-slate-950">{formatTrainingMetric(result.brierScore)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">ECE</p>
+                    <p className="font-semibold text-slate-950">{formatTrainingMetric(result.expectedCalibrationError)}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Samples</p>
+                    <p className="font-semibold text-slate-950">{result.sampleCount || "Pending"}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="space-y-4">

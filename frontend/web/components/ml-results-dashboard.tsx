@@ -16,6 +16,7 @@ import { triggerTrainingRun } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import {
   calibrationDataFromRun,
+  latestCompletedRunForModel,
   logisticCoefficientsFromRun,
   formatTrainingMetric,
   formatTrainingRate,
@@ -23,6 +24,7 @@ import {
   modelMetricsFromRuns,
   metricHistoryFromRuns,
   shortTrainingHash,
+  xgboostFeatureImportancesFromRun,
 } from "@/lib/ml-evaluation";
 import { modelMetricGlossary } from "@/lib/metric-glossary";
 import { useMlEvaluationState } from "@/lib/use-ml-evaluation-state";
@@ -93,6 +95,7 @@ function AurocTable({ rows }: { rows: ReturnType<typeof modelMetricsFromRuns> })
               <th className="pb-3 pr-4">Precision</th>
               <th className="pb-3 pr-4">Recall</th>
               <th className="pb-3 pr-4">Brier</th>
+              <th className="pb-3 pr-4">ECE</th>
             </tr>
           </thead>
           <tbody>
@@ -104,6 +107,97 @@ function AurocTable({ rows }: { rows: ReturnType<typeof modelMetricsFromRuns> })
                 <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.precision)}</td>
                 <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.recall)}</td>
                 <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.brier)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.ece)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function MethodComparisonTable({ xgboostRun, logisticRun }: { xgboostRun: ReturnType<typeof latestCompletedRunForModel>; logisticRun: ReturnType<typeof latestCompletedRunForModel> }) {
+  const ensembleReady = Boolean(xgboostRun?.metrics && logisticRun?.metrics);
+  const ensembleMetric = (selector: (run: NonNullable<typeof xgboostRun>) => number | undefined) => {
+    if (!xgboostRun || !logisticRun) {
+      return undefined;
+    }
+    const values = [selector(xgboostRun), selector(logisticRun)].filter((value): value is number => value !== undefined);
+    if (!values.length) {
+      return undefined;
+    }
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  };
+  const rows: Array<{
+    method: string;
+    role: string;
+    status: string;
+    auroc?: number;
+    brier?: number;
+    ece?: number;
+    quality?: number;
+  }> = [
+    {
+      method: "ML ensemble",
+      role: "Runtime default",
+      status: ensembleReady ? "Available" : "Needs both models",
+      auroc: ensembleMetric((run) => run.metrics?.rocAuc),
+      brier: ensembleMetric((run) => run.metrics?.brierScore),
+      ece: ensembleMetric((run) => run.metrics?.expectedCalibrationError),
+      quality: ensembleMetric((run) => run.metrics?.qualityScore),
+    },
+    {
+      method: "XGBoost",
+      role: "Model scorer",
+      status: xgboostRun ? "Cached" : "Pending",
+      auroc: xgboostRun?.metrics?.rocAuc,
+      brier: xgboostRun?.metrics?.brierScore,
+      ece: xgboostRun?.metrics?.expectedCalibrationError,
+      quality: xgboostRun?.metrics?.qualityScore,
+    },
+    {
+      method: "Logistic regression",
+      role: "Model scorer",
+      status: logisticRun ? "Cached" : "Pending",
+      auroc: logisticRun?.metrics?.rocAuc,
+      brier: logisticRun?.metrics?.brierScore,
+      ece: logisticRun?.metrics?.expectedCalibrationError,
+      quality: logisticRun?.metrics?.qualityScore,
+    },
+    { method: "Heuristic baseline", role: "Reference/fallback", status: "Always available" },
+    { method: "Failsafe fallback", role: "Last resort", status: "Only after scorer failure" },
+  ];
+
+  return (
+    <Card className="space-y-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.24em] text-muted">Scoring Methods</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Runtime model comparison</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
+              <th className="pb-3 pr-4">Method</th>
+              <th className="pb-3 pr-4">Role</th>
+              <th className="pb-3 pr-4">Status</th>
+              <th className="pb-3 pr-4">AUROC</th>
+              <th className="pb-3 pr-4">Brier</th>
+              <th className="pb-3 pr-4">ECE</th>
+              <th className="pb-3 pr-4">Quality</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.method} className="border-b border-line/70 last:border-b-0">
+                <td className="py-3 pr-4 font-semibold text-foreground">{row.method}</td>
+                <td className="py-3 pr-4 text-muted">{row.role}</td>
+                <td className="py-3 pr-4 text-foreground">{row.status}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.auroc)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.brier)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.ece)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.quality)}</td>
               </tr>
             ))}
           </tbody>
@@ -149,6 +243,37 @@ function VariableEffectsTable({ rows }: { rows: ReturnType<typeof logisticCoeffi
   );
 }
 
+function XGBoostFeatureTable({ rows }: { rows: ReturnType<typeof xgboostFeatureImportancesFromRun> }) {
+  return (
+    <Card className="space-y-4">
+      <div>
+        <p className="text-xs uppercase tracking-[0.24em] text-muted">XGBoost Drivers</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Top gain importances</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
+              <th className="pb-3 pr-4">Variable</th>
+              <th className="pb-3 pr-4">Gain</th>
+              <th className="pb-3 pr-4">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.feature} className="border-b border-line/70 last:border-b-0">
+                <td className="py-3 pr-4 font-semibold text-foreground">{row.feature}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(row.gain)}</td>
+                <td className="py-3 pr-4 text-foreground">{formatTrainingRate(row.importance)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
 export function MlResultsDashboard() {
   const { dataset, latestRun: run, runs, loading, error, refresh } = useMlEvaluationState();
   const { toast } = useToast();
@@ -157,9 +282,16 @@ export function MlResultsDashboard() {
   const calibrationData = useMemo(() => calibrationDataFromRun(run), [run]);
   const metricHistory = useMemo(() => metricHistoryFromRuns(runs), [runs]);
   const modelMetricRows = useMemo(() => modelMetricsFromRuns(runs), [runs]);
-  const coefficientRows = useMemo(() => logisticCoefficientsFromRun(run), [run]);
+  const logisticRun = useMemo(() => latestCompletedRunForModel(runs, "logistic-regression-baseline"), [runs]);
+  const xgboostRun = useMemo(() => latestCompletedRunForModel(runs, "xgboost-baseline"), [runs]);
+  const coefficientRows = useMemo(() => logisticCoefficientsFromRun(logisticRun), [logisticRun]);
+  const xgboostFeatureRows = useMemo(() => xgboostFeatureImportancesFromRun(xgboostRun), [xgboostRun]);
 
-  const datasetReady = (dataset?.totalSnapshots ?? 0) > 0;
+  const totalSnapshots = dataset?.totalSnapshots ?? 0;
+  const labeledSnapshots = dataset?.labeledSnapshots ?? 0;
+  const realProjectLabeledSnapshots = dataset?.realProjectLabeledSnapshots ?? 0;
+  const datasetHasSnapshots = totalSnapshots > 0;
+  const datasetReady = labeledSnapshots > 0 && realProjectLabeledSnapshots === labeledSnapshots;
   const canTrigger = datasetReady && !running;
   const featureCount = run?.datasetSummary?.featureNames.length ?? 0;
   const observedWindow =
@@ -173,12 +305,13 @@ export function MlResultsDashboard() {
     try {
       const response = await triggerTrainingRun(force);
       await refresh({ background: true });
+      const modelCount = response.runs?.length ?? 1;
       toast({
         tone: "success",
         title: response.reusedCachedRun ? "Latest cached run reused" : "Training run finished",
         description: response.reusedCachedRun
-          ? "The dataset hash did not change, so the most recent cached artifact stayed active."
-          : "A fresh training artifact was cached and is now visible across the ML pages.",
+          ? `The dataset hash did not change, so ${modelCount} cached model artifact${modelCount === 1 ? "" : "s"} stayed active.`
+          : `${modelCount} model artifact${modelCount === 1 ? "" : "s"} were cached and are now visible across the ML pages.`,
       });
     } catch (triggerError) {
       toast({
@@ -218,8 +351,8 @@ export function MlResultsDashboard() {
           <div className="grid gap-3 md:grid-cols-3">
             <div className="rounded-lg border border-line bg-panelAlt p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Training base</p>
-              <p className="mt-2 text-lg font-semibold text-foreground">{dataset?.totalSnapshots ?? 0} snapshots</p>
-              <p className="text-sm text-muted">{dataset?.uniqueRepositories ?? 0} repositories in the current base</p>
+              <p className="mt-2 text-lg font-semibold text-foreground">{totalSnapshots} snapshots</p>
+              <p className="text-sm text-muted">{dataset?.uniqueRepositories ?? 0} repositories, {labeledSnapshots} labeled rows</p>
             </div>
             <div className="rounded-lg border border-line bg-panelAlt p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Dataset hash</p>
@@ -235,7 +368,7 @@ export function MlResultsDashboard() {
 
           <div className="flex flex-wrap gap-3">
             <Button onClick={() => void handleTrigger(false)} disabled={!canTrigger}>
-              {running ? "Running..." : run ? "Reuse latest or run" : "Run training"}
+              {running ? "Running..." : run ? "Reuse all or run" : "Run all models"}
             </Button>
             <Button className="bg-panel text-foreground hover:bg-panelAlt hover:text-foreground" onClick={() => void handleTrigger(true)} disabled={!canTrigger}>
               Force rerun
@@ -261,7 +394,13 @@ export function MlResultsDashboard() {
           </div>
 
           {!datasetReady && !loading ? (
-            <p className="text-sm text-muted">Run repository analyses first so the training snapshot base has enough data to build from.</p>
+            <p className="text-sm text-muted">
+              {datasetHasSnapshots && labeledSnapshots > 0 && realProjectLabeledSnapshots < labeledSnapshots
+                ? `Training needs every labeled row to include a GitHub repository identity. Current base: ${realProjectLabeledSnapshots}/${labeledSnapshots} labeled rows are real-project snapshots.`
+                : datasetHasSnapshots
+                ? `Training needs labeled real-project rows before it can produce a model. Current base: ${labeledSnapshots}/${totalSnapshots} snapshots include label_inactive_12m.`
+                : "Run repository analyses first so the training snapshot base has data to build from."}
+            </p>
           ) : null}
         </Card>
 
@@ -272,13 +411,13 @@ export function MlResultsDashboard() {
           </div>
 
           <p className="text-sm leading-6 text-muted">
-            The deployed trainer currently produces the calibrated logistic-regression baseline. The thesis model track should add XGBoost, a compact neural network, and a calibrated ensemble score once those artifacts are implemented.
+            The deployed trainer now runs every available model by default and keeps each artifact visible. Runtime scoring uses the available model set as an ensemble unless a single model is explicitly requested.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <DetailBlock label="Model" value={run?.modelName ? `${run.modelName} ${run.modelVersion}` : "Waiting for first run"} />
             <DetailBlock label="Observed window" value={observedWindow} />
-            <DetailBlock label="Labeled rows" value={`${run?.datasetSummary?.labeledRows ?? 0} labeled / ${run?.datasetSummary?.totalRows ?? 0} total`} />
+            <DetailBlock label="Labeled rows" value={`${run?.datasetSummary?.labeledRows ?? labeledSnapshots} labeled / ${run?.datasetSummary?.totalRows ?? totalSnapshots} total`} />
             <DetailBlock label="Feature count" value={`${featureCount} features in the latest artifact`} />
           </div>
 
@@ -287,8 +426,8 @@ export function MlResultsDashboard() {
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Badge tone="neutral">Current: logistic regression</Badge>
-            <Badge tone="neutral">Next: XGBoost</Badge>
+            <Badge tone="neutral">Default: XGBoost</Badge>
+            <Badge tone="neutral">Available: logistic regression</Badge>
             <Badge tone="neutral">Next: neural net</Badge>
             <Badge tone="neutral">Target: calibrated ensemble</Badge>
           </div>
@@ -316,19 +455,27 @@ export function MlResultsDashboard() {
             accent="primary"
           />
           <MetricCard
+            label="ECE"
+            value={formatTrainingMetric(run?.metrics?.expectedCalibrationError)}
+            detail="Calibration gap across equal-width probability bins. Lower is better."
+            accent="primary"
+          />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
             label="Inactive 12m rate"
             value={formatTrainingRate(run?.metrics?.positiveRate)}
             detail="Positive-label pressure in the current held-out slice."
             accent="secondary"
           />
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="F1" value={formatTrainingMetric(run?.metrics?.f1Score)} detail="Thresholded balance of precision and recall." />
           <MetricCard label="Precision" value={formatTrainingMetric(run?.metrics?.precision)} detail="How often predicted inactivity is correct." />
           <MetricCard label="Recall" value={formatTrainingMetric(run?.metrics?.recall)} detail="How much true inactivity the model is catching." />
-          <MetricCard label="Log loss" value={formatTrainingMetric(run?.metrics?.logLoss)} detail="Penalty for overconfident wrong probabilities." />
         </div>
+        <MetricCard label="Log loss" value={formatTrainingMetric(run?.metrics?.logLoss)} detail="Penalty for overconfident wrong probabilities." />
       </section>
+
+      <MethodComparisonTable xgboostRun={xgboostRun} logisticRun={logisticRun} />
 
       {modelMetricRows.length ? (
         <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -356,9 +503,11 @@ export function MlResultsDashboard() {
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Variable Effects</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No coefficient artifact yet</h2>
           </div>
-          <p className="text-sm text-muted">The logistic variable-effect table appears after a completed run stores feature names and coefficients.</p>
+          <p className="text-sm text-muted">Coefficient effects appear for completed logistic artifacts; XGBoost runs use the calibration and metric panels above.</p>
         </Card>
       )}
+
+      {xgboostFeatureRows.length ? <XGBoostFeatureTable rows={xgboostFeatureRows} /> : null}
 
       <section className="grid gap-6 xl:grid-cols-[1.16fr_0.84fr]">
         {calibrationData.length ? (
