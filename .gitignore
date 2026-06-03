@@ -34,7 +34,8 @@ postgres-data/
 tmp/
 
 # LaTeX build output
-tex/thesis/build/
+tex/thesis/build/*
+!tex/thesis/build/thesis.pdf
 tex/thesis/**/*.aux
 tex/thesis/**/*.bbl
 tex/thesis/**/*.bcf
