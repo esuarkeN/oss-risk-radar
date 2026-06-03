@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +11,8 @@ function parseArgs(argv) {
     targetDir: path.join("deployment", "training"),
     minimumRepositories: 40,
     minimumInactiveRepositories: 8,
+    runtimeDatasetPath: "/app/tmp/training/snapshots.json",
+    runtimeRunsDir: "/app/tmp/training/runs",
     clean: true,
   };
 
@@ -38,6 +40,16 @@ function parseArgs(argv) {
         args.minimumInactiveRepositories = parsePositiveInteger(next, "--minimum-inactive-repositories");
         index += 1;
         break;
+      case "--runtime-dataset-path":
+        if (!next) throw new Error("--runtime-dataset-path requires a value");
+        args.runtimeDatasetPath = next;
+        index += 1;
+        break;
+      case "--runtime-runs-dir":
+        if (!next) throw new Error("--runtime-runs-dir requires a value");
+        args.runtimeRunsDir = next;
+        index += 1;
+        break;
       case "--no-clean":
         args.clean = false;
         break;
@@ -63,6 +75,10 @@ function resolveRepoPath(value) {
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf-8"));
+}
+
+function writeJson(filePath, value) {
+  writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function loadSnapshots(snapshotPath) {
@@ -128,13 +144,39 @@ function validateSnapshots(snapshotPath, args) {
   };
 }
 
-function copyIfExists(source, target) {
-  if (!existsSync(source)) {
-    return false;
+function runtimeArtifactPath(runtimeRunsDir, artifactFileName) {
+  return `${runtimeRunsDir.replace(/[\\/]+$/, "")}/${artifactFileName}`;
+}
+
+function basenameFromAnyPlatform(value) {
+  const raw = `${value ?? ""}`.trim();
+  if (raw === "") {
+    return "";
   }
+  const winName = path.win32.basename(raw);
+  const posixName = path.posix.basename(raw);
+  if (winName.endsWith(".json")) {
+    return winName;
+  }
+  if (posixName.endsWith(".json")) {
+    return posixName;
+  }
+  return path.basename(raw);
+}
+
+function normalizedRunArtifact(sourcePath, args) {
+  const artifact = readJson(sourcePath);
+  const artifactFileName = basenameFromAnyPlatform(artifact.artifactPath) || path.basename(sourcePath);
+  return {
+    ...artifact,
+    datasetPath: args.runtimeDatasetPath,
+    artifactPath: runtimeArtifactPath(args.runtimeRunsDir, artifactFileName),
+  };
+}
+
+function copyRunArtifact(source, target, args) {
   mkdirSync(path.dirname(target), { recursive: true });
-  copyFileSync(source, target);
-  return true;
+  writeJson(target, normalizedRunArtifact(source, args));
 }
 
 function stageArtifacts(args) {
@@ -159,14 +201,19 @@ function stageArtifacts(args) {
   mkdirSync(path.join(targetDir, "runs"), { recursive: true });
   copyFileSync(sourceSnapshotPath, path.join(targetDir, "snapshots.json"));
 
-  const latestCopied = copyIfExists(sourceLatestRunPath, path.join(targetDir, "latest-run.json"));
+  let latestCopied = false;
+  if (existsSync(sourceLatestRunPath)) {
+    copyRunArtifact(sourceLatestRunPath, path.join(targetDir, "latest-run.json"), args);
+    latestCopied = true;
+  }
+
   let runCount = 0;
   if (existsSync(sourceRunsDir)) {
     for (const item of readdirSync(sourceRunsDir, { withFileTypes: true })) {
       if (item.isDirectory() || path.extname(item.name) !== ".json") {
         continue;
       }
-      copyFileSync(path.join(sourceRunsDir, item.name), path.join(targetDir, "runs", item.name));
+      copyRunArtifact(path.join(sourceRunsDir, item.name), path.join(targetDir, "runs", item.name), args);
       runCount += 1;
     }
   }
