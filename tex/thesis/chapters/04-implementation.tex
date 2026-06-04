@@ -1,8 +1,13 @@
 \chapter{Implementation}
 \label{chap:implementation}
 
-Document the implemented system architecture, backend services, frontend views,
-scoring components, and data flow.
+- I started with a selection of languages to best build a model on which we can train our gathered data which we desribed in the previous chapter. 
+- So as the main language for our model we used Pyhton as it has the best support for machine learning and data science \cite{gfg_python_ml} \cite{stackoverflow_python_2025}. So for the data gathering and cleaning we used JavaScript as it is the most used language on GitHub and npm \cite{github_language_stats} \cite{npm_language_stats} as well as we are using Typescript for our website.
+- We first build a snapshot of our dataset with 30 repos like next or request to test our ml learning scripts
+- The Logistic Regression model was used as a baseline to test the featuresets we created and to see if they are useful for our task. and also to see if some of our initialy features maybe be to broad and not cohere and not represent the data we gather from the real life, for example the open issues feature was to braod as well active repos such as postgres/postgres have a lot of issues but get a negative score for them as logistic regression analyzed it as a negative feature as inactive also have a lot of unsolved issues. Also some repos are mirrors of the origial repos so we have to actually well look in the description to see if its a mirror and handle it differently as mirrors dont have issues.
+- With that in mind I itterated more over the actualy data to 
+- We used the featuresets to train our XGBoost model and also the neural net how we done it is seen in the code here. first the baseline is trained with the logistic regression and then we use the same featuresets to train the XGBoost and the neural net. We also used cross validation to see how well our model generalizes to unseen data and to avoid overfitting. We also used grid search to find the best hyperparameters for our models.
+- Then we implement the scoring system and the website to show the scores of the repos and to show the features that contribute to the score. We also used SHAP values to explain the predictions of our model and to see which features are the most important for our model. We also used a dashboard to show the scores of the repos and to show the features that contribute to the score.
 
 \section{Example Listing}
 
