@@ -4,7 +4,7 @@
 
 - mocked submission flow
 - Go orchestration service
-- Python heuristic scoring
+- Python feature extraction and model scoring
 - Next.js dashboard with overview and detail views
 - local Docker Compose stack
 

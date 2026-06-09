@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { CalibrationCurveChart } from "@/components/charts/calibration-curve-chart";
 import { LogisticCoefficientChart } from "@/components/charts/logistic-coefficient-chart";
@@ -11,8 +11,6 @@ import { InfoChipGroup } from "@/components/info-chip-group";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useToast } from "@/components/toast-provider";
-import { triggerTrainingRun } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import {
   calibrationDataFromRun,
@@ -141,7 +139,7 @@ function MethodComparisonTable({ xgboostRun, logisticRun }: { xgboostRun: Return
     {
       method: "ML ensemble",
       role: "Runtime default",
-      status: ensembleReady ? "Available" : "Needs both models",
+      status: ensembleReady ? "Available" : "Needs both artifacts",
       auroc: ensembleMetric((run) => run.metrics?.rocAuc),
       brier: ensembleMetric((run) => run.metrics?.brierScore),
       ece: ensembleMetric((run) => run.metrics?.expectedCalibrationError),
@@ -149,8 +147,8 @@ function MethodComparisonTable({ xgboostRun, logisticRun }: { xgboostRun: Return
     },
     {
       method: "XGBoost",
-      role: "Model scorer",
-      status: xgboostRun ? "Cached" : "Pending",
+      role: "Artifact scorer",
+      status: xgboostRun ? "Cached" : "Required",
       auroc: xgboostRun?.metrics?.rocAuc,
       brier: xgboostRun?.metrics?.brierScore,
       ece: xgboostRun?.metrics?.expectedCalibrationError,
@@ -158,15 +156,13 @@ function MethodComparisonTable({ xgboostRun, logisticRun }: { xgboostRun: Return
     },
     {
       method: "Logistic regression",
-      role: "Model scorer",
-      status: logisticRun ? "Cached" : "Pending",
+      role: "Artifact scorer",
+      status: logisticRun ? "Cached" : "Required",
       auroc: logisticRun?.metrics?.rocAuc,
       brier: logisticRun?.metrics?.brierScore,
       ece: logisticRun?.metrics?.expectedCalibrationError,
       quality: logisticRun?.metrics?.qualityScore,
     },
-    { method: "Heuristic baseline", role: "Reference/fallback", status: "Always available" },
-    { method: "Failsafe fallback", role: "Last resort", status: "Only after scorer failure" },
   ];
 
   return (
@@ -276,14 +272,12 @@ function XGBoostFeatureTable({ rows }: { rows: ReturnType<typeof xgboostFeatureI
 
 export function MlResultsDashboard() {
   const { dataset, latestRun: run, runs, loading, error, refresh } = useMlEvaluationState();
-  const { toast } = useToast();
-  const [running, setRunning] = useState(false);
 
   const calibrationData = useMemo(() => calibrationDataFromRun(run), [run]);
   const metricHistory = useMemo(() => metricHistoryFromRuns(runs), [runs]);
   const modelMetricRows = useMemo(() => modelMetricsFromRuns(runs), [runs]);
-  const logisticRun = useMemo(() => latestCompletedRunForModel(runs, "logistic-regression-baseline"), [runs]);
-  const xgboostRun = useMemo(() => latestCompletedRunForModel(runs, "xgboost-baseline"), [runs]);
+  const logisticRun = useMemo(() => latestCompletedRunForModel(runs, "logistic-regression-full-history"), [runs]);
+  const xgboostRun = useMemo(() => latestCompletedRunForModel(runs, "xgboost-full-history"), [runs]);
   const coefficientRows = useMemo(() => logisticCoefficientsFromRun(logisticRun), [logisticRun]);
   const xgboostFeatureRows = useMemo(() => xgboostFeatureImportancesFromRun(xgboostRun), [xgboostRun]);
 
@@ -292,37 +286,11 @@ export function MlResultsDashboard() {
   const realProjectLabeledSnapshots = dataset?.realProjectLabeledSnapshots ?? 0;
   const datasetHasSnapshots = totalSnapshots > 0;
   const datasetReady = labeledSnapshots > 0 && realProjectLabeledSnapshots === labeledSnapshots;
-  const canTrigger = datasetReady && !running;
   const featureCount = run?.datasetSummary?.featureNames.length ?? 0;
   const observedWindow =
     run?.datasetSummary?.earliestObservedAt && run?.datasetSummary?.latestObservedAt
       ? `${formatDate(run.datasetSummary.earliestObservedAt)} to ${formatDate(run.datasetSummary.latestObservedAt)}`
       : "Waiting for first completed artifact";
-
-  async function handleTrigger(force = false) {
-    setRunning(true);
-
-    try {
-      const response = await triggerTrainingRun(force);
-      await refresh({ background: true });
-      const modelCount = response.runs?.length ?? 1;
-      toast({
-        tone: "success",
-        title: response.reusedCachedRun ? "Latest cached run reused" : "Training run finished",
-        description: response.reusedCachedRun
-          ? `The dataset hash did not change, so ${modelCount} cached model artifact${modelCount === 1 ? "" : "s"} stayed active.`
-          : `${modelCount} model artifact${modelCount === 1 ? "" : "s"} were cached and are now visible across the ML pages.`,
-      });
-    } catch (triggerError) {
-      toast({
-        tone: "error",
-        title: "Training trigger failed",
-        description: triggerError instanceof Error ? triggerError.message : "The ML training endpoint did not return a usable artifact.",
-      });
-    } finally {
-      setRunning(false);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -341,9 +309,9 @@ export function MlResultsDashboard() {
           <div className="space-y-3">
             <StatusPill status={run?.status} />
             <div>
-              <h2 className="text-3xl font-semibold tracking-tight text-foreground">Latest training result without the dashboard sprawl.</h2>
+              <h2 className="text-3xl font-semibold tracking-tight text-foreground">Latest staged model artifact without the dashboard sprawl.</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-                Trigger training here, keep the key metrics above the fold, and push data inspection and artifact history into their own pages.
+                Review the staged model artifact bundle, keep the key metrics above the fold, and inspect data and artifact history on focused pages.
               </p>
             </div>
           </div>
@@ -362,17 +330,11 @@ export function MlResultsDashboard() {
             <div className="rounded-lg border border-line bg-panelAlt p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Time-aware split</p>
               <p className="mt-2 text-lg font-semibold text-foreground">{formatTrainingSplit(run)}</p>
-              <p className="text-sm text-muted">{run?.metrics ? `${run.metrics.sampleCount} held-out samples evaluated` : "Split appears after the first completed run"}</p>
+              <p className="text-sm text-muted">{run?.metrics ? `${run.metrics.sampleCount} held-out samples evaluated` : "Split appears after the first staged artifact"}</p>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => void handleTrigger(false)} disabled={!canTrigger}>
-              {running ? "Running..." : run ? "Reuse all or run" : "Run all models"}
-            </Button>
-            <Button className="bg-panel text-foreground hover:bg-panelAlt hover:text-foreground" onClick={() => void handleTrigger(true)} disabled={!canTrigger}>
-              Force rerun
-            </Button>
             <Link
               href="/ml-evaluation/dataset"
               className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:bg-panelAlt"
@@ -407,11 +369,11 @@ export function MlResultsDashboard() {
         <Card className="space-y-5">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Latest Artifact</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">What changed in the current training picture</h2>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">What changed in the current artifact bundle</h2>
           </div>
 
           <p className="text-sm leading-6 text-muted">
-            The deployed trainer now runs every available model by default and keeps each artifact visible. Runtime scoring uses the available model set as an ensemble unless a single model is explicitly requested.
+            The deployed bundle is produced offline from the notebook and artifact scripts. Runtime scoring uses the full-history ensemble when a GHArchive cache row exists and the cold-start ensemble when it does not; missing artifacts are configuration errors.
           </p>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -422,14 +384,14 @@ export function MlResultsDashboard() {
           </div>
 
           <p className="text-sm text-muted">
-            {run?.message ?? "Trigger the first run to cache a live evaluation artifact and populate the dataset and run-history pages."}
+            {run?.message ?? "Run the offline notebook or `npm run ml:bootstrap:foundation -- --gharchive-source <path>` to export staged artifacts for this page."}
           </p>
 
           <div className="flex flex-wrap gap-2">
-            <Badge tone="neutral">Default: XGBoost</Badge>
-            <Badge tone="neutral">Available: logistic regression</Badge>
-            <Badge tone="neutral">Next: neural net</Badge>
-            <Badge tone="neutral">Target: calibrated ensemble</Badge>
+            <Badge tone="neutral">Runtime: artifact-only</Badge>
+            <Badge tone="neutral">Default: calibrated ensemble</Badge>
+            <Badge tone="neutral">Full-history + cold-start</Badge>
+            <Badge tone="neutral">Required: staged bundle</Badge>
           </div>
         </Card>
       </section>
@@ -488,7 +450,7 @@ export function MlResultsDashboard() {
             <p className="text-xs uppercase tracking-[0.24em] text-muted">AUROC Table</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No evaluated model runs yet</h2>
           </div>
-          <p className="text-sm text-muted">A completed training run with held-out labels will populate the AUROC and classification table.</p>
+          <p className="text-sm text-muted">A staged artifact with held-out labels will populate the AUROC and classification table.</p>
         </Card>
       )}
 
@@ -541,7 +503,7 @@ export function MlResultsDashboard() {
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Metric history</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No cached run history yet</h2>
           </div>
-          <p className="text-sm text-muted">Once you have more than one cached training run with metrics, the run-history trend chart will appear here.</p>
+          <p className="text-sm text-muted">Once you have more than one staged artifact with metrics, the run-history trend chart will appear here.</p>
         </Card>
       )}
     </div>

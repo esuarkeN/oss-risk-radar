@@ -22,7 +22,6 @@ import (
 var ErrNotFound = errors.New("resource not found")
 
 type Scorer interface {
-	Score(ctx context.Context, analysisID string, dependencies []DependencyRecord) (map[string]RiskProfile, error)
 	Ready(ctx context.Context) error
 }
 
@@ -42,38 +41,40 @@ type Store interface {
 }
 
 type ServiceOptions struct {
-	MethodologyVersion  string
-	Store               Store
-	Scorer              Scorer
-	ManifestFetcher     providers.GitHubClient
-	PackageResolver     providers.DepsDevClient
-	RepositoryClient    providers.GitHubClient
-	ScorecardClient     providers.ScorecardClient
-	UploadDir           string
-	TrainingDatasetPath string
-	TrainingRunsDir     string
-	TrainingModelName   string
-	WorkerPollInterval  time.Duration
-	RetryDelay          time.Duration
-	Logger              *slog.Logger
+	MethodologyVersion       string
+	Store                    Store
+	Scorer                   Scorer
+	ManifestFetcher          providers.GitHubClient
+	PackageResolver          providers.DepsDevClient
+	RepositoryClient         providers.GitHubClient
+	ScorecardClient          providers.ScorecardClient
+	UploadDir                string
+	TrainingDatasetPath      string
+	TrainingFeatureCachePath string
+	TrainingRunsDir          string
+	TrainingModelName        string
+	WorkerPollInterval       time.Duration
+	RetryDelay               time.Duration
+	Logger                   *slog.Logger
 }
 
 type Service struct {
-	methodologyVersion string
-	store              Store
-	scorer             Scorer
-	manifestFetcher    providers.GitHubClient
-	packageResolver    providers.DepsDevClient
-	repositoryClient   providers.GitHubClient
-	scorecardClient    providers.ScorecardClient
-	uploadDir          string
-	trainingDataset    *trainingDatasetManager
-	trainingRuns       *trainingRunArtifactManager
-	trainingModelName  string
-	workerPollInterval time.Duration
-	retryDelay         time.Duration
-	logger             *slog.Logger
-	startOnce          sync.Once
+	methodologyVersion   string
+	store                Store
+	scorer               Scorer
+	manifestFetcher      providers.GitHubClient
+	packageResolver      providers.DepsDevClient
+	repositoryClient     providers.GitHubClient
+	scorecardClient      providers.ScorecardClient
+	uploadDir            string
+	trainingDataset      *trainingDatasetManager
+	trainingFeatureCache *repositoryFeatureCacheManager
+	trainingRuns         *trainingRunArtifactManager
+	trainingModelName    string
+	workerPollInterval   time.Duration
+	retryDelay           time.Duration
+	logger               *slog.Logger
+	startOnce            sync.Once
 }
 
 func NewServiceWithOptions(options ServiceOptions) *Service {
@@ -86,6 +87,9 @@ func NewServiceWithOptions(options ServiceOptions) *Service {
 	}
 	if options.TrainingDatasetPath == "" {
 		options.TrainingDatasetPath = filepath.Join("tmp", "training", "snapshots.json")
+	}
+	if options.TrainingFeatureCachePath == "" {
+		options.TrainingFeatureCachePath = filepath.Join("tmp", "training", "repository-feature-cache.json")
 	}
 	if options.TrainingRunsDir == "" {
 		options.TrainingRunsDir = filepath.Join("tmp", "training", "runs")
@@ -102,20 +106,21 @@ func NewServiceWithOptions(options ServiceOptions) *Service {
 	_ = os.MkdirAll(options.UploadDir, 0o755)
 
 	return &Service{
-		methodologyVersion: options.MethodologyVersion,
-		store:              options.Store,
-		scorer:             options.Scorer,
-		manifestFetcher:    options.ManifestFetcher,
-		packageResolver:    options.PackageResolver,
-		repositoryClient:   options.RepositoryClient,
-		scorecardClient:    options.ScorecardClient,
-		uploadDir:          options.UploadDir,
-		trainingDataset:    newTrainingDatasetManager(options.TrainingDatasetPath),
-		trainingRuns:       newTrainingRunArtifactManager(options.TrainingRunsDir),
-		trainingModelName:  strings.TrimSpace(options.TrainingModelName),
-		workerPollInterval: options.WorkerPollInterval,
-		retryDelay:         options.RetryDelay,
-		logger:             logger,
+		methodologyVersion:   options.MethodologyVersion,
+		store:                options.Store,
+		scorer:               options.Scorer,
+		manifestFetcher:      options.ManifestFetcher,
+		packageResolver:      options.PackageResolver,
+		repositoryClient:     options.RepositoryClient,
+		scorecardClient:      options.ScorecardClient,
+		uploadDir:            options.UploadDir,
+		trainingDataset:      newTrainingDatasetManager(options.TrainingDatasetPath),
+		trainingFeatureCache: newRepositoryFeatureCacheManager(options.TrainingFeatureCachePath),
+		trainingRuns:         newTrainingRunArtifactManager(options.TrainingRunsDir),
+		trainingModelName:    strings.TrimSpace(options.TrainingModelName),
+		workerPollInterval:   options.WorkerPollInterval,
+		retryDelay:           options.RetryDelay,
+		logger:               logger,
 	}
 }
 
@@ -249,6 +254,9 @@ func (s *Service) findReusableAnalysis(ctx context.Context, submission AnalysisS
 		if len(existing.Dependencies) == 0 {
 			continue
 		}
+		if !s.reusableAnalysisHasCurrentModelResults(existing, submission.ModelName) {
+			continue
+		}
 
 		job, err := s.reusedJobForAnalysis(ctx, existing)
 		if err != nil {
@@ -258,6 +266,98 @@ func (s *Service) findReusableAnalysis(ctx context.Context, submission AnalysisS
 	}
 
 	return AnalysisRecord{}, JobRecord{}, false, nil
+}
+
+func (s *Service) reusableAnalysisHasCurrentModelResults(existing AnalysisRecord, requestedModelName string) bool {
+	if s.trainingRuns == nil {
+		return true
+	}
+	if _, ok := s.scorer.(modelCapableScorer); !ok {
+		return true
+	}
+
+	modelRuns, err := s.trainingRuns.List()
+	if err != nil {
+		s.logger.Warn("failed to read training artifacts while checking reusable analysis", "analysis_id", existing.ID, "error", err)
+		return true
+	}
+
+	selectedRuns := latestModelArtifactsForScoring(modelRuns, modelNameForScoring(requestedModelName, s.trainingModelName))
+	if len(selectedRuns) == 0 {
+		return true
+	}
+
+	expectedByRegime := map[string][]modelArtifactIdentity{}
+	for _, run := range selectedRuns {
+		regime := modelArtifactFeatureRegime(run)
+		expectedByRegime[regime] = append(expectedByRegime[regime], modelArtifactIdentityFromRun(run))
+	}
+
+	for _, dependency := range existing.Dependencies {
+		if dependency.RiskProfile == nil {
+			return false
+		}
+		if !riskProfileHasAnyModelArtifactSet(*dependency.RiskProfile, expectedByRegime) {
+			return false
+		}
+	}
+	return true
+}
+
+func modelNameForScoring(modelName string, fallback string) string {
+	trimmed := strings.TrimSpace(modelName)
+	if trimmed != "" {
+		return trimmed
+	}
+	return fallback
+}
+
+type modelArtifactIdentity struct {
+	modelName    string
+	modelVersion string
+	trainedAt    string
+}
+
+func modelArtifactIdentityFromRun(run TrainingRunArtifact) modelArtifactIdentity {
+	return modelArtifactIdentity{
+		modelName:    run.ModelName,
+		modelVersion: run.ModelVersion,
+		trainedAt:    run.TrainedAt,
+	}
+}
+
+func riskProfileHasModelArtifacts(profile RiskProfile, expected []modelArtifactIdentity) bool {
+	if len(expected) == 0 {
+		return true
+	}
+
+	available := make(map[modelArtifactIdentity]bool, len(profile.ModelResults))
+	for _, result := range profile.ModelResults {
+		available[modelArtifactIdentity{
+			modelName:    result.ModelName,
+			modelVersion: result.ModelVersion,
+			trainedAt:    result.TrainedAt,
+		}] = true
+	}
+
+	for _, artifact := range expected {
+		if !available[artifact] {
+			return false
+		}
+	}
+	return true
+}
+
+func riskProfileHasAnyModelArtifactSet(profile RiskProfile, expectedByRegime map[string][]modelArtifactIdentity) bool {
+	if len(expectedByRegime) == 0 {
+		return true
+	}
+	for _, expected := range expectedByRegime {
+		if riskProfileHasModelArtifacts(profile, expected) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) reusedJobForAnalysis(ctx context.Context, existing AnalysisRecord) (JobRecord, error) {
@@ -451,76 +551,90 @@ func (s *Service) executeAnalysis(ctx context.Context, queued AnalysisRecord) (A
 }
 
 func (s *Service) scoreDependencies(ctx context.Context, analysisID string, dependencies []DependencyRecord, modelName string) (map[string]RiskProfile, error) {
-	modelFallbackReason := ""
-	if s.trainingRuns != nil {
-		modelRuns, err := s.trainingRuns.List()
+	if s.trainingRuns == nil {
+		return nil, errors.New("staged model artifacts are required for scoring")
+	}
+	modelScorer, ok := s.scorer.(modelCapableScorer)
+	if !ok {
+		return nil, errors.New("configured scorer does not support model artifacts")
+	}
+
+	modelRuns, err := s.trainingRuns.List()
+	if err != nil {
+		return nil, fmt.Errorf("read staged model artifacts: %w", err)
+	}
+	requestedModelName := modelNameForScoring(modelName, s.trainingModelName)
+	selectedRuns := latestModelArtifactsForScoring(modelRuns, requestedModelName)
+	if len(selectedRuns) == 0 {
+		return nil, errors.New("no staged Logistic/XGBoost model artifact is available for scoring")
+	}
+
+	dependenciesByRegime := map[string][]DependencyRecord{}
+	for _, dependency := range dependencies {
+		featureRegime := dependency.FeatureRegime
+		if featureRegime == "" {
+			featureRegime = featureRegimeColdStart
+		}
+		dependenciesByRegime[featureRegime] = append(dependenciesByRegime[featureRegime], dependency)
+	}
+
+	combinedResults := make(map[string]RiskProfile, len(dependencies))
+	allFailedModels := []string{}
+	for _, featureRegime := range []string{featureRegimeFullHistory, featureRegimeColdStart} {
+		regimeDependencies := dependenciesByRegime[featureRegime]
+		if len(regimeDependencies) == 0 {
+			continue
+		}
+		regimeRuns := filterModelArtifactsByFeatureRegime(selectedRuns, featureRegime)
+		if len(regimeRuns) == 0 {
+			return nil, fmt.Errorf("no staged %s model artifact is available for scoring", featureRegime)
+		}
+
+		scoreSets := make([]modelScoreSet, 0, len(regimeRuns))
+		failedModels := []string{}
+		for _, run := range regimeRuns {
+			scores, scoreErr := modelScorer.ScoreModel(ctx, analysisID, regimeDependencies, *run.ModelArtifact)
+			if scoreErr == nil {
+				completed, completeErr := requireCompleteRiskProfiles(regimeDependencies, scores, "model", run.ModelArtifact.ModelName)
+				if completeErr != nil {
+					scoreErr = completeErr
+				} else {
+					scoreSets = append(scoreSets, modelScoreSet{
+						run:    run,
+						scores: completed,
+					})
+					continue
+				}
+			}
+			failedModels = append(failedModels, run.ModelName)
+			s.logger.Warn(
+				"model scoring failed",
+				"analysis_id", analysisID,
+				"feature_regime", featureRegime,
+				"model_name", run.ModelArtifact.ModelName,
+				"model_version", run.ModelArtifact.ModelVersion,
+				"error", scoreErr,
+			)
+		}
+		if len(scoreSets) == 0 {
+			return nil, fmt.Errorf("all staged %s model scorers failed: %s", featureRegime, strings.Join(failedModels, ", "))
+		}
+		regimeResults, err := combineModelScoreSets(regimeDependencies, scoreSets, failedModels)
 		if err != nil {
-			s.logger.Warn("failed to read training artifacts", "analysis_id", analysisID, "error", err)
-		} else {
-			modelScorer, ok := s.scorer.(modelCapableScorer)
-			requestedModelName := strings.TrimSpace(modelName)
-			if requestedModelName == "" {
-				requestedModelName = s.trainingModelName
-			}
-			selectedRuns := latestModelArtifactsForScoring(modelRuns, requestedModelName)
-			if ok && len(selectedRuns) > 0 {
-				scoreSets := make([]modelScoreSet, 0, len(selectedRuns))
-				failedModels := []string{}
-				for _, run := range selectedRuns {
-					scores, scoreErr := modelScorer.ScoreModel(ctx, analysisID, dependencies, *run.ModelArtifact)
-					if scoreErr == nil {
-						scoreSets = append(scoreSets, modelScoreSet{
-							run:    run,
-							scores: completeRiskProfiles(dependencies, scores, "model", run.ModelArtifact.ModelName),
-						})
-						continue
-					}
-					failedModels = append(failedModels, run.ModelName)
-					s.logger.Warn(
-						"model scoring failed, continuing with remaining model scorers",
-						"analysis_id", analysisID,
-						"model_name", run.ModelArtifact.ModelName,
-						"model_version", run.ModelArtifact.ModelVersion,
-						"error", scoreErr,
-					)
-				}
-				if len(scoreSets) > 0 {
-					return combineModelScoreSets(dependencies, scoreSets, failedModels), nil
-				}
-				s.logger.Warn(
-					"all model scoring failed, falling back to heuristic scoring",
-					"analysis_id", analysisID,
-					"model_count", len(selectedRuns),
-				)
-				modelFallbackReason = "Cached model artifacts were available, but every model scorer failed; heuristic scoring was used."
-			} else if ok {
-				modelFallbackReason = "No trained Logistic/XGBoost model artifact is cached yet; heuristic scoring was used."
-			}
+			return nil, err
 		}
-	}
-
-	scores, err := s.scorer.Score(ctx, analysisID, dependencies)
-	if err == nil {
-		completed := completeRiskProfiles(dependencies, scores, "heuristic", "")
-		if modelFallbackReason != "" {
-			return addRiskProfileCaveat(completed, modelFallbackReason), nil
+		for dependencyID, profile := range regimeResults {
+			if featureRegime == featureRegimeColdStart {
+				profile.Caveats = uniqueStrings(append(profile.Caveats, "No staged GHArchive feature cache row was available, so this score used the cold-start model."))
+			}
+			combinedResults[dependencyID] = profile
 		}
-		return completed, nil
+		allFailedModels = append(allFailedModels, failedModels...)
 	}
-
-	s.logger.Warn("heuristic scoring failed, using in-process failsafe scoring", "analysis_id", analysisID, "error", err)
-	return fallbackRiskProfiles(dependencies, err), nil
-}
-
-func addRiskProfileCaveat(scores map[string]RiskProfile, caveat string) map[string]RiskProfile {
-	if caveat == "" {
-		return scores
+	if len(combinedResults) == 0 {
+		return nil, fmt.Errorf("all staged model scorers failed: %s", strings.Join(allFailedModels, ", "))
 	}
-	for dependencyID, profile := range scores {
-		profile.Caveats = uniqueStrings(append(profile.Caveats, caveat))
-		scores[dependencyID] = profile
-	}
-	return scores
+	return combinedResults, nil
 }
 
 func (s *Service) parseUpload(upload UploadArtifact) ([]DependencyRecord, error) {
@@ -626,6 +740,7 @@ func (s *Service) enrichDependencies(ctx context.Context, dependencies []Depende
 				dependency.Scorecard = providerScorecardToAnalysis(*scorecardSnapshot)
 			}
 		}
+		s.applyHistoricalFeatures(&dependency)
 		dependency.RawSignals = buildRawSignals(dependency)
 		dependency.RawSignalsAvailable = len(dependency.RawSignals) > 0
 		dependencies[index] = dependency
@@ -749,6 +864,9 @@ func providerRepositoryToAnalysis(snapshot providers.RepositorySnapshot) *Reposi
 		RecentContributors90d:         snapshot.RecentContributors90d,
 		ContributorConcentration:      snapshot.ContributorConcentration,
 		PullRequestMedianResponseDays: snapshot.PullRequestMedianResponseDays,
+		PullRequestMedianMergeDays:    snapshot.PullRequestMedianMergeDays,
+		IssueResolutionMedianDays:     snapshot.IssueResolutionMedianDays,
+		StaleIssueShare:               snapshot.StaleIssueShare,
 		LastPushAgeDays:               snapshot.LastPushAgeDays,
 		LastReleaseAgeDays:            snapshot.LastReleaseAgeDays,
 		ReleaseCadenceDays:            snapshot.ReleaseCadenceDays,
@@ -792,6 +910,15 @@ func buildRawSignals(dependency DependencyRecord) []RawSignalItem {
 		}
 		if dependency.Repository.PullRequestMedianResponseDays != nil {
 			signals = append(signals, NewRawSignal("repository.pr_median_response_days", *dependency.Repository.PullRequestMedianResponseDays, "github", &observedAt))
+		}
+		if dependency.Repository.PullRequestMedianMergeDays != nil {
+			signals = append(signals, NewRawSignal("repository.pr_median_merge_days", *dependency.Repository.PullRequestMedianMergeDays, "github", &observedAt))
+		}
+		if dependency.Repository.IssueResolutionMedianDays != nil {
+			signals = append(signals, NewRawSignal("repository.issue_resolution_median_days", *dependency.Repository.IssueResolutionMedianDays, "github", &observedAt))
+		}
+		if dependency.Repository.StaleIssueShare != nil {
+			signals = append(signals, NewRawSignal("repository.stale_issue_share", *dependency.Repository.StaleIssueShare, "github", &observedAt))
 		}
 	}
 	if dependency.Scorecard != nil {

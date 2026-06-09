@@ -17,6 +17,10 @@ type PostgresStore struct {
 	db *sql.DB
 }
 
+const postgresSchemaCompatibilitySQL = `
+ALTER TABLE dependencies
+ADD COLUMN IF NOT EXISTS historical_features JSONB NOT NULL DEFAULT '{}'::jsonb`
+
 func NewPostgresStore(databaseURL string) (*PostgresStore, error) {
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
@@ -26,7 +30,12 @@ func NewPostgresStore(databaseURL string) (*PostgresStore, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &PostgresStore{db: db}, nil
+	store := &PostgresStore{db: db}
+	if err := store.ensureSchemaCompatibility(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return store, nil
 }
 
 func (s *PostgresStore) Close() error {
@@ -38,6 +47,15 @@ func (s *PostgresStore) Close() error {
 
 func (s *PostgresStore) Ready(ctx context.Context) error {
 	return s.db.PingContext(ctx)
+}
+
+func (s *PostgresStore) ensureSchemaCompatibility() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := s.db.ExecContext(ctx, postgresSchemaCompatibilitySQL); err != nil {
+		return fmt.Errorf("postgres schema compatibility check failed: %w", err)
+	}
+	return nil
 }
 
 func (s *PostgresStore) SaveUpload(ctx context.Context, upload analysis.UploadArtifact) error {
@@ -233,6 +251,13 @@ func (s *PostgresStore) SaveAnalysisResult(ctx context.Context, item analysis.An
 		if err != nil {
 			return err
 		}
+		historicalFeaturesJSON, err := json.Marshal(dependency.HistoricalFeatures)
+		if err != nil {
+			return err
+		}
+		if string(historicalFeaturesJSON) == "null" {
+			historicalFeaturesJSON = []byte("{}")
+		}
 		riskProfileJSON, err := json.Marshal(dependency.RiskProfile)
 		if err != nil {
 			return err
@@ -244,8 +269,8 @@ func (s *PostgresStore) SaveAnalysisResult(ctx context.Context, item analysis.An
 
 		if _, err := tx.ExecContext(ctx, `
             INSERT INTO dependencies (
-                id, analysis_id, ecosystem, package_name, package_version, direct, dependency_path, repository_snapshot, scorecard_snapshot, risk_profile, raw_signals, raw_signals_available, parsed_from_upload_id
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,''))`,
+                id, analysis_id, ecosystem, package_name, package_version, direct, dependency_path, repository_snapshot, scorecard_snapshot, historical_features, risk_profile, raw_signals, raw_signals_available, parsed_from_upload_id
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NULLIF($14,''))`,
 			dependency.ID,
 			dependency.AnalysisID,
 			dependency.Ecosystem,
@@ -255,6 +280,7 @@ func (s *PostgresStore) SaveAnalysisResult(ctx context.Context, item analysis.An
 			string(dependencyPath),
 			nullIfJSON(repositoryJSON),
 			nullIfJSON(scorecardJSON),
+			string(historicalFeaturesJSON),
 			nullIfJSON(riskProfileJSON),
 			string(rawSignalsJSON),
 			dependency.RawSignalsAvailable,
@@ -333,7 +359,7 @@ func (s *PostgresStore) GetAnalysis(ctx context.Context, id string) (analysis.An
 
 func (s *PostgresStore) ListDependenciesByAnalysis(ctx context.Context, analysisID string) ([]analysis.DependencyRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-        SELECT id, analysis_id, ecosystem, package_name, package_version, direct, dependency_path, repository_snapshot, scorecard_snapshot, risk_profile, raw_signals, raw_signals_available, COALESCE(parsed_from_upload_id, '')
+        SELECT id, analysis_id, ecosystem, package_name, package_version, direct, dependency_path, repository_snapshot, scorecard_snapshot, historical_features, risk_profile, raw_signals, raw_signals_available, COALESCE(parsed_from_upload_id, '')
         FROM dependencies
         WHERE analysis_id = $1
         ORDER BY direct DESC, package_name ASC`, analysisID)
@@ -355,7 +381,7 @@ func (s *PostgresStore) ListDependenciesByAnalysis(ctx context.Context, analysis
 
 func (s *PostgresStore) GetDependency(ctx context.Context, id string) (analysis.DependencyRecord, error) {
 	row := s.db.QueryRowContext(ctx, `
-        SELECT id, analysis_id, ecosystem, package_name, package_version, direct, dependency_path, repository_snapshot, scorecard_snapshot, risk_profile, raw_signals, raw_signals_available, COALESCE(parsed_from_upload_id, '')
+        SELECT id, analysis_id, ecosystem, package_name, package_version, direct, dependency_path, repository_snapshot, scorecard_snapshot, historical_features, risk_profile, raw_signals, raw_signals_available, COALESCE(parsed_from_upload_id, '')
         FROM dependencies
         WHERE id = $1`, id)
 	dependency, err := scanDependency(row)
@@ -433,6 +459,7 @@ func scanDependency(row scanner) (analysis.DependencyRecord, error) {
 	var dependencyPath []byte
 	var repositoryJSON []byte
 	var scorecardJSON []byte
+	var historicalFeaturesJSON []byte
 	var riskProfileJSON []byte
 	var rawSignalsJSON []byte
 
@@ -446,6 +473,7 @@ func scanDependency(row scanner) (analysis.DependencyRecord, error) {
 		&dependencyPath,
 		&repositoryJSON,
 		&scorecardJSON,
+		&historicalFeaturesJSON,
 		&riskProfileJSON,
 		&rawSignalsJSON,
 		&dependency.RawSignalsAvailable,
@@ -461,6 +489,9 @@ func scanDependency(row scanner) (analysis.DependencyRecord, error) {
 		return analysis.DependencyRecord{}, err
 	}
 	if err := decodeJSON(scorecardJSON, &dependency.Scorecard); err != nil {
+		return analysis.DependencyRecord{}, err
+	}
+	if err := decodeJSON(historicalFeaturesJSON, &dependency.HistoricalFeatures); err != nil {
 		return analysis.DependencyRecord{}, err
 	}
 	if err := decodeJSON(riskProfileJSON, &dependency.RiskProfile); err != nil {

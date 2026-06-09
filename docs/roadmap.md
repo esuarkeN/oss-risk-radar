@@ -4,7 +4,7 @@
 
 1. Scaffold the monorepo and local development environment.
 2. Implement the Go analysis orchestration API.
-3. Implement the Python heuristic scoring service.
+3. Implement the Python feature extraction and model scoring service.
 4. Implement the Next.js dashboard and demo submission flow.
 5. Add the shared schema package and generated client types.
 

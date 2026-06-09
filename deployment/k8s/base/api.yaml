@@ -81,10 +81,14 @@ spec:
               value: /app/tmp/uploads
             - name: TRAINING_DATASET_PATH
               value: /app/tmp/training/snapshots.json
+            - name: TRAINING_FEATURE_CACHE_PATH
+              value: /app/tmp/training/repository-feature-cache.json
             - name: TRAINING_RUNS_DIR
               value: /app/tmp/training/runs
             - name: TRAINING_SEED_DATASET_PATH
               value: /app/seed/training/snapshots.json
+            - name: TRAINING_SEED_FEATURE_CACHE_PATH
+              value: /app/seed/training/repository-feature-cache.json
             - name: TRAINING_SEED_RUNS_DIR
               value: /app/seed/training/runs
             - name: TRAINING_SEED_LATEST_RUN_PATH

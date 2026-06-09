@@ -30,7 +30,9 @@ services:
       API_ALLOWED_ORIGIN: ${API_ALLOWED_ORIGIN:-http://localhost:3000}
       DATABASE_URL: postgres://oss_risk_radar:oss_risk_radar@postgres:5432/oss_risk_radar?sslmode=disable
       SCORING_BASE_URL: http://scoring:8090
+      TRAINING_FEATURE_CACHE_PATH: /app/tmp/training/repository-feature-cache.json
       TRAINING_SEED_DATASET_PATH: /app/seed/training/snapshots.json
+      TRAINING_SEED_FEATURE_CACHE_PATH: /app/seed/training/repository-feature-cache.json
       TRAINING_SEED_RUNS_DIR: /app/seed/training/runs
       TRAINING_SEED_LATEST_RUN_PATH: /app/seed/training/latest-run.json
       TRAINING_SEED_MERGE_EXISTING: "true"
@@ -49,8 +51,6 @@ services:
     build:
       context: .
       dockerfile: deployment/docker/scoring.Dockerfile
-    ports:
-      - "${SCORING_PORT:-8090}:8090"
 
   web:
     profiles: ["apps"]

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { InfoChipGroup } from "@/components/info-chip-group";
 import { SiteHeader } from "@/components/site-header";
 import { Card } from "@/components/ui/card";
-import { heuristicSignalGlossary } from "@/lib/metric-glossary";
+import { modelFeatureGlossary } from "@/lib/metric-glossary";
 
 const rules = [
   "Archived repos push risk up sharply.",
@@ -19,9 +19,9 @@ export default function MethodologyPage() {
       <SiteHeader />
       <Card className="space-y-4">
         <p className="text-xs uppercase tracking-[0.24em] text-muted">Methodology</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">The heuristic layer in short form.</h1>
-        <p className="max-w-3xl text-sm leading-7 text-muted">The MVP scores maintenance fragility using public activity, release, contributor, backlog, and Scorecard-style hygiene signals.</p>
-        <InfoChipGroup items={heuristicSignalGlossary} />
+        <h1 className="text-3xl font-semibold tracking-tight text-foreground">The model feature layer in short form.</h1>
+        <p className="max-w-3xl text-sm leading-7 text-muted">Runtime scoring uses staged model artifacts built from public activity, release, contributor, backlog, and historical maintenance signals; Scorecard remains a separate security posture input.</p>
+        <InfoChipGroup items={modelFeatureGlossary} />
       </Card>
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {rules.map((rule) => (
@@ -31,8 +31,8 @@ export default function MethodologyPage() {
         ))}
       </section>
       <Card className="space-y-3">
-        <p className="text-xs uppercase tracking-[0.24em] text-muted">Model path</p>
-        <p className="text-sm text-muted">The ML layer reuses these signals and evaluates them with calibration-first metrics like Brier score. See <Link href="/ml-evaluation" className="font-medium text-accent">ML Results</Link>.</p>
+        <p className="text-xs uppercase tracking-[0.24em] text-muted">Artifact path</p>
+        <p className="text-sm text-muted">The runtime scorer uses exported Logistic Regression and XGBoost artifacts evaluated with calibration-first metrics like Brier score. See <Link href="/ml-evaluation" className="font-medium text-accent">ML Results</Link>.</p>
       </Card>
     </>
   );

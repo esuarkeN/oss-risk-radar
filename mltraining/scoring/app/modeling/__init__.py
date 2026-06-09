@@ -5,15 +5,37 @@ from app.modeling.artifacts import (
     serialize_xgboost_model,
 )
 from app.modeling.baseline import LogisticRegressionModel, fit_logistic_regression, predict_probabilities
-from app.modeling.features import FEATURE_NAMES, FEATURE_VERSION, build_feature_row, build_feature_rows, extract_feature_values
-from app.modeling.registry import ModelMetadata, latest_model_metadata
+from app.modeling.features import (
+    COLD_START_FEATURE_NAMES,
+    COLD_START_FEATURE_VERSION,
+    FEATURE_NAMES,
+    FEATURE_REGIME_COLD_START,
+    FEATURE_REGIME_FULL_HISTORY,
+    FEATURE_VERSION,
+    FULL_HISTORY_FEATURE_NAMES,
+    FULL_HISTORY_FEATURE_VERSION,
+    PREDICTIVE_HISTORICAL_FEATURE_NAMES,
+    build_feature_row,
+    build_feature_rows,
+    extract_feature_values,
+    feature_names_for_regime,
+    feature_regime_for_version,
+    feature_version_for_regime,
+    normalize_feature_regime,
+)
 from app.modeling.xgboost_model import XGBoostFeatureImportance, XGBoostModel, fit_xgboost_classifier, predict_xgboost_probabilities
 
 __all__ = [
     "FEATURE_NAMES",
+    "COLD_START_FEATURE_NAMES",
+    "COLD_START_FEATURE_VERSION",
+    "FEATURE_REGIME_COLD_START",
+    "FEATURE_REGIME_FULL_HISTORY",
     "FEATURE_VERSION",
+    "FULL_HISTORY_FEATURE_NAMES",
+    "FULL_HISTORY_FEATURE_VERSION",
+    "PREDICTIVE_HISTORICAL_FEATURE_NAMES",
     "LogisticRegressionModel",
-    "ModelMetadata",
     "XGBoostFeatureImportance",
     "XGBoostModel",
     "build_feature_row",
@@ -21,9 +43,12 @@ __all__ = [
     "deserialize_logistic_regression_model",
     "deserialize_xgboost_model",
     "extract_feature_values",
+    "feature_names_for_regime",
+    "feature_regime_for_version",
+    "feature_version_for_regime",
     "fit_logistic_regression",
     "fit_xgboost_classifier",
-    "latest_model_metadata",
+    "normalize_feature_regime",
     "predict_probabilities",
     "predict_xgboost_probabilities",
     "serialize_logistic_regression_model",

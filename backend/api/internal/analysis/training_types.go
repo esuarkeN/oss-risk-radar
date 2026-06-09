@@ -138,17 +138,6 @@ type ListTrainingRunsResponse struct {
 	Runs []TrainingRunArtifact `json:"runs"`
 }
 
-type TriggerTrainingRunRequest struct {
-	Force     bool   `json:"force"`
-	ModelName string `json:"modelName,omitempty"`
-}
-
-type TriggerTrainingRunResponse struct {
-	Run             TrainingRunArtifact   `json:"run"`
-	Runs            []TrainingRunArtifact `json:"runs,omitempty"`
-	ReusedCachedRun bool                  `json:"reusedCachedRun"`
-}
-
 type TrainingScorecardCheckSnapshot struct {
 	Name   string  `json:"name"`
 	Score  float64 `json:"score"`

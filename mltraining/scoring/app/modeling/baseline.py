@@ -16,8 +16,8 @@ class LogisticRegressionModel:
     coefficients: list[float]
     intercept: float
     standardization: StandardizationProfile
-    model_name: str = "logistic-regression-baseline"
-    model_version: str = "0.3.0"
+    model_name: str = "logistic-regression-full-history"
+    model_version: str = "0.4.0"
 
 
 def _sigmoid(value: float) -> float:

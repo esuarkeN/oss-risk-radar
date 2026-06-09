@@ -7,7 +7,7 @@ from app.modeling import (
     predict_probabilities,
     predict_xgboost_probabilities,
 )
-from app.modeling.features import FEATURE_VERSION
+from app.modeling.features import COLD_START_FEATURE_VERSION, FEATURE_VERSION, FULL_HISTORY_FEATURE_VERSION
 from app.schemas.score import (
     CalibrationBin,
     DependencySignalPayload,
@@ -17,9 +17,47 @@ from app.schemas.score import (
     ScoreResult,
     XGBoostModelArtifact,
 )
-from app.scoring.explanations import factor
-from app.scoring.heuristic import clamp, derive_maintenance_outlook_12m_score, determine_action_level, determine_bucket, score_dependency
+from app.scoring.explanations import build_evidence_items, factor
 from app.training.calibration import CalibrationBinSummary, HistogramCalibrator
+
+
+def _clamp(value: float, lower: float = 0, upper: float = 100) -> float:
+    return max(lower, min(upper, value))
+
+
+def _maintenance_outlook_12m_score(inactivity_risk_score: float) -> float:
+    return round(_clamp(100 - inactivity_risk_score), 2)
+
+
+def _risk_bucket(score: float) -> str:
+    if score >= 80:
+        return "critical"
+    if score >= 60:
+        return "high"
+    if score >= 35:
+        return "medium"
+    return "low"
+
+
+def _action_level(score: float) -> str:
+    if score >= 80:
+        return "replace_candidate"
+    if score >= 50:
+        return "review"
+    return "monitor"
+
+
+def _scorecard_posture(payload: DependencySignalPayload) -> tuple[float, list[str]]:
+    if payload.scorecard is None or payload.scorecard.score is None:
+        return 0, ["OpenSSF Scorecard data was unavailable, so security posture is not model-derived."]
+
+    posture = payload.scorecard.score * 10
+    for check in payload.scorecard.checks:
+        if check.score >= 8:
+            posture += 2
+        elif check.score <= 4:
+            posture -= 3
+    return round(_clamp(posture), 2), []
 
 
 def _build_calibrator(calibration_bins: list[CalibrationBin]) -> HistogramCalibrator | None:
@@ -43,9 +81,7 @@ def score_dependency_with_model(
     payload: DependencySignalPayload,
     artifact: ModelArtifact,
 ) -> ScoreResult:
-    heuristic_result = score_dependency(payload)
-    heuristic_profile = heuristic_result.risk_profile
-    feature_values, missing_signals = extract_feature_values(payload)
+    feature_values, missing_signals = extract_feature_values(payload, feature_names=artifact.feature_names)
     matrix = [[feature_values[name] for name in artifact.feature_names]]
 
     if isinstance(artifact, XGBoostModelArtifact):
@@ -63,28 +99,40 @@ def score_dependency_with_model(
         calibrated_probability = calibrator.predict([raw_probability])[0]
 
     inactivity_probability = max(0.0, min(1.0, calibrated_probability))
-    inactivity_risk_score = round(clamp(inactivity_probability * 100), 2)
-    maintenance_outlook_12m_score = derive_maintenance_outlook_12m_score(inactivity_risk_score)
+    inactivity_risk_score = round(_clamp(inactivity_probability * 100), 2)
     prediction_margin = abs(inactivity_probability - 0.5) * 2
-    confidence_score = round(clamp(heuristic_profile.confidence_score * (0.5 + (0.5 * prediction_margin)), 0, 1), 2)
+    signal_completeness = feature_values.get(
+        "signal_completeness",
+        max(0.0, min(1.0, 1.0 - (len(missing_signals) / max(1, len(artifact.feature_names))))),
+    )
+    confidence_score = round(max(0.0, min(1.0, signal_completeness * (0.5 + (0.5 * prediction_margin)))), 2)
+    security_posture_score, caveats = _scorecard_posture(payload)
 
-    caveats = list(heuristic_profile.caveats)
     if not artifact.calibration_bins:
         caveats.append("Model calibration bins were unavailable, so the 12-month outlook uses raw model probabilities.")
-    if artifact.feature_version != FEATURE_VERSION:
+    if artifact.feature_version not in {FEATURE_VERSION, FULL_HISTORY_FEATURE_VERSION, COLD_START_FEATURE_VERSION}:
         caveats.append("The stored model was trained on an older feature set, so runtime inference may drift until retrained.")
+    if missing_signals:
+        caveats.append("Some model input signals were missing and imputed as neutral zero-valued features.")
 
     direction = "increase" if inactivity_risk_score >= 50 else "decrease"
-    model_factor = factor(
-        "12-month outlook model",
-        direction,
-        round(10 + (prediction_margin * 20), 2),
-        (
-            f"Calibrated {artifact.model_name} predicts a {inactivity_risk_score:.1f}% risk "
-            "that public maintenance signals trend inactive within 12 months."
+    explanation_factors = [
+        factor(
+            "12-month outlook model",
+            direction,
+            round(10 + (prediction_margin * 20), 2),
+            (
+                f"Calibrated {artifact.model_name} predicts a {inactivity_risk_score:.1f}% risk "
+                "that public maintenance signals trend inactive within 12 months."
+            ),
         ),
-    )
-    explanation_factors = sorted([model_factor, *heuristic_profile.explanation_factors], key=lambda item: item.weight, reverse=True)[:6]
+        factor(
+            "Model input completeness",
+            "neutral",
+            round(signal_completeness * 20, 2),
+            f"{signal_completeness:.0%} of expected model input signals were available before imputation.",
+        ),
+    ]
 
     return ScoreResult(
         dependency_id=payload.dependency_id,
@@ -93,14 +141,14 @@ def score_dependency_with_model(
         ecosystem=payload.ecosystem,
         risk_profile=RiskProfileResponse(
             inactivity_risk_score=inactivity_risk_score,
-            maintenance_outlook_12m_score=maintenance_outlook_12m_score,
-            security_posture_score=heuristic_profile.security_posture_score,
+            maintenance_outlook_12m_score=_maintenance_outlook_12m_score(inactivity_risk_score),
+            security_posture_score=security_posture_score,
             confidence_score=confidence_score,
-            risk_bucket=determine_bucket(inactivity_risk_score),
-            action_level=determine_action_level(inactivity_risk_score),
+            risk_bucket=_risk_bucket(inactivity_risk_score),
+            action_level=_action_level(inactivity_risk_score),
             caveats=sorted(set(caveats)),
-            missing_signals=sorted(set(heuristic_profile.missing_signals + missing_signals)),
+            missing_signals=missing_signals,
             explanation_factors=explanation_factors,
-            evidence=heuristic_profile.evidence,
+            evidence=build_evidence_items(payload),
         ),
     )

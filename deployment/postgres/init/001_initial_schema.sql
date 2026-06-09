@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS dependencies (
     dependency_path JSONB NOT NULL DEFAULT '[]'::jsonb,
     repository_snapshot JSONB,
     scorecard_snapshot JSONB,
+    historical_features JSONB NOT NULL DEFAULT '{}'::jsonb,
     risk_profile JSONB,
     raw_signals JSONB NOT NULL DEFAULT '[]'::jsonb,
     raw_signals_available BOOLEAN NOT NULL DEFAULT FALSE,
@@ -67,3 +68,5 @@ CREATE INDEX IF NOT EXISTS idx_jobs_runnable ON jobs (status, next_run_at, creat
 CREATE INDEX IF NOT EXISTS idx_dependencies_analysis ON dependencies (analysis_id, direct, package_name);
 CREATE INDEX IF NOT EXISTS idx_uploads_analysis ON uploaded_artifacts (analysis_id, uploaded_at);
 CREATE INDEX IF NOT EXISTS idx_edges_analysis ON dependency_edges (analysis_id, id);
+
+ALTER TABLE dependencies ADD COLUMN IF NOT EXISTS historical_features JSONB NOT NULL DEFAULT '{}'::jsonb;

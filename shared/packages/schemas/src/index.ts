@@ -12,7 +12,7 @@ export interface AnalysisSubmission {
   repositoryUrl?: string;
   uploadId?: string;
   artifactName?: string;
-  modelName?: "all" | "logistic-regression-baseline" | "xgboost-baseline" | string;
+  modelName?: "all" | "logistic-regression-full-history" | "xgboost-full-history" | "logistic-regression-cold-start" | "xgboost-cold-start" | string;
   includeTransitiveDependencies?: boolean;
   demoProfile?: string;
 }
@@ -70,7 +70,7 @@ export interface RiskProfile {
   confidenceScore: number;
   riskBucket: RiskBucket;
   actionLevel: ActionLevel;
-  scoringMethod?: "model" | "heuristic" | "failsafe" | string;
+  scoringMethod?: "model" | "model_ensemble" | string;
   scoringModel?: string;
   modelResults?: ModelRiskProfile[];
   caveats: string[];
@@ -136,6 +136,7 @@ export interface DependencyRecord {
   direct: boolean;
   repository?: RepositorySnapshot;
   scorecard?: ScorecardSnapshot;
+  historicalFeatures?: Record<string, number>;
   riskProfile?: RiskProfile;
   dependencyPath: string[];
   rawSignalsAvailable: boolean;
@@ -361,15 +362,4 @@ export interface GetLatestTrainingRunResponse {
 
 export interface ListTrainingRunsResponse {
   runs: TrainingRunArtifact[];
-}
-
-export interface TriggerTrainingRunRequest {
-  force?: boolean;
-  modelName?: string;
-}
-
-export interface TriggerTrainingRunResponse {
-  run: TrainingRunArtifact;
-  runs?: TrainingRunArtifact[];
-  reusedCachedRun: boolean;
 }

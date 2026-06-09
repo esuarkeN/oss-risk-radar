@@ -5,9 +5,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.modeling import (
-    FEATURE_VERSION,
+    FEATURE_REGIME_FULL_HISTORY,
     fit_logistic_regression,
     fit_xgboost_classifier,
+    feature_version_for_regime,
+    normalize_feature_regime,
     predict_probabilities,
     predict_xgboost_probabilities,
     serialize_logistic_regression_model,
@@ -38,6 +40,8 @@ class TrainingRunConfig:
     validation_ratio: float = 0.15
     calibration_bins: int = 10
     threshold: float | None = None
+    feature_regime: str = FEATURE_REGIME_FULL_HISTORY
+    exclude_already_archived_at_observation: bool = True
 
 
 @dataclass(slots=True)
@@ -54,29 +58,40 @@ class TrainingRunResult:
     note: str
 
 
-LOGISTIC_ALIASES = {"logistic-regression-baseline", "logistic_regression", "logistic-regression"}
-XGBOOST_ALIASES = {"xgboost-baseline", "xgboost", "xgboost_classifier", "xgboost-classifier", "gradient_boosted_trees", "gradient-boosted-trees"}
-SUPPORTED_ALGORITHMS = LOGISTIC_ALIASES | XGBOOST_ALIASES
+MODEL_ALIASES = {
+    "logistic-regression-full-history": ("logistic_regression", "full-history", "logistic-regression-full-history", "0.4.0"),
+    "logistic-regression-cold-start": ("logistic_regression", "cold-start", "logistic-regression-cold-start", "0.4.0"),
+    "xgboost-full-history": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+    "xgboost-cold-start": ("xgboost", "cold-start", "xgboost-cold-start", "0.2.0"),
+    "logistic-regression-baseline": ("logistic_regression", "full-history", "logistic-regression-full-history", "0.4.0"),
+    "logistic_regression": ("logistic_regression", "full-history", "logistic-regression-full-history", "0.4.0"),
+    "logistic-regression": ("logistic_regression", "full-history", "logistic-regression-full-history", "0.4.0"),
+    "xgboost-baseline": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+    "xgboost": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+    "xgboost_classifier": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+    "xgboost-classifier": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+    "gradient_boosted_trees": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+    "gradient-boosted-trees": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+}
+SUPPORTED_ALGORITHMS = set(MODEL_ALIASES)
 
 
-def _normalize_algorithm(algorithm: str) -> str:
+def _model_spec(algorithm: str, configured_regime: str) -> tuple[str, str, str, str]:
     normalized = algorithm.strip().lower()
-    if normalized in LOGISTIC_ALIASES:
-        return "logistic_regression"
-    if normalized in XGBOOST_ALIASES:
-        return "xgboost"
-    if normalized not in SUPPORTED_ALGORITHMS:
+    if normalized not in MODEL_ALIASES:
         raise ValueError(
             "unsupported model_name: "
-            f"{algorithm}. Runtime training supports logistic-regression-baseline and xgboost-baseline."
+            f"{algorithm}. Offline training supports logistic-regression-full-history, "
+            "xgboost-full-history, logistic-regression-cold-start, and xgboost-cold-start."
         )
-    return normalized
-
-
-def _model_identity(algorithm: str) -> tuple[str, str]:
-    if algorithm == "xgboost":
-        return "xgboost-baseline", "0.1.0"
-    return "logistic-regression-baseline", "0.3.0"
+    algorithm_name, model_regime, model_name, model_version = MODEL_ALIASES[normalized]
+    if normalized in {"logistic_regression", "logistic-regression", "xgboost", "xgboost_classifier", "xgboost-classifier", "gradient_boosted_trees", "gradient-boosted-trees"}:
+        model_regime = normalize_feature_regime(configured_regime)
+        if algorithm_name == "xgboost":
+            model_name = "xgboost-cold-start" if model_regime == "cold-start" else "xgboost-full-history"
+        else:
+            model_name = "logistic-regression-cold-start" if model_regime == "cold-start" else "logistic-regression-full-history"
+    return algorithm_name, normalize_feature_regime(model_regime), model_name, model_version
 
 
 def _load_snapshots(config: TrainingRunConfig) -> list[TrainingSnapshotInput]:
@@ -104,10 +119,14 @@ def _assert_disjoint_splits(split: DatasetSplit) -> None:
 
 
 def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
-    algorithm = _normalize_algorithm(config.algorithm)
-    model_name, model_version = _model_identity(algorithm)
+    algorithm, feature_regime, model_name, model_version = _model_spec(config.algorithm, config.feature_regime)
+    feature_version = feature_version_for_regime(feature_regime)
     snapshots = _load_snapshots(config)
-    dataset = build_dataset(snapshots)
+    dataset = build_dataset(
+        snapshots,
+        feature_regime=feature_regime,
+        exclude_already_archived_at_observation=config.exclude_already_archived_at_observation,
+    )
     summary = summarize_dataset(dataset)
     labeled_dataset_rows = labeled_rows(dataset.rows)
     trained_at = datetime.now(UTC).isoformat()
@@ -143,6 +162,8 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
     else:
         model = fit_logistic_regression(dataset.feature_names, train_matrix, train_labels)
         validation_predictions = predict_probabilities(model, validation_matrix)
+    model.model_name = model_name
+    model.model_version = model_version
 
     calibrator = fit_histogram_calibrator(
         validation_predictions,
@@ -184,6 +205,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
             trained_at=trained_at,
             threshold=metrics.threshold,
             calibration_bins=calibration_bins,
+            feature_version=feature_version,
         )
         if algorithm == "xgboost"
         else serialize_logistic_regression_model(
@@ -191,6 +213,7 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
             trained_at=trained_at,
             threshold=metrics.threshold,
             calibration_bins=calibration_bins,
+            feature_version=feature_version,
         )
     )
 
@@ -222,17 +245,8 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         calibration_bins=calibration_bins,
         artifact=artifact,
         note=(
-            f"Trained {model.model_name} using {FEATURE_VERSION} on a {split_note} time-aware split with class-balanced inactive labels. "
-            "The latest model artifact is now available for runtime scoring, but it still needs historical-label validation before thesis claims."
+            f"Trained {model.model_name} using {feature_version} on a {split_note} time-aware split with class-balanced inactive labels. "
+            "Already-archived-at-observation rows are excluded so the model learns pre-inactivity warning indicators."
         ),
     )
 
-
-def train_placeholder(config: TrainingRunConfig) -> dict[str, str]:
-    result = run_training_pipeline(config)
-    return {
-        "status": result.status,
-        "dataset_path": config.dataset_path or "inline",
-        "algorithm": config.algorithm,
-        "note": result.note,
-    }

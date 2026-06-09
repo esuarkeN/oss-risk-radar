@@ -1,52 +1,63 @@
 {
-  "analysisId": "anl_demo_01",
-  "scoringPolicy": "heuristic-v1",
+  "analysis_id": "anl_demo_01",
+  "scoring_version": "model-v1",
   "dependencies": [
     {
-      "dependencyId": "dep_react_01",
-      "package": {
-        "ecosystem": "npm",
-        "name": "react",
-        "version": "18.3.1",
-        "purl": "pkg:npm/react@18.3.1"
-      },
+      "dependency_id": "dep_react_01",
+      "package_name": "react",
+      "package_version": "18.3.1",
+      "ecosystem": "npm",
+      "direct": true,
       "repository": {
-        "provider": "github",
-        "owner": "facebook",
-        "name": "react",
+        "full_name": "facebook/react",
         "url": "https://github.com/facebook/react",
+        "default_branch": "main",
         "archived": false,
         "stars": 229000,
-        "lastPushAt": "2026-03-29T14:00:00Z"
+        "forks": 47000,
+        "open_issues": 1200,
+        "last_push_age_days": 4,
+        "last_release_age_days": 52,
+        "release_cadence_days": 39,
+        "recent_contributors_90d": 11,
+        "contributor_concentration": 0.41,
+        "open_issue_growth_90d": -0.05,
+        "pr_response_median_days": 2.8
       },
-      "signals": {
-        "archived": false,
-        "lastCommitAgeDays": 4,
-        "lastReleaseAgeDays": 52,
-        "releaseCadenceDays": 39,
-        "recentContributorCount": 11,
-        "contributorConcentration": 0.41,
-        "openIssueGrowthRatio": -0.05,
-        "prResponseMedianDays": 2.8,
-        "maintenanceMetadataPresent": true,
-        "documentationCoverage": 0.9,
-        "scorecard": {
-          "overallScore": 8.6,
-          "branchProtection": true,
-          "tokenPermissions": true,
-          "signedReleases": true,
-          "fuzzing": false,
-          "ciTests": true
-        }
-      },
-      "provenance": [
-        {
-          "label": "Repository metadata snapshot",
-          "source": "github",
-          "observedAt": "2026-04-02T00:00:00Z",
-          "url": "https://github.com/facebook/react"
-        }
-      ]
+      "scorecard": {
+        "score": 8.6,
+        "checks": [
+          {
+            "name": "Branch-Protection",
+            "score": 9,
+            "reason": "Default branch protections are visible in the latest snapshot."
+          }
+        ]
+      }
     }
-  ]
+  ],
+  "model_artifact": {
+    "model_name": "logistic-regression-cold-start",
+    "model_version": "demo-artifact",
+    "feature_version": "feature-set-v3-cold-start",
+    "trained_at": "2026-04-02T00:00:00Z",
+    "threshold": 0.5,
+    "algorithm": "logistic_regression",
+    "feature_names": ["last_push_age_days"],
+    "coefficients": [0.12],
+    "intercept": -1.4,
+    "standardization": {
+      "means": [90],
+      "scales": [45]
+    },
+    "calibration_bins": [
+      {
+        "lower_bound": 0,
+        "upper_bound": 0.2,
+        "count": 25,
+        "average_prediction": 0.11,
+        "empirical_rate": 0.08
+      }
+    ]
+  }
 }

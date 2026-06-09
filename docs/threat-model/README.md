@@ -7,7 +7,7 @@ This project analyzes public dependency and repository metadata. The main securi
 - Analysis records and dependency snapshots
 - Provider provenance and evidence
 - User uploads and repository URLs
-- Heuristic and model output
+- Model-artifact scoring output
 - CI and deployment configuration
 
 ## Trust boundaries

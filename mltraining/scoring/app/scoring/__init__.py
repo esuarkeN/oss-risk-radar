@@ -1,3 +1,3 @@
-from app.scoring.heuristic import score_dependency, scoring_timestamp
+from app.scoring.model import score_dependency_with_model
 
-__all__ = ["score_dependency", "scoring_timestamp"]
+__all__ = ["score_dependency_with_model"]

@@ -141,6 +141,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/JobResponse"
+  /api/v1/training/dataset:
+    get:
+      operationId: getTrainingDataset
+      summary: Read the staged training dataset summary
+      responses:
+        "200":
+          description: Training dataset summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingDatasetResponse"
+  /api/v1/training/runs:
+    get:
+      operationId: listTrainingRuns
+      summary: List staged model artifacts
+      responses:
+        "200":
+          description: Staged model artifact history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingRunListResponse"
+  /api/v1/training/runs/latest:
+    get:
+      operationId: getLatestTrainingRun
+      summary: Read the latest staged model artifact
+      responses:
+        "200":
+          description: Latest staged model artifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatestTrainingRunResponse"
 components:
   parameters:
     AnalysisId:
@@ -416,6 +449,10 @@ components:
         rawSignals:
           type: object
           additionalProperties: true
+        historicalFeatures:
+          type: object
+          additionalProperties:
+            type: number
     PackageCoordinate:
       type: object
       required: [ecosystem, name, version]
@@ -454,9 +491,30 @@ components:
           type: boolean
         stars:
           type: integer
+        forks:
+          type: integer
+        openIssues:
+          type: integer
         lastPushAt:
           type: string
           format: date-time
+        lastReleaseAt:
+          type: string
+          format: date-time
+        recentContributors90d:
+          type: integer
+        contributorConcentration:
+          type: number
+        openIssueGrowth90d:
+          type: number
+        pullRequestMedianResponseDays:
+          type: number
+        pullRequestMedianMergeDays:
+          type: number
+        issueResolutionMedianDays:
+          type: number
+        staleIssueShare:
+          type: number
     RiskScore:
       type: object
       required:
@@ -551,3 +609,25 @@ components:
       properties:
         job:
           $ref: "#/components/schemas/Job"
+    TrainingDatasetResponse:
+      type: object
+      required: [dataset]
+      properties:
+        dataset:
+          type: object
+          additionalProperties: true
+    TrainingRunListResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    LatestTrainingRunResponse:
+      type: object
+      properties:
+        run:
+          type: object
+          additionalProperties: true

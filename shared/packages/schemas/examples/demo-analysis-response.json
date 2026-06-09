@@ -31,7 +31,7 @@
       ]
     },
     "methodology": {
-      "scoreVersion": "heuristic-v1",
+      "scoreVersion": "model-v1",
       "scoredAt": "2026-04-02T00:00:03Z",
       "caveatCount": 2,
       "missingSignalCount": 3

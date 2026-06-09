@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: OSS Risk Radar Scoring Service API
-  version: 0.1.0
-  description: Internal scoring and feature contracts used by the Go orchestrator.
+  version: 0.2.0
+  description: Internal model-artifact scoring and feature contracts used by the Go orchestrator.
 servers:
-  - url: http://localhost:8001
+  - url: http://scoring:8090
 paths:
   /health:
     get:
@@ -15,195 +15,431 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
-  /score/heuristic:
+                $ref: "#/components/schemas/ServiceStatusResponse"
+  /ready:
+    get:
+      operationId: getReady
+      responses:
+        "200":
+          description: Readiness status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceStatusResponse"
+  /score/model:
     post:
-      operationId: scoreHeuristic
+      operationId: scoreModel
+      description: Scores dependencies with the supplied staged model artifact. The model artifact is required runtime configuration.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/HeuristicScoreRequest"
+              $ref: "#/components/schemas/ScoreModelRequest"
       responses:
         "200":
-          description: Heuristic score result
+          description: Model score result
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HeuristicScoreResponse"
+                $ref: "#/components/schemas/ScoreModelResponse"
+        "400":
+          description: Invalid scoring payload or model artifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /features/extract:
+    post:
+      operationId: extractFeatures
+      description: Extracts normalized feature rows from dependency signals for offline dataset and artifact workflows.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DependencyBatchRequest"
+      responses:
+        "200":
+          description: Extracted feature rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeaturesExtractResponse"
 components:
   schemas:
-    HealthResponse:
+    ServiceStatusResponse:
       type: object
-      required: [status, service]
+      required: [status, service, version]
       properties:
         status:
           type: string
-          enum: [ok]
+          enum: [ok, ready]
         service:
-          type: string
-    HeuristicScoreRequest:
-      type: object
-      required: [analysisId, scoringPolicy, dependencies]
-      properties:
-        analysisId:
-          type: string
-        scoringPolicy:
-          type: string
-          example: heuristic-v1
-        dependencies:
-          type: array
-          items:
-            $ref: "#/components/schemas/DependencyScoreInput"
-    DependencyScoreInput:
-      type: object
-      required: [dependencyId, package, repository, signals, provenance]
-      properties:
-        dependencyId:
-          type: string
-        package:
-          $ref: "#/components/schemas/PackageCoordinate"
-        repository:
-          $ref: "#/components/schemas/RepositoryRef"
-        signals:
-          $ref: "#/components/schemas/SignalSnapshot"
-        provenance:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProvenanceItem"
-    PackageCoordinate:
-      type: object
-      required: [ecosystem, name, version]
-      properties:
-        ecosystem:
-          type: string
-        name:
           type: string
         version:
           type: string
-        purl:
-          type: string
-    RepositoryRef:
+    ErrorResponse:
       type: object
+      required: [detail]
       properties:
-        provider:
+        detail:
           type: string
-        owner:
+    DependencyBatchRequest:
+      type: object
+      required: [analysis_id, dependencies]
+      properties:
+        analysis_id:
           type: string
-        name:
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencySignalPayload"
+    ScoreModelRequest:
+      type: object
+      required: [analysis_id, dependencies, model_artifact]
+      properties:
+        analysis_id:
+          type: string
+        scoring_version:
+          type: string
+          default: model-v1
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencySignalPayload"
+        model_artifact:
+          $ref: "#/components/schemas/ModelArtifact"
+    DependencySignalPayload:
+      type: object
+      required: [dependency_id, package_name, package_version, ecosystem]
+      properties:
+        dependency_id:
+          type: string
+        package_name:
+          type: string
+        package_version:
+          type: string
+        ecosystem:
+          type: string
+        direct:
+          type: boolean
+          default: true
+        repository:
+          $ref: "#/components/schemas/RepositorySnapshotInput"
+        scorecard:
+          $ref: "#/components/schemas/ScorecardSnapshotInput"
+        historical_features:
+          type: object
+          additionalProperties:
+            type: number
+    RepositorySnapshotInput:
+      type: object
+      required: [full_name, url]
+      properties:
+        full_name:
           type: string
         url:
           type: string
           format: uri
+        default_branch:
+          type: string
+          default: main
         archived:
           type: boolean
+          default: false
         stars:
           type: integer
-        lastPushAt:
+          minimum: 0
+          default: 0
+        forks:
+          type: integer
+          minimum: 0
+          default: 0
+        open_issues:
+          type: integer
+          minimum: 0
+          default: 0
+        last_push_age_days:
+          type: integer
+          minimum: 0
+        last_release_age_days:
+          type: integer
+          minimum: 0
+        release_cadence_days:
+          type: integer
+          minimum: 0
+        recent_contributors_90d:
+          type: integer
+          minimum: 0
+        contributor_concentration:
+          type: number
+          minimum: 0
+          maximum: 1
+        open_issue_growth_90d:
+          type: number
+        pr_response_median_days:
+          type: number
+          minimum: 0
+    ScorecardSnapshotInput:
+      type: object
+      properties:
+        score:
+          type: number
+          minimum: 0
+          maximum: 10
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScorecardCheckInput"
+          default: []
+    ScorecardCheckInput:
+      type: object
+      required: [name, score, reason]
+      properties:
+        name:
+          type: string
+        score:
+          type: number
+          minimum: 0
+          maximum: 10
+        reason:
+          type: string
+    ModelArtifact:
+      oneOf:
+        - $ref: "#/components/schemas/LogisticRegressionModelArtifact"
+        - $ref: "#/components/schemas/XGBoostModelArtifact"
+      discriminator:
+        propertyName: algorithm
+    LogisticRegressionModelArtifact:
+      type: object
+      required:
+        - model_name
+        - model_version
+        - feature_version
+        - trained_at
+        - threshold
+        - algorithm
+        - feature_names
+        - coefficients
+        - intercept
+        - standardization
+        - calibration_bins
+      properties:
+        model_name:
+          type: string
+        model_version:
+          type: string
+        feature_version:
+          type: string
+        trained_at:
           type: string
           format: date-time
-    SignalSnapshot:
-      type: object
-      properties:
-        archived:
-          type: boolean
-        lastCommitAgeDays:
-          type: integer
-        lastReleaseAgeDays:
-          type: integer
-        releaseCadenceDays:
-          type: integer
-        recentContributorCount:
-          type: integer
-        contributorConcentration:
+        threshold:
           type: number
-        openIssueGrowthRatio:
-          type: number
-        prResponseMedianDays:
-          type: number
-        scorecard:
-          $ref: "#/components/schemas/ScorecardSignals"
-        maintenanceMetadataPresent:
-          type: boolean
-        documentationCoverage:
-          type: number
-    ScorecardSignals:
-      type: object
-      properties:
-        overallScore:
-          type: number
-        branchProtection:
-          type: boolean
-        tokenPermissions:
-          type: boolean
-        signedReleases:
-          type: boolean
-        fuzzing:
-          type: boolean
-        ciTests:
-          type: boolean
-    ProvenanceItem:
-      type: object
-      required: [label, source, observedAt]
-      properties:
-        label:
+          minimum: 0
+          maximum: 1
+        algorithm:
           type: string
-        source:
+          enum: [logistic_regression]
+        feature_names:
+          type: array
+          items:
+            type: string
+        coefficients:
+          type: array
+          items:
+            type: number
+        intercept:
+          type: number
+        standardization:
+          $ref: "#/components/schemas/StandardizationProfileArtifact"
+        calibration_bins:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalibrationBin"
+    XGBoostModelArtifact:
+      type: object
+      required:
+        - model_name
+        - model_version
+        - feature_version
+        - trained_at
+        - threshold
+        - algorithm
+        - feature_names
+        - booster_json
+        - tree_count
+        - max_depth
+        - learning_rate
+        - calibration_bins
+      properties:
+        model_name:
           type: string
-        observedAt:
+        model_version:
+          type: string
+        feature_version:
+          type: string
+        trained_at:
           type: string
           format: date-time
-        url:
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+        algorithm:
           type: string
-          format: uri
-    HeuristicScoreResponse:
+          enum: [xgboost]
+        feature_names:
+          type: array
+          items:
+            type: string
+        booster_json:
+          type: string
+        tree_count:
+          type: integer
+          minimum: 1
+        max_depth:
+          type: integer
+          minimum: 1
+        learning_rate:
+          type: number
+          exclusiveMinimum: 0
+        objective:
+          type: string
+          default: binary:logistic
+        xgboost_version:
+          type: string
+        feature_importances:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureImportance"
+        calibration_bins:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalibrationBin"
+    StandardizationProfileArtifact:
       type: object
-      required: [analysisId, scoringPolicy, generatedAt, results]
+      required: [means, scales]
       properties:
-        analysisId:
+        means:
+          type: array
+          items:
+            type: number
+        scales:
+          type: array
+          items:
+            type: number
+    FeatureImportance:
+      type: object
+      required: [feature, gain, importance]
+      properties:
+        feature:
           type: string
-        scoringPolicy:
+        gain:
+          type: number
+          minimum: 0
+        importance:
+          type: number
+          minimum: 0
+          maximum: 1
+    CalibrationBin:
+      type: object
+      required: [lower_bound, upper_bound, count, average_prediction, empirical_rate]
+      properties:
+        lower_bound:
+          type: number
+          minimum: 0
+          maximum: 1
+        upper_bound:
+          type: number
+          minimum: 0
+          maximum: 1
+        count:
+          type: integer
+          minimum: 0
+        average_prediction:
+          type: number
+          minimum: 0
+          maximum: 1
+        empirical_rate:
+          type: number
+          minimum: 0
+          maximum: 1
+    ScoreModelResponse:
+      type: object
+      required: [analysis_id, scoring_version, generated_at, results]
+      properties:
+        analysis_id:
           type: string
-        generatedAt:
+        scoring_version:
+          type: string
+        generated_at:
           type: string
           format: date-time
         results:
           type: array
           items:
-            $ref: "#/components/schemas/DependencyScoreResult"
-    DependencyScoreResult:
+            $ref: "#/components/schemas/ScoreResult"
+    ScoreResult:
+      type: object
+      required: [dependency_id, package_name, package_version, ecosystem, risk_profile]
+      properties:
+        dependency_id:
+          type: string
+        package_name:
+          type: string
+        package_version:
+          type: string
+        ecosystem:
+          type: string
+        risk_profile:
+          $ref: "#/components/schemas/RiskProfileResponse"
+    RiskProfileResponse:
       type: object
       required:
-        - dependencyId
-        - inactivityRisk
-        - securityPosture
-        - confidence
-        - signalCompleteness
-        - bucket
-        - actionLevel
-        - explanationFactors
-        - evidence
+        - inactivity_risk_score
+        - maintenance_outlook_12m_score
+        - security_posture_score
+        - confidence_score
+        - risk_bucket
+        - action_level
         - caveats
-        - missingSignals
+        - missing_signals
+        - explanation_factors
+        - evidence
       properties:
-        dependencyId:
+        inactivity_risk_score:
+          type: number
+          minimum: 0
+          maximum: 100
+        maintenance_outlook_12m_score:
+          type: number
+          minimum: 0
+          maximum: 100
+        security_posture_score:
+          type: number
+          minimum: 0
+          maximum: 100
+        confidence_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        risk_bucket:
           type: string
-        inactivityRisk:
-          type: integer
-        securityPosture:
-          type: integer
-        confidence:
-          type: integer
-        signalCompleteness:
-          type: integer
-        bucket:
-          type: string
-          enum: [low, elevated, high, critical]
-        actionLevel:
+          enum: [low, medium, high, critical]
+        action_level:
           type: string
           enum: [monitor, review, replace_candidate]
-        explanationFactors:
+        caveats:
+          type: array
+          items:
+            type: string
+        missing_signals:
+          type: array
+          items:
+            type: string
+        explanation_factors:
           type: array
           items:
             $ref: "#/components/schemas/ExplanationFactor"
@@ -211,48 +447,70 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/EvidenceItem"
-        caveats:
-          type: array
-          items:
-            type: string
-        missingSignals:
-          type: array
-          items:
-            type: string
     ExplanationFactor:
       type: object
-      required: [title, direction, weight, rationale]
-      properties:
-        title:
-          type: string
-        direction:
-          type: string
-          enum: [risk_up, risk_down, context]
-        weight:
-          type: integer
-        value:
-          oneOf:
-            - type: string
-            - type: number
-            - type: boolean
-        rationale:
-          type: string
-    EvidenceItem:
-      type: object
-      required: [label, value, source, observedAt]
+      required: [label, direction, weight, detail]
       properties:
         label:
           type: string
-        value:
-          oneOf:
-            - type: string
-            - type: number
-            - type: boolean
+        direction:
+          type: string
+          enum: [increase, decrease, neutral]
+        weight:
+          type: number
+        detail:
+          type: string
+    EvidenceItem:
+      type: object
+      required: [source, signal, value, observed_at]
+      properties:
         source:
           type: string
-        observedAt:
+        signal:
+          type: string
+        value:
+          type: string
+        observed_at:
           type: string
           format: date-time
-        url:
+        provenance_url:
           type: string
           format: uri
+    FeaturesExtractResponse:
+      type: object
+      required: [analysis_id, feature_version, generated_at, rows]
+      properties:
+        analysis_id:
+          type: string
+        feature_version:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExtractedFeatureRow"
+    ExtractedFeatureRow:
+      type: object
+      required: [dependency_id, package_name, package_version, ecosystem, observed_at, missing_signals, feature_values]
+      properties:
+        dependency_id:
+          type: string
+        package_name:
+          type: string
+        package_version:
+          type: string
+        ecosystem:
+          type: string
+        observed_at:
+          type: string
+          format: date-time
+        missing_signals:
+          type: array
+          items:
+            type: string
+        feature_values:
+          type: object
+          additionalProperties:
+            type: number

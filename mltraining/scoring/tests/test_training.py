@@ -3,8 +3,10 @@ import importlib.util
 import pytest
 
 from app.training.calibration import fit_histogram_calibrator
+from app.training.datasets import build_dataset
 from app.training.evaluation import compute_binary_classification_metrics
 from app.modeling.baseline import fit_logistic_regression, predict_probabilities
+from app.schemas.score import TrainingSnapshotInput
 from app.training.pipeline import TrainingRunConfig, run_training_pipeline
 
 
@@ -57,16 +59,39 @@ def test_training_pipeline_returns_completed_result(training_snapshots: list[dic
     assert result.metrics.expected_calibration_error >= 0
     assert len(result.calibration_bins) == 5
     assert result.artifact is not None
-    assert result.artifact.feature_version == "feature-set-v1"
-    assert result.artifact.model_version == "0.3.0"
+    assert result.model_name == "logistic-regression-full-history"
+    assert result.artifact.feature_version == "feature-set-v3-full-history"
+    assert result.artifact.model_version == "0.4.0"
     assert len(result.artifact.feature_names) == len(result.artifact.coefficients)
+
+
+def test_training_dataset_can_exclude_already_archived_observation_rows(
+    training_snapshots: list[dict[str, object]],
+) -> None:
+    archived_snapshot = dict(training_snapshots[0])
+    archived_dependency = dict(archived_snapshot["dependency"])
+    archived_repository = dict(archived_dependency["repository"])
+    archived_historical = dict(archived_dependency["historical_features"])
+    archived_repository["archived"] = True
+    archived_historical["repo_archived_at_obs"] = 1.0
+    archived_dependency["repository"] = archived_repository
+    archived_dependency["historical_features"] = archived_historical
+    archived_snapshot["dependency"] = archived_dependency
+
+    snapshots = [TrainingSnapshotInput.model_validate(item) for item in [*training_snapshots, archived_snapshot]]
+    dataset = build_dataset(
+        snapshots,
+        exclude_already_archived_at_observation=True,
+    )
+
+    assert len(dataset.rows) == len(training_snapshots)
 
 
 @pytest.mark.skipif(importlib.util.find_spec("xgboost") is None, reason="xgboost is not installed")
 def test_training_pipeline_supports_xgboost(training_snapshots: list[dict[str, object]]) -> None:
     result = run_training_pipeline(
         TrainingRunConfig(
-            algorithm="xgboost-baseline",
+            algorithm="xgboost-full-history",
             snapshots=training_snapshots,
             train_ratio=0.5,
             validation_ratio=0.25,
@@ -75,7 +100,7 @@ def test_training_pipeline_supports_xgboost(training_snapshots: list[dict[str, o
     )
 
     assert result.status == "completed"
-    assert result.model_name == "xgboost-baseline"
+    assert result.model_name == "xgboost-full-history"
     assert result.artifact is not None
     assert result.artifact.algorithm == "xgboost"
     assert result.artifact.booster_json

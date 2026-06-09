@@ -19,7 +19,7 @@ export const productGlossary: InfoChipItem[] = [
   }
 ];
 
-export const heuristicSignalGlossary: InfoChipItem[] = [
+export const modelFeatureGlossary: InfoChipItem[] = [
   {
     label: "Last push age",
     description: "How old the latest repository push is. Older push activity is a strong inactivity signal."

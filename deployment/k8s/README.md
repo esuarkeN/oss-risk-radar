@@ -66,14 +66,14 @@ Before building the API image for production, copy the real-world training artif
 npm run ml:stage-training
 ```
 
-The API image copies these files to `/app/seed/training`. On startup, the deployment seeds `/app/tmp/training` from them and merges the seed with future non-demo user analyses, so the deployed repository and ML pages start from a real-world base and can grow over time.
+The API image copies these files to `/app/seed/training`. On startup, the deployment seeds `/app/tmp/training` from them, including `snapshots.json`, `repository-feature-cache.json`, `latest-run.json`, and `runs/*.json`, so the deployed repository and ML pages start from a fixed real-world artifact bundle. User-submitted repositories can inform future corpus curation, but they are not treated as active/inactive labels at runtime.
 
 If the deployed PVC already contains placeholder/test rows, run one cleanup rollout with `TRAINING_SEED_MERGE_EXISTING=false` or delete `/app/tmp/training/snapshots.json` from the API PVC before returning to the default merge mode.
 
 The staging script validates that labeled rows have real GitHub repository identities and refuses obvious fixture-style exports with fewer than 40 repositories or fewer than 8 inactive repositories. Do not seed production with demo, fixture, or synthetic labeled data. If you need to rebuild the base, run the real-project pipeline first, for example:
 
 ```sh
-npm run ml:bootstrap:real-projects
+npm run ml:bootstrap:real-projects -- --gharchive-source ./tmp/gharchive
 npm run ml:stage-training
 ```
 

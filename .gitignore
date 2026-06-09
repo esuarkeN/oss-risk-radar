@@ -9,6 +9,7 @@ node_modules/
 .next/
 dist/
 coverage/
+*.tsbuildinfo
 
 # Python
 __pycache__/
@@ -17,6 +18,8 @@ __pycache__/
 .mypy_cache/
 .venv/
 venv/
+*.egg-info/
+mltraining/scoring/build/
 
 # Go
 bin/

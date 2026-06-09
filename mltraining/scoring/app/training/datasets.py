@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import json
 from pathlib import Path
 
-from app.modeling.features import FEATURE_NAMES, build_feature_row
+from app.modeling.features import feature_names_for_regime, build_feature_row
 from app.schemas.score import DatasetSummary, TrainingSnapshotInput
 
 
@@ -18,7 +18,6 @@ class TrainingRow:
     ecosystem: str
     observed_at: datetime
     label_inactive_12m: int | None
-    heuristic_reference_score: float
     missing_signals: list[str]
     feature_values: dict[str, float]
 
@@ -61,10 +60,30 @@ def load_snapshots_from_uri(dataset_uri: str) -> list[TrainingSnapshotInput]:
     return [TrainingSnapshotInput.model_validate(item) for item in items]
 
 
-def build_dataset(snapshots: list[TrainingSnapshotInput]) -> DatasetBundle:
+def snapshot_already_archived_at_observation(snapshot: TrainingSnapshotInput) -> bool:
+    historical_value = snapshot.dependency.historical_features.get("repo_archived_at_obs")
+    if historical_value is not None:
+        return float(historical_value) >= 1.0
+    repository = snapshot.dependency.repository
+    return bool(repository is not None and repository.archived)
+
+
+def build_dataset(
+    snapshots: list[TrainingSnapshotInput],
+    *,
+    feature_regime: str | None = None,
+    exclude_already_archived_at_observation: bool = False,
+) -> DatasetBundle:
+    feature_names = feature_names_for_regime(feature_regime)
     rows: list[TrainingRow] = []
     for snapshot in snapshots:
-        feature_row = build_feature_row(snapshot.dependency, observed_at=snapshot.observed_at)
+        if exclude_already_archived_at_observation and snapshot_already_archived_at_observation(snapshot):
+            continue
+        feature_row = build_feature_row(
+            snapshot.dependency,
+            observed_at=snapshot.observed_at,
+            feature_names=feature_names,
+        )
         rows.append(
             TrainingRow(
                 analysis_id=snapshot.analysis_id,
@@ -74,14 +93,13 @@ def build_dataset(snapshots: list[TrainingSnapshotInput]) -> DatasetBundle:
                 ecosystem=snapshot.dependency.ecosystem,
                 observed_at=parse_observed_at(snapshot.observed_at),
                 label_inactive_12m=None if snapshot.label_inactive_12m is None else int(snapshot.label_inactive_12m),
-                heuristic_reference_score=feature_row.heuristic_reference_score,
                 missing_signals=feature_row.missing_signals,
                 feature_values=feature_row.feature_values,
             )
         )
 
     rows.sort(key=lambda row: row.observed_at)
-    return DatasetBundle(rows=rows, feature_names=list(FEATURE_NAMES))
+    return DatasetBundle(rows=rows, feature_names=list(feature_names))
 
 
 def summarize_dataset(dataset: DatasetBundle) -> DatasetSummary:

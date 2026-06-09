@@ -32,7 +32,5 @@ export type {
   TrainingRunMetrics,
   TrainingRunModelArtifact,
   TrainingRunSplitSummary,
-  TriggerTrainingRunRequest,
-  TriggerTrainingRunResponse,
   UploadedArtifactRecord
 } from "@oss-risk-radar/schemas";

@@ -154,13 +154,7 @@ export function runtimeScoringLabel(methods: ScoringMethodOverview[]) {
   if (primaryModel) {
     return `ML model: ${compactModelName(primaryModel.label)}`;
   }
-  if (methods.some((method) => method.method === "failsafe")) {
-    return "Failsafe fallback";
-  }
-  if (methods.some((method) => method.method === "heuristic")) {
-    return "Heuristic fallback";
-  }
-  return "Pending";
+  return "Model artifact required";
 }
 
 export function latestCompletedRunForModel(runs: TrainingRunArtifact[], modelName: string) {
@@ -206,21 +200,21 @@ function scoringMethodLabel(method: ScoringMethodSummary) {
   if (method.method === "model_ensemble") {
     return "Model ensemble";
   }
-  if (method.method === "failsafe") {
-    return "Failsafe";
-  }
-  if (method.method === "heuristic") {
-    return "Heuristic";
-  }
   return formatFeatureName(method.method);
 }
 
 function formatModelName(modelName: string) {
-  if (modelName === "xgboost-baseline") {
-    return "XGBoost";
+  if (modelName === "xgboost-full-history") {
+    return "XGBoost full history";
   }
-  if (modelName === "logistic-regression-baseline") {
-    return "Logistic regression";
+  if (modelName === "logistic-regression-full-history") {
+    return "Logistic regression full history";
+  }
+  if (modelName === "xgboost-cold-start") {
+    return "XGBoost cold start";
+  }
+  if (modelName === "logistic-regression-cold-start") {
+    return "Logistic regression cold start";
   }
   return modelName.replace(/[-_]/g, " ");
 }

@@ -4,6 +4,8 @@ from typing import Any, Callable
 
 import pytest
 
+from app.training.maintenance_dataset.features import HISTORICAL_FEATURE_NAMES
+
 
 def make_dependency_payload(
     dependency_id: str = "dep_1",
@@ -23,6 +25,7 @@ def make_dependency_payload(
     forks: int = 600,
     open_issues: int = 87,
     scorecard_score: float | None = 8.4,
+    historical_features: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     repository: dict[str, Any] | None
     if (
@@ -67,6 +70,21 @@ def make_dependency_payload(
             ],
         }
 
+    if historical_features is None:
+        historical_features = {name: 0.0 for name in HISTORICAL_FEATURE_NAMES}
+        historical_features.update(
+            {
+                "commits_90d": float(max(0, recent_contributors_90d or 0) * 2),
+                "contributors_90d": float(recent_contributors_90d or 0),
+                "top1_contributor_commit_share_365d": float(contributor_concentration or 0),
+                "issue_backlog_growth_90d": float(open_issue_growth_90d or 0),
+                "pr_response_median_days_365d": float(pr_response_median_days or 0),
+                "stars_total_at_obs": float(stars),
+                "forks_total_at_obs": float(forks),
+                "repo_archived_at_obs": 1.0 if archived else 0.0,
+            }
+        )
+
     return {
         "dependency_id": dependency_id,
         "package_name": package_name,
@@ -75,6 +93,7 @@ def make_dependency_payload(
         "direct": direct,
         "repository": repository,
         "scorecard": scorecard,
+        "historical_features": historical_features,
     }
 
 
@@ -112,7 +131,7 @@ def training_snapshots() -> list[dict[str, Any]]:
                     contributor_concentration=0.9 if label else 0.3,
                     open_issue_growth_90d=0.45 if label else -0.1,
                     pr_response_median_days=40 if label else 2,
-                    archived=bool(label and index % 2 == 0),
+                    archived=False,
                     scorecard_score=4.5 if label else 8.8,
                 ),
             }

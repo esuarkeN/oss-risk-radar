@@ -6,7 +6,7 @@ This repository now contains a working phase-2 vertical slice with:
 
 - a Next.js analyst dashboard in `frontend/web`
 - a Go API/orchestration service in `backend/api`
-- a Python FastAPI scoring and experimentation service in `mltraining/scoring`
+- an internal Python scoring, notebook, and offline artifact workspace in `mltraining/scoring`
 - shared TypeScript contracts in `shared/packages/schemas`
 - Docker, Postgres bootstrap assets, and local startup scripts in `deployment`, `compose.yaml`, and `scripts/dev`
 
@@ -17,7 +17,7 @@ This repository now contains a working phase-2 vertical slice with:
 - manifest parsing for direct and transitive dependencies where the artifact supports it
 - durable analysis jobs with retryable lifecycle state in PostgreSQL
 - dependency enrichment through pluggable deps.dev, GitHub, and OpenSSF Scorecard adapters
-- explainable heuristic scoring plus calibrated logistic-regression and XGBoost training/scoring utilities
+- model-artifact scoring with staged calibrated Logistic Regression and XGBoost artifacts
 - a historical dataset builder that exports quarter-based OSS maintenance training snapshots for the existing ML pipeline
 - dependency overview, richer filtering, raw signal display, path exploration, and graph context in the frontend
 
@@ -25,7 +25,7 @@ This repository now contains a working phase-2 vertical slice with:
 
 - `frontend`: user-facing applications, currently the Next.js dashboard in `frontend/web`
 - `backend`: operational services, currently the Go API in `backend/api`
-- `mltraining`: scoring, feature engineering, and model experimentation code in `mltraining/scoring`
+- `mltraining`: scoring, feature engineering, notebooks, and offline artifact training code in `mltraining/scoring`
 - `shared`: reusable packages and contracts, including `shared/packages/schemas`
 - `deployment`: Dockerfiles, Compose assets, Kubernetes manifests, Argo CD application config, and Postgres initialization scripts
 - `docs`: architecture, methodology, threat model, roadmap, and API notes
@@ -37,7 +37,7 @@ This repository now contains a working phase-2 vertical slice with:
 2. Submit a GitHub repository URL, upload a dependency artifact, or run the demo analysis.
 3. The Go API registers an analysis and queues a durable background job in PostgreSQL.
 4. The worker parses manifests, resolves package metadata via deps.dev, enriches repositories through GitHub, fetches Scorecard signals, and calls the scoring service.
-5. The Python scoring service returns inactivity-oriented risk profiles, security posture context, confidence, caveats, explanation factors, and evidence.
+5. The Python scoring service scores with staged model artifacts and returns inactivity-oriented risk profiles, security posture context, confidence, caveats, explanation factors, and evidence.
 6. The frontend renders the overview dashboard, dependency graph/path context, and detail views.
 
 ## Local development
@@ -47,7 +47,7 @@ This repository now contains a working phase-2 vertical slice with:
 1. Copy `.env.example` to `.env` if you want to override defaults.
 2. Run `npm run dev`.
 3. The script will build and start Postgres, the Go API, the scoring service, and the frontend through Docker Compose.
-4. It waits for `http://localhost:8080/health`, `http://localhost:8090/health`, and `http://localhost:3000` before reporting success.
+4. It waits for `http://localhost:8080/health` and `http://localhost:3000` before reporting success. The scoring service is internal to the Compose network.
 
 ### Run services separately
 
@@ -61,6 +61,7 @@ This repository now contains a working phase-2 vertical slice with:
 - Canonical image definitions live in `deployment/docker/*.Dockerfile`.
 - The compose file can start only shared infrastructure, such as Postgres, without the app profile.
 - App containers are behind the Compose `apps` profile; use `docker compose --profile apps up --build` for raw Compose control.
+- Local Postgres analysis history is disposable for ML retraining. If a local schema change leaves the app DB stale, you can reset only the app database with `docker compose down`, `docker volume rm oss-risk-radar_postgres_data`, and `docker compose up -d postgres`. This does not delete `tmp/gharchive`, `tmp/training`, `tmp/notebooks`, or `deployment/training`.
 
 ## Deployment
 
@@ -80,18 +81,18 @@ Public API endpoints:
 - `GET /api/v1/analyses/:id/graph`
 - `GET /api/v1/dependencies/:id`
 - `GET /api/v1/jobs/:id`
+- `GET /api/v1/training/dataset`
+- `GET /api/v1/training/runs`
+- `GET /api/v1/training/runs/latest`
 
 Internal scoring endpoints:
 
 - `GET /health`
 - `GET /ready`
-- `POST /score/heuristic`
 - `POST /score/model`
 - `POST /features/extract`
-- `POST /models/train`
 
-`POST /api/v1/training/runs` accepts an optional `modelName`; the default is `all`, which trains logistic regression and XGBoost and returns both artifacts. Use `logistic-regression-baseline` or `xgboost-baseline` to refresh only one model.
-Analysis submissions may also include `modelName`; when omitted, runtime scoring uses every cached model artifact available for the latest training dataset and exposes per-model outputs alongside the ensemble score.
+Model training is offline and notebook-primary. `notebooks/oss-maintenance-training.ipynb` is the visible ML workflow and the artifact export boundary; `npm run ml:train` executes that notebook headlessly to write `tmp/training/runs/*.json` and `tmp/training/latest-run.json`. Runtime scoring is model-artifact-only: the API must provide staged Logistic Regression and XGBoost artifacts for full-history and cold-start scoring, and missing artifacts are deployment configuration errors instead of substitute scoring behavior.
 
 ## Important positioning
 
@@ -102,10 +103,13 @@ OSS Risk Radar is not framed as a vulnerability scanner or a definitive trust sc
 - `npm run dev` to start the full stack
 - `npm run test:api` to run Go tests
 - `npm run test:scoring` to run Python tests
-- `npm run ml:dataset -- build-all --seed-file <path> --gharchive-source <path> --output-dir tmp/training/oss-maintenance` to build a historical maintenance dataset
-- `npm run ml:seed:foundation -- --target-repositories 2000 --github-token <token>` to generate a repository foundation seed directly from the GitHub Search API
+- `npm run ml:dataset -- build-all --seed-file <path> --gharchive-source <path> --output-dir tmp/training/oss-maintenance` to build a historical maintenance dataset; local GHArchive directories infer the latest safe observation end automatically
+- `npm run ml:seed:foundation -- --target-repositories 5000 --github-token <token>` to generate a repository foundation seed directly from the GitHub Search API
 - `npm run ml:dataset:foundation -- --github-token <token> --gharchive-source <path>` to build the larger repository-first dataset from the generated foundation seed
-- `npm run ml:bootstrap -- --gharchive-source <path>` to build from the small starter seed, trigger training, and verify cached run artifacts under `tmp/training/runs`
+- `npm run ml:notebook` to open the JupyterLab workflow
+- `npm run ml:notebook:execute` to smoke-execute the notebook with a fixture dataset under `tmp/notebooks`
+- `npm run ml:train` to execute the notebook and export the full-history plus cold-start model artifact bundle from `tmp/training/snapshots.json`
+- `npm run ml:bootstrap -- --gharchive-source <path>` to build from the small starter seed, train the artifact bundle offline, and verify cached run artifacts plus `tmp/training/repository-feature-cache.json`
 - `npm run ml:bootstrap:foundation -- --github-token <token> --gharchive-source <path>` to build and train from the larger GitHub repository foundation seed
 - `npm run check:web` to lint and build the frontend
 - `powershell -ExecutionPolicy Bypass -File scripts/dev/validate-scaffold.ps1` to validate the repo scaffold
@@ -118,7 +122,7 @@ OSS Risk Radar is not framed as a vulnerability scanner or a definitive trust sc
 4. Expand upload support to SBOM inputs and Maven/POM-style ecosystems.
 5. Add stronger analysis polling, live job progress, and retry visibility in the frontend.
 6. Introduce authenticated, tenant-ready middleware and analysis ownership boundaries in the API.
-7. Persist trained model artifacts and model registry metadata beyond in-memory training responses.
-8. Add notebook-friendly demo datasets and evaluation reports under `mltraining/scoring` for thesis validation.
+7. Add a future labeled-corpus queue for user-submitted repositories without treating submissions as labels.
+8. Add richer notebook evaluation reports under `notebooks/` for thesis validation.
 9. Add browser-level end-to-end tests for submit -> job -> dashboard -> detail navigation.
 10. Harden the Kubernetes deployment with observability, backups, secret rotation, and rollout verification.

@@ -8,7 +8,7 @@ OSS Risk Radar is not a vulnerability scanner and it does not claim that a packa
 - The security posture score summarizes public indicators related to repository hygiene and secure development practice.
 - The confidence indicator reflects how complete and recent the available evidence is, not how true the score is in an absolute sense.
 
-## Signals used in the first phase
+## Signals used by the model artifacts
 
 - Last commit age
 - Last release age
@@ -30,7 +30,9 @@ OSS Risk Radar is not a vulnerability scanner and it does not claim that a packa
 
 ## Research path
 
-The first release should ship explainable heuristics. A future model can be layered on top once the snapshot store, labels, and evaluation pipeline are stable enough for time-aware training and calibration.
+The current scoring path uses fixed Logistic Regression and XGBoost artifacts exported from the notebook workflow. Missing model artifacts are deployment configuration errors; runtime scoring should not produce substitute scores when the artifact bundle is absent.
+
+For runtime scoring signal and output framing, see `docs/methodology/model-artifact-scoring.md`.
 
 ## Historical dataset builder
 

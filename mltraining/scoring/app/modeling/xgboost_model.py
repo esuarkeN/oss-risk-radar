@@ -20,8 +20,8 @@ class XGBoostModel:
     learning_rate: float
     xgboost_version: str
     feature_importances: list[XGBoostFeatureImportance]
-    model_name: str = "xgboost-baseline"
-    model_version: str = "0.1.0"
+    model_name: str = "xgboost-full-history"
+    model_version: str = "0.2.0"
     objective: str = "binary:logistic"
 
 
@@ -31,7 +31,7 @@ def _load_xgboost() -> Any:
     except ModuleNotFoundError as exc:
         raise ValueError(
             "XGBoost support requires the xgboost Python package. "
-            "Install mltraining/scoring requirements before training or scoring xgboost-baseline artifacts."
+            "Install mltraining/scoring requirements before training or scoring XGBoost artifacts."
         ) from exc
     return xgb
 

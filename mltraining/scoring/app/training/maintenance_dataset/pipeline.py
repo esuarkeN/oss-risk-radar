@@ -46,11 +46,18 @@ class DatasetPaths:
     snapshot_features: Path
     snapshot_labels: Path
     training_snapshots: Path
+    repository_feature_cache: Path
 
     @classmethod
-    def from_output_dir(cls, output_dir: str | Path, training_output_path: str | Path | None = None) -> "DatasetPaths":
+    def from_output_dir(
+        cls,
+        output_dir: str | Path,
+        training_output_path: str | Path | None = None,
+        feature_cache_output_path: str | Path | None = None,
+    ) -> "DatasetPaths":
         root = Path(output_dir)
         training_path = Path(training_output_path) if training_output_path else root / "training_snapshots.json"
+        feature_cache_path = Path(feature_cache_output_path) if feature_cache_output_path else root / "repository_feature_cache.json"
         return cls(
             output_dir=root,
             repositories=root / "repositories.jsonl",
@@ -60,6 +67,7 @@ class DatasetPaths:
             snapshot_features=root / "snapshot_features.jsonl",
             snapshot_labels=root / "snapshot_labels.jsonl",
             training_snapshots=training_path,
+            repository_feature_cache=feature_cache_path,
         )
 
 
@@ -76,6 +84,7 @@ class DatasetBuildConfig:
     sample_seed: int = 42
     include_forks: bool = False
     training_output_path: str | Path | None = None
+    feature_cache_output_path: str | Path | None = None
     merge_existing_training_output: bool = True
 
 
@@ -102,7 +111,11 @@ class DatasetBuilder:
     def __init__(self, config: DatasetBuildConfig, adapters: PipelineAdapters) -> None:
         self.config = config
         self.adapters = adapters
-        self.paths = DatasetPaths.from_output_dir(config.output_dir, config.training_output_path)
+        self.paths = DatasetPaths.from_output_dir(
+            config.output_dir,
+            config.training_output_path,
+            config.feature_cache_output_path,
+        )
 
     def ingest_candidates(self) -> dict[str, int]:
         candidates = self._dedupe_candidates(load_package_candidates(Path(self.config.seed_file)))
@@ -285,6 +298,22 @@ class DatasetBuilder:
                         "historical_features": feature_row.feature_values,
                     },
                     "label_inactive_12m": None if label_row is None else label_row.label_inactive_12m,
+                    "sampling": {
+                        "seed_source": package.source,
+                        "mapping_source": package.mapping_source,
+                        "popularity_tier": package.popularity_tier,
+                    },
+                    "label_components": None
+                    if label_row is None
+                    else {
+                        "maintained_12m": label_row.maintained_12m,
+                        "future_active_commit_months_12m": label_row.future_active_commit_months_12m,
+                        "future_contributors_12m": label_row.future_contributors_12m,
+                        "future_releases_12m": label_row.future_releases_12m,
+                        "future_merged_prs_12m": label_row.future_merged_prs_12m,
+                        "archived_by_t_plus_12m": label_row.archived_by_t_plus_12m,
+                        "missing_label_signals": label_row.missing_label_signals,
+                    },
                 }
             )
 
@@ -293,6 +322,14 @@ class DatasetBuilder:
 
         payload = {"updatedAt": datetime.now(UTC).isoformat(), "snapshots": training_rows}
         write_json(self.paths.training_snapshots, payload)
+        feature_cache_rows = _build_repository_feature_cache(repositories, feature_rows)
+        write_json(
+            self.paths.repository_feature_cache,
+            {
+                "updatedAt": payload["updatedAt"],
+                "repositories": feature_cache_rows,
+            },
+        )
         labeled_rows = sum(1 for row in training_rows if row.get("label_inactive_12m") is not None)
         return {
             "training_snapshots": len(training_rows),
@@ -300,6 +337,7 @@ class DatasetBuilder:
             "existing_training_snapshots": len(existing_rows),
             "added_training_snapshots": merge_summary["added"],
             "updated_training_snapshots": merge_summary["updated"],
+            "repository_feature_cache": len(feature_cache_rows),
             "labeled_rows": labeled_rows,
         }
 
@@ -585,6 +623,36 @@ def _merge_training_snapshot_rows(
     merged_rows = passthrough_rows + list(keyed_rows.values())
     merged_rows.sort(key=_training_snapshot_sort_key)
     return merged_rows, {"added": added, "updated": updated}
+
+
+def _build_repository_feature_cache(
+    repositories: dict[str, RepositoryRecord],
+    feature_rows: dict[str, SnapshotFeatureRow],
+) -> list[dict[str, Any]]:
+    excluded_runtime_features = {"repo_archived_at_obs"}
+    latest_by_repository: dict[str, dict[str, Any]] = {}
+    for feature_row in feature_rows.values():
+        repository = repositories.get(feature_row.repository_id)
+        if repository is None:
+            continue
+        repository_full_name = repository.full_name.strip().lower()
+        if not repository_full_name:
+            continue
+        current = latest_by_repository.get(repository_full_name)
+        if current is not None and str(current.get("observedAt", "")) >= feature_row.observed_at.isoformat():
+            continue
+        latest_by_repository[repository_full_name] = {
+            "repositoryFullName": repository_full_name,
+            "repositoryUrl": repository.url,
+            "observedAt": feature_row.observed_at.isoformat(),
+            "source": "gharchive",
+            "featureValues": {
+                key: value for key, value in feature_row.feature_values.items() if key not in excluded_runtime_features
+            },
+            "missingFeatures": [key for key in feature_row.missing_features if key not in excluded_runtime_features],
+        }
+
+    return [latest_by_repository[key] for key in sorted(latest_by_repository)]
 
 
 def _training_snapshot_identity(row: dict[str, Any]) -> tuple[str, str, str] | None:

@@ -39,7 +39,12 @@ def test_build_snapshot_features_calculates_chaoss_style_proxies() -> None:
         ],
         issues={
             "1": IssueState(issue_id="1", created_at=datetime(2023, 12, 10, tzinfo=UTC)),
-            "2": IssueState(issue_id="2", created_at=datetime(2023, 11, 1, tzinfo=UTC), closed_at=datetime(2023, 12, 1, tzinfo=UTC)),
+            "2": IssueState(
+                issue_id="2",
+                created_at=datetime(2023, 11, 1, tzinfo=UTC),
+                closed_at=datetime(2023, 12, 1, tzinfo=UTC),
+                first_response_at=datetime(2023, 11, 3, tzinfo=UTC),
+            ),
             "3": IssueState(issue_id="3", created_at=datetime(2023, 6, 1, tzinfo=UTC)),
         },
         pull_requests={
@@ -81,6 +86,11 @@ def test_build_snapshot_features_calculates_chaoss_style_proxies() -> None:
     assert row.feature_values["releases_365d"] == 1.0
     assert row.feature_values["versions_published_365d"] == 1.0
     assert row.feature_values["dependency_count_at_obs"] == 4.0
+    assert row.feature_values["issue_first_response_median_days_365d"] == 2.0
+    assert row.feature_values["issue_resolution_median_days_365d"] == 30.0
+    assert row.feature_values["stale_issue_share_at_obs"] == 0.5
+    assert row.feature_values["pr_response_median_days_365d"] == 8.0
+    assert row.feature_values["pr_merge_latency_median_days_365d"] == 2.0
     assert row.open_issues_total_at_obs == 2
     assert row.release_cadence_days is not None
     assert row.pr_response_median_days is not None

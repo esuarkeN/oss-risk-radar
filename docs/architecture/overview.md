@@ -3,8 +3,8 @@
 OSS Risk Radar is organized as a pragmatic monorepo with three primary runtime surfaces:
 
 - `frontend/web`: analyst-facing dashboard for analysis submission and review
-- `backend/api`: operational backbone responsible for orchestration, validation, storage coordination, and frontend-facing APIs
-- `mltraining/scoring`: internal intelligence service responsible for heuristic scoring today and ML-backed inference later
+- `backend/api`: operational backbone responsible for orchestration, validation, storage coordination, and the only frontend-facing API
+- `mltraining/scoring`: internal intelligence service and offline ML workspace responsible for model-artifact inference, feature extraction, notebooks, and fixed artifact training
 
 Design principles:
 

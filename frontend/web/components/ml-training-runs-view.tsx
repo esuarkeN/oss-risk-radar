@@ -46,7 +46,7 @@ export function MlTrainingRunsView() {
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Cached runs</p>
           <p className="text-4xl font-semibold tracking-tight text-foreground">{sortedRuns.length}</p>
-          <p className="text-sm text-muted">Artifacts currently visible to the UI</p>
+          <p className="text-sm text-muted">Staged artifacts currently visible to the UI</p>
         </Card>
         <Card className="space-y-2">
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Latest status</p>
@@ -116,9 +116,9 @@ export function MlTrainingRunsView() {
         <Card className="space-y-4">
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Run History</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No cached training runs yet</h2>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">No staged model artifacts yet</h2>
           </div>
-          <p className="text-sm text-muted">Trigger a training run from the overview page and the artifact log will appear here.</p>
+          <p className="text-sm text-muted">Run the offline notebook or `npm run ml:bootstrap:foundation -- --gharchive-source &lt;path&gt;` and the artifact log will appear here.</p>
         </Card>
       )}
     </div>

@@ -6,7 +6,7 @@ OSS Risk Radar is organized as a monorepo with clear ownership boundaries so tha
 
 - `frontend/web` hosts the Next.js dashboard and analyst experience.
 - `backend/api` hosts the Go REST API, orchestration layer, and persistence coordination.
-- `mltraining/scoring` hosts the Python scoring, feature extraction, and model experimentation code.
+- `mltraining/scoring` hosts the internal Python scoring, feature extraction, notebook, and offline artifact training code.
 - `shared/packages/schemas` will hold shared contracts, generated clients, and JSON schema artifacts.
 - `docs` captures architecture, methodology, API contracts, threat model, and roadmap material.
 - `deployment` contains container, Compose, Kubernetes, Argo CD, and environment scaffolding.
@@ -15,7 +15,8 @@ OSS Risk Radar is organized as a monorepo with clear ownership boundaries so tha
 ## Service boundaries
 
 - The Go API is the system entry point for user-facing analysis requests, uploads, and job orchestration.
-- The Python scoring service is stateless and should only consume normalized payloads from the Go API.
+- The Python scoring service is internal and stateless; it consumes normalized payloads and staged model artifacts from the Go API.
+- Model training is an offline notebook-primary workflow that exports fixed artifacts instead of a public runtime API.
 - The frontend should not talk directly to provider APIs or the database.
 - Public enrichment providers should be isolated behind provider interfaces so they can be mocked, swapped, or disabled independently.
 
@@ -24,7 +25,7 @@ OSS Risk Radar is organized as a monorepo with clear ownership boundaries so tha
 1. The user submits a repository URL or dependency artifact.
 2. The Go API creates an analysis and queues a job.
 3. The Go API normalizes a dependency set, either from a real parser or a demo fixture.
-4. The Python service returns a conservative heuristic risk profile with evidence and caveats.
+4. The Python service scores dependencies with staged model artifacts and returns conservative risk profiles with evidence and caveats.
 5. The frontend renders summary cards, charts, filters, and a dependency detail view.
 
 ## Design principles

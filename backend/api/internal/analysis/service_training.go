@@ -12,7 +12,7 @@ func (s *Service) GetTrainingDatasetSummary(_ context.Context) (TrainingDatasetS
 	return s.trainingDataset.Summary()
 }
 
-func (s *Service) BootstrapTrainingArtifacts(datasetSeedPath string, runsSeedDir string, latestRunSeedPath string, mergeExisting bool) error {
+func (s *Service) BootstrapTrainingArtifacts(datasetSeedPath string, featureCacheSeedPath string, runsSeedDir string, latestRunSeedPath string, mergeExisting bool) error {
 	if s.trainingDataset != nil {
 		seeded, err := s.trainingDataset.BootstrapFromSeed(datasetSeedPath, mergeExisting)
 		if err != nil {
@@ -20,6 +20,16 @@ func (s *Service) BootstrapTrainingArtifacts(datasetSeedPath string, runsSeedDir
 		}
 		if seeded && s.logger != nil {
 			s.logger.Info("seeded training dataset", slog.String("path", s.trainingDataset.path), slog.String("seed_path", datasetSeedPath), slog.Bool("merge_existing", mergeExisting))
+		}
+	}
+
+	if s.trainingFeatureCache != nil {
+		seeded, err := s.trainingFeatureCache.BootstrapFromSeed(featureCacheSeedPath)
+		if err != nil {
+			return err
+		}
+		if seeded && s.logger != nil {
+			s.logger.Info("seeded repository feature cache", slog.String("path", s.trainingFeatureCache.path), slog.String("seed_path", featureCacheSeedPath))
 		}
 	}
 

@@ -14,7 +14,6 @@ import type {
   ListAnalysesResponse,
   TrainingDatasetSummary,
   TrainingRunArtifact,
-  TriggerTrainingRunResponse,
 } from "@oss-risk-radar/schemas";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8080/api/v1";
@@ -105,13 +104,6 @@ export async function getLatestTrainingRun(): Promise<TrainingRunArtifact | null
 export async function listTrainingRuns(): Promise<TrainingRunArtifact[]> {
   const response = await request<ListTrainingRunsResponse>("/training/runs");
   return response.runs;
-}
-
-export function triggerTrainingRun(force = false) {
-  return request<TriggerTrainingRunResponse>("/training/runs", {
-    method: "POST",
-    body: JSON.stringify({ force })
-  });
 }
 
 export function listAnalyses() {

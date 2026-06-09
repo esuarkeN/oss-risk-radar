@@ -32,7 +32,12 @@ def _lookup_bin_rate(bins: list[CalibrationBinSummary], prediction: float) -> fl
     return bins[-1].empirical_rate
 
 
-def fit_histogram_calibrator(predictions: list[float], labels: list[int], bin_count: int = 10) -> HistogramCalibrator:
+def fit_histogram_calibrator(
+    predictions: list[float],
+    labels: list[int],
+    bin_count: int = 10,
+    smoothing_weight: float = 4.0,
+) -> HistogramCalibrator:
     if len(predictions) != len(labels):
         raise ValueError("predictions and labels must have the same length")
     if not predictions:
@@ -49,6 +54,7 @@ def fit_histogram_calibrator(predictions: list[float], labels: list[int], bin_co
         raw_bins[index]["predictions"].append(clipped)
         raw_bins[index]["labels"].append(int(label))
 
+    base_rate = sum(int(label) for label in labels) / len(labels)
     summaries: list[CalibrationBinSummary] = []
     previous_rate = 0.0
     for index, bucket in enumerate(raw_bins):
@@ -59,7 +65,7 @@ def fit_histogram_calibrator(predictions: list[float], labels: list[int], bin_co
         count = len(bucket_predictions)
         if count:
             average_prediction = sum(bucket_predictions) / count
-            empirical_rate = sum(bucket_labels) / count
+            empirical_rate = (sum(bucket_labels) + (base_rate * smoothing_weight)) / (count + smoothing_weight)
         else:
             average_prediction = lower + (width / 2)
             empirical_rate = previous_rate

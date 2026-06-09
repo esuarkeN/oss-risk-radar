@@ -2,18 +2,27 @@
 name = "oss-risk-radar-scoring"
 version = "0.1.0"
 description = "FastAPI scoring service for OSS Risk Radar"
-requires-python = ">=3.12"
+requires-python = ">=3.14,<3.15"
 dependencies = [
-  "fastapi>=0.115.0,<1.0.0",
-  "uvicorn[standard]>=0.30.0,<1.0.0",
-  "pydantic>=2.8.0,<3.0.0",
-  "xgboost>=2.1.0,<4.0.0"
+  "fastapi>=0.136.3,<1.0.0",
+  "uvicorn[standard]>=0.49.0,<1.0.0",
+  "pydantic>=2.13.4,<3.0.0",
+  "xgboost>=3.2.0,<4.0.0"
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.3.0,<10.0.0",
-  "httpx>=0.27.0,<1.0.0"
+  "pytest>=9.0.3,<10.0.0",
+  "httpx>=0.28.1,<1.0.0"
+]
+notebook = [
+  "jupyterlab>=4.5.8,<5.0.0",
+  "ipykernel>=7.2.0,<8.0.0",
+  "pandas>=2.3.3,<3.0.0",
+  "matplotlib>=3.10.9,<4.0.0",
+  "seaborn>=0.13.2,<1.0.0",
+  "nbconvert>=7.17.1,<8.0.0",
+  "papermill>=2.7.0,<3.0.0"
 ]
 
 [tool.pytest.ini_options]

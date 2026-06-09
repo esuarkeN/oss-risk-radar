@@ -37,9 +37,7 @@ HISTORICAL_FEATURE_NAMES = [
     "repo_age_days",
     "stars_total_at_obs",
     "forks_total_at_obs",
-    "direct_dependents_count_at_obs",
     "dependency_count_at_obs",
-    "ecosystem_download_tier_at_obs",
     "popularity_tier_at_obs",
     "repo_archived_at_obs",
     "has_recent_release_flag",
@@ -48,6 +46,11 @@ HISTORICAL_FEATURE_NAMES = [
     "contributors_drop_365d_vs_prev_365d",
     "release_gap_risk",
     "concentration_risk_score",
+    "issue_first_response_median_days_365d",
+    "issue_resolution_median_days_365d",
+    "stale_issue_share_at_obs",
+    "pr_response_median_days_365d",
+    "pr_merge_latency_median_days_365d",
 ]
 
 
@@ -134,8 +137,6 @@ def build_snapshot_features(
     if dependency_count is None:
         missing_features.append("dependency_count_at_obs")
 
-    missing_features.append("direct_dependents_count_at_obs")
-    missing_features.append("ecosystem_download_tier_at_obs")
     popularity_tier = _popularity_tier_from_history(stars_total_at_obs, forks_total_at_obs)
     popularity_tier_numeric = {"low": 0.0, "medium": 1.0, "high": 2.0}[popularity_tier]
 
@@ -147,7 +148,19 @@ def build_snapshot_features(
     release_gap_risk = _release_gap_risk(days_since_last_release, release_cadence_days, package_age_days, repo_age_days)
     concentration_risk_score = min(1.0, top1_share * 0.6 + top2_share * 0.2 + concentration_index * 0.2 + maintainer_concentration_flag * 0.15)
 
+    issue_first_response_median_days = _issue_first_response_median_days(history, window_365, observed_at)
+    if issue_first_response_median_days is None:
+        missing_features.append("issue_first_response_median_days_365d")
+    issue_resolution_median_days = _issue_resolution_median_days(history, window_365, observed_at)
+    if issue_resolution_median_days is None:
+        missing_features.append("issue_resolution_median_days_365d")
+    stale_issue_share = stale_open_issues / max(1, backlog_obs)
     pr_response_median_days = _pr_response_median_days(history, window_365, observed_at)
+    if pr_response_median_days is None:
+        missing_features.append("pr_response_median_days_365d")
+    pr_merge_latency_median_days = _pr_merge_latency_median_days(history, window_365, observed_at)
+    if pr_merge_latency_median_days is None:
+        missing_features.append("pr_merge_latency_median_days_365d")
 
     if history.coverage_start is None or history.coverage_start > window_365:
         missing_features.append("history_coverage_before_observation")
@@ -182,9 +195,7 @@ def build_snapshot_features(
         "repo_age_days": float(repo_age_days or 0),
         "stars_total_at_obs": float(stars_total_at_obs),
         "forks_total_at_obs": float(forks_total_at_obs),
-        "direct_dependents_count_at_obs": 0.0,
         "dependency_count_at_obs": float(dependency_count or 0),
-        "ecosystem_download_tier_at_obs": 0.0,
         "popularity_tier_at_obs": popularity_tier_numeric,
         "repo_archived_at_obs": repo_archived_at_obs,
         "has_recent_release_flag": has_recent_release_flag,
@@ -193,6 +204,11 @@ def build_snapshot_features(
         "contributors_drop_365d_vs_prev_365d": round(contributors_drop, 6),
         "release_gap_risk": round(release_gap_risk, 6),
         "concentration_risk_score": round(concentration_risk_score, 6),
+        "issue_first_response_median_days_365d": float(issue_first_response_median_days or 0),
+        "issue_resolution_median_days_365d": float(issue_resolution_median_days or 0),
+        "stale_issue_share_at_obs": round(stale_issue_share, 6),
+        "pr_response_median_days_365d": float(pr_response_median_days or 0),
+        "pr_merge_latency_median_days_365d": float(pr_merge_latency_median_days or 0),
     }
 
     ordered_values = {name: float(feature_values[name]) for name in HISTORICAL_FEATURE_NAMES}
@@ -277,6 +293,39 @@ def _pr_response_median_days(history: RepositoryHistory, start, end) -> float | 
         if response_at is None or not (start < response_at <= end):
             continue
         samples.append((response_at - pr.created_at).total_seconds() / 86_400)
+    if not samples:
+        return None
+    return round(float(median(samples)), 6)
+
+
+def _issue_first_response_median_days(history: RepositoryHistory, start, end) -> float | None:
+    samples = []
+    for issue in history.issues.values():
+        if issue.first_response_at is None or not (start < issue.first_response_at <= end):
+            continue
+        samples.append((issue.first_response_at - issue.created_at).total_seconds() / 86_400)
+    if not samples:
+        return None
+    return round(float(median(samples)), 6)
+
+
+def _issue_resolution_median_days(history: RepositoryHistory, start, end) -> float | None:
+    samples = []
+    for issue in history.issues.values():
+        if issue.closed_at is None or not (start < issue.closed_at <= end):
+            continue
+        samples.append((issue.closed_at - issue.created_at).total_seconds() / 86_400)
+    if not samples:
+        return None
+    return round(float(median(samples)), 6)
+
+
+def _pr_merge_latency_median_days(history: RepositoryHistory, start, end) -> float | None:
+    samples = []
+    for pr in history.pull_requests.values():
+        if pr.merged_at is None or not (start < pr.merged_at <= end):
+            continue
+        samples.append((pr.merged_at - pr.created_at).total_seconds() / 86_400)
     if not samples:
         return None
     return round(float(median(samples)), 6)

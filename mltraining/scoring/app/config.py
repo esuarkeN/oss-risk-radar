@@ -23,7 +23,7 @@ class Settings:
     service_version: str = os.getenv("SCORING_SERVICE_VERSION", "0.1.0")
     host: str = os.getenv("SCORING_HOST", "0.0.0.0")
     port: int = int_env("SCORING_PORT", 8090)
-    model_name: str = os.getenv("SCORING_MODEL_NAME", "heuristic-v1")
+    model_name: str = os.getenv("SCORING_MODEL_NAME", "model-artifact-v1")
 
 
 settings = Settings()

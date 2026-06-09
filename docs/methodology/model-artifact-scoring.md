@@ -1,6 +1,6 @@
-# Heuristic Scoring Methodology
+# Model-Artifact Scoring Methodology
 
-Phase 1 uses an explainable heuristic focused on inactivity-oriented risk and public security-practice indicators.
+Runtime scoring uses exported Logistic Regression and XGBoost artifacts focused on inactivity-oriented risk and public security-practice indicators. The artifact bundle is required configuration for runtime scoring.
 
 Signals currently modeled:
 
@@ -27,4 +27,5 @@ Important framing:
 - a high score is not proof of abandonment
 - a low score is not proof of safety
 - missing data is surfaced explicitly and lowers confidence
+- missing model artifacts are configuration errors and should stop scoring instead of producing substitute scores
 - popularity metrics remain weak context rather than primary evidence

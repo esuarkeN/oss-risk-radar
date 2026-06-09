@@ -259,7 +259,6 @@ async function verifyPortsAreAvailable() {
   const ports = [
     { envKey: "POSTGRES_PORT", service: "postgres", fallback: 5432 },
     { envKey: "API_PORT", service: "api", fallback: 8080 },
-    { envKey: "SCORING_PORT", service: "scoring", fallback: 8090 },
     { envKey: "WEB_PORT", service: "web", fallback: 3000 }
   ];
 
@@ -325,12 +324,10 @@ if (!shouldWait) process.exit(0);
 
 const env = readEnvConfig();
 const apiPort = parsePort(env.get("API_PORT"), 8080);
-const scoringPort = parsePort(env.get("SCORING_PORT"), 8090);
 const webPort = parsePort(env.get("WEB_PORT"), 3000);
 
 const services = [
   { name: "api", url: `http://localhost:${apiPort}/health` },
-  { name: "scoring", url: `http://localhost:${scoringPort}/health` },
   { name: "web", url: `http://localhost:${webPort}` },
 ];
 

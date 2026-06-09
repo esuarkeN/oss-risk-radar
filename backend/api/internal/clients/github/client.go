@@ -46,8 +46,10 @@ func (c *Client) GetRepository(ctx context.Context, repositoryURL string) (*prov
 
 	releaseTimes, _ := c.getReleaseTimes(ctx, owner, repo)
 	recentContributors, concentration, _ := c.getRecentContributorStats(ctx, owner, repo)
-	prMedian, _ := c.getPRMedian(ctx, owner, repo)
+	prMedian, prMergeLatency, _ := c.getPRMetrics(ctx, owner, repo)
 	openIssueGrowth, _ := c.getOpenIssueGrowth(ctx, owner, repo, payload.OpenIssues)
+	issueResolutionMedian, _ := c.getIssueResolutionMedian(ctx, owner, repo)
+	staleIssueShare, _ := c.getStaleIssueShare(ctx, owner, repo, payload.OpenIssues)
 
 	snapshot := &providers.RepositorySnapshot{
 		FullName:                      payload.FullName,
@@ -61,6 +63,9 @@ func (c *Client) GetRepository(ctx context.Context, repositoryURL string) (*prov
 		RecentContributors90d:         recentContributors,
 		ContributorConcentration:      concentration,
 		PullRequestMedianResponseDays: prMedian,
+		PullRequestMedianMergeDays:    prMergeLatency,
+		IssueResolutionMedianDays:     issueResolutionMedian,
+		StaleIssueShare:               staleIssueShare,
 		LastPushAgeDays:               ageDays(payload.PushedAt),
 		OpenIssueGrowth90d:            openIssueGrowth,
 	}
@@ -182,25 +187,36 @@ func (c *Client) getRecentContributorStats(ctx context.Context, owner string, re
 	return &count, &concentration, nil
 }
 
-func (c *Client) getPRMedian(ctx context.Context, owner string, repo string) (*float64, error) {
+func (c *Client) getPRMetrics(ctx context.Context, owner string, repo string) (*float64, *float64, error) {
 	var payload []struct {
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
+		CreatedAt time.Time  `json:"created_at"`
+		UpdatedAt time.Time  `json:"updated_at"`
+		MergedAt  *time.Time `json:"merged_at"`
 	}
 	if err := c.getJSON(ctx, fmt.Sprintf("/repos/%s/%s/pulls?state=closed&sort=updated&direction=desc&per_page=20", owner, repo), &payload); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(payload) == 0 {
-		return nil, fmt.Errorf("no pull requests found")
+		return nil, nil, fmt.Errorf("no pull requests found")
 	}
 
 	samples := make([]float64, 0, len(payload))
+	mergeSamples := make([]float64, 0, len(payload))
 	for _, item := range payload {
 		samples = append(samples, item.UpdatedAt.Sub(item.CreatedAt).Hours()/24)
+		if item.MergedAt != nil {
+			mergeSamples = append(mergeSamples, item.MergedAt.Sub(item.CreatedAt).Hours()/24)
+		}
 	}
 	sort.Float64s(samples)
 	median := samples[len(samples)/2]
-	return &median, nil
+	var mergeMedian *float64
+	if len(mergeSamples) > 0 {
+		sort.Float64s(mergeSamples)
+		value := mergeSamples[len(mergeSamples)/2]
+		mergeMedian = &value
+	}
+	return &median, mergeMedian, nil
 }
 
 func (c *Client) getOpenIssueGrowth(ctx context.Context, owner string, repo string, openIssues int) (*float64, error) {
@@ -218,6 +234,52 @@ func (c *Client) getOpenIssueGrowth(ctx context.Context, owner string, repo stri
 	}
 	growth := float64(payload.TotalCount) / float64(openIssues)
 	return &growth, nil
+}
+
+func (c *Client) getIssueResolutionMedian(ctx context.Context, owner string, repo string) (*float64, error) {
+	date := time.Now().UTC().AddDate(0, 0, -365).Format("2006-01-02")
+	query := url.QueryEscape(fmt.Sprintf("repo:%s/%s type:issue state:closed closed:>=%s", owner, repo, date))
+	var payload struct {
+		Items []struct {
+			CreatedAt time.Time  `json:"created_at"`
+			ClosedAt  *time.Time `json:"closed_at"`
+		} `json:"items"`
+	}
+	if err := c.getJSON(ctx, "/search/issues?q="+query+"&per_page=20", &payload); err != nil {
+		return nil, err
+	}
+	samples := make([]float64, 0, len(payload.Items))
+	for _, item := range payload.Items {
+		if item.ClosedAt != nil {
+			samples = append(samples, item.ClosedAt.Sub(item.CreatedAt).Hours()/24)
+		}
+	}
+	if len(samples) == 0 {
+		return nil, fmt.Errorf("no closed issues found")
+	}
+	sort.Float64s(samples)
+	median := samples[len(samples)/2]
+	return &median, nil
+}
+
+func (c *Client) getStaleIssueShare(ctx context.Context, owner string, repo string, openIssues int) (*float64, error) {
+	if openIssues == 0 {
+		zero := 0.0
+		return &zero, nil
+	}
+	date := time.Now().UTC().AddDate(0, 0, -90).Format("2006-01-02")
+	query := url.QueryEscape(fmt.Sprintf("repo:%s/%s type:issue state:open created:<%s", owner, repo, date))
+	var payload struct {
+		TotalCount int `json:"total_count"`
+	}
+	if err := c.getJSON(ctx, "/search/issues?q="+query, &payload); err != nil {
+		return nil, err
+	}
+	share := float64(payload.TotalCount) / float64(openIssues)
+	if share > 1 {
+		share = 1
+	}
+	return &share, nil
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, target any) error {

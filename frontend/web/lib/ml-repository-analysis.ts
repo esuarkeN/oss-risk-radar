@@ -24,7 +24,6 @@ const expectedSignals = [
   "contributor_concentration",
   "open_issue_growth_90d",
   "pr_response_median_days",
-  "scorecard_score",
 ];
 
 const featureLabels: Record<string, string> = {
@@ -38,10 +37,6 @@ const featureLabels: Record<string, string> = {
   contributor_concentration: "Contributor concentration",
   open_issue_growth_90d: "Issue growth",
   pr_response_median_days: "PR response time",
-  scorecard_score: "Scorecard score",
-  scorecard_checks_scored: "Scorecard checks",
-  scorecard_high_checks: "Strong scorecard checks",
-  scorecard_low_checks: "Weak scorecard checks",
   stars_log1p: "Stars",
   forks_log1p: "Forks",
   open_issues_log1p: "Open issues",
@@ -51,6 +46,49 @@ const featureLabels: Record<string, string> = {
   ecosystem_go: "Go ecosystem",
   ecosystem_maven: "Maven ecosystem",
   ecosystem_other: "Other ecosystem",
+  commits_30d: "Commits 30d",
+  commits_90d: "Commits 90d",
+  commits_365d: "Commits 365d",
+  active_commit_months_365d: "Active commit months",
+  days_since_last_commit: "Days since commit",
+  contributors_90d: "Contributors 90d",
+  contributors_365d: "Contributors 365d",
+  new_contributors_365d: "New contributors",
+  top1_contributor_commit_share_365d: "Top contributor share",
+  top2_contributor_commit_share_365d: "Top 2 contributor share",
+  contributor_concentration_index: "Contributor concentration index",
+  maintainer_concentration_flag: "Maintainer concentration",
+  opened_issues_90d: "Issues opened 90d",
+  closed_issues_90d: "Issues closed 90d",
+  issue_closure_ratio_90d: "Issue closure ratio",
+  issue_backlog_growth_90d: "Backlog growth",
+  stale_open_issues_count_at_obs: "Stale open issues",
+  opened_prs_90d: "PRs opened 90d",
+  merged_prs_90d: "PRs merged 90d",
+  closed_unmerged_prs_90d: "PRs closed unmerged",
+  pr_merge_ratio_90d: "PR merge ratio",
+  stale_open_prs_count_at_obs: "Stale open PRs",
+  releases_365d: "Releases 365d",
+  days_since_last_release: "Days since release",
+  versions_published_365d: "Versions published",
+  package_age_days: "Package age",
+  repo_age_days: "Repository age",
+  stars_total_at_obs: "Stars at observation",
+  forks_total_at_obs: "Forks at observation",
+  dependency_count_at_obs: "Dependency count",
+  popularity_tier_at_obs: "Popularity tier",
+  repo_archived_at_obs: "Archived at observation",
+  has_recent_release_flag: "Recent release",
+  has_recent_pr_merge_flag: "Recent PR merge",
+  activity_drop_365d_vs_prev_365d: "Activity drop",
+  contributors_drop_365d_vs_prev_365d: "Contributor drop",
+  release_gap_risk: "Release gap risk",
+  concentration_risk_score: "Concentration risk",
+  issue_first_response_median_days_365d: "Issue first response",
+  issue_resolution_median_days_365d: "Issue resolution time",
+  stale_issue_share_at_obs: "Stale issue share",
+  pr_response_median_days_365d: "PR response time",
+  pr_merge_latency_median_days_365d: "PR merge latency",
 };
 
 function sigmoid(value: number) {
@@ -114,12 +152,15 @@ function calibratedProbability(rawProbability: number, artifact: TrainingRunMode
 
 export function repositoryFeatureValues(dependency: DependencyRecord, featureNames: string[]) {
   const repository = dependency.repository;
-  const scorecard = dependency.scorecard;
+  const historicalFeatures = dependency.historicalFeatures ?? {};
   const ecosystem = normalizeEcosystem(dependency.ecosystem);
   const missingSignals = new Set(dependency.riskProfile?.missingSignals ?? []);
-  const missingExpectedSignals = expectedSignals.filter((signal) => missingSignals.has(signal)).length;
-  const highChecks = scorecard?.checks.filter((check) => check.score >= 8).length ?? 0;
-  const lowChecks = scorecard?.checks.filter((check) => check.score <= 4).length ?? 0;
+  const modelCompletenessSignals = featureNames.filter((feature) => feature !== "signal_completeness");
+  const completenessDenominator = modelCompletenessSignals.length || expectedSignals.length;
+  const missingExpectedSignals =
+    modelCompletenessSignals.length > 0
+      ? modelCompletenessSignals.filter((signal) => missingSignals.has(signal)).length
+      : expectedSignals.filter((signal) => missingSignals.has(signal)).length;
 
   const values: Record<string, number> = {
     has_repository_mapping: repository ? 1 : 0,
@@ -134,14 +175,10 @@ export function repositoryFeatureValues(dependency: DependencyRecord, featureNam
     open_issue_growth_90d: numericRawSignal(dependency, "repository.open_issue_growth_90d") ?? 0,
     pr_response_median_days:
       numericRawSignal(dependency, "repository.pr_median_response_days") ?? repository?.pullRequestMedianResponseDays ?? 0,
-    scorecard_score: numericRawSignal(dependency, "scorecard.score") ?? scorecard?.score ?? 0,
-    scorecard_checks_scored: scorecard?.checks.length ?? 0,
-    scorecard_high_checks: highChecks,
-    scorecard_low_checks: lowChecks,
     stars_log1p: Math.log1p(repository?.stars ?? 0),
     forks_log1p: Math.log1p(repository?.forks ?? 0),
     open_issues_log1p: Math.log1p(repository?.openIssues ?? 0),
-    signal_completeness: Math.max(0, (expectedSignals.length - missingExpectedSignals) / expectedSignals.length),
+    signal_completeness: Math.max(0, (completenessDenominator - missingExpectedSignals) / completenessDenominator),
     ecosystem_npm: ecosystem === "npm" ? 1 : 0,
     ecosystem_pypi: ecosystem === "pypi" || ecosystem === "python" ? 1 : 0,
     ecosystem_go: ecosystem === "go" || ecosystem === "golang" ? 1 : 0,
@@ -149,7 +186,7 @@ export function repositoryFeatureValues(dependency: DependencyRecord, featureNam
     ecosystem_other: ["npm", "pypi", "python", "go", "golang", "maven"].includes(ecosystem) ? 0 : 1,
   };
 
-  return Object.fromEntries(featureNames.map((feature) => [feature, values[feature] ?? 0]));
+  return Object.fromEntries(featureNames.map((feature) => [feature, values[feature] ?? historicalFeatures[feature] ?? 0]));
 }
 
 export function repositoryModelAnalysis(

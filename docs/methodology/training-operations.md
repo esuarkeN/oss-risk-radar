@@ -1,6 +1,6 @@
 # Training Operations
 
-This note captures the practical plan for keeping the Logistic Regression and XGBoost training path usable. Runtime analysis can still fall back to heuristic scoring when no model artifact exists, but the thesis workflow should treat that as a temporary operational state, not the target behavior.
+This note captures the practical plan for keeping the Logistic Regression and XGBoost artifact path usable. Runtime analysis is model-artifact-only: the fixed offline artifact bundle is required configuration, and missing artifacts should stop scoring instead of producing substitute scores.
 
 ## What Can Train
 
@@ -15,22 +15,17 @@ For the current inactivity model, each usable row needs:
 
 This is why plain analysis captures and GitHub links in `snapshots.json` are not enough. They help build the dataset, but the labels must come from historical activity after each observation date.
 
+Archived and dormant repositories are included intentionally because their earlier timelines show the warning signals before maintenance stops. The seed bucket is not the label. Rows where the repository is already archived at observation time are kept for diagnostics and excluded from the main predictive fit; archival inside `(t, t + 12 months]` is an outcome component of `label_inactive_12m`.
+
 ## GH Archive Coverage
 
 Do not train from sparse random GH Archive hours. Absence of activity is meaningful only when the label window has complete enough coverage. If an hour was never processed, "no event" could mean "no activity" or "missing data", and the inactive label becomes unreliable.
 
-For the current default thesis window:
-
-- feature lookback starts: `2021-01-01`
-- observations run from: `2023-01-01`
-- observations run through: `2024-01-01`
-- 12 month labels require coverage through: `2025-01-01`
-
-So the practical GH Archive range is `2021-01-01` through `2025-01-01` inclusive. The downloader script uses an exclusive end date, so pass `-EndExclusive "2025-01-02"`.
+For the current default thesis workflow, feature lookback starts two years before the first observation and labels use a 12 month future window. The JS dataset helper now inspects local `--gharchive-source` directories, finds dates with all 24 hourly files, and infers the latest cadence-aligned observation date whose future label window is covered. If `--observation-end` is passed explicitly, the helper validates that the requested end date is labelable and fails if local coverage is too short.
 
 ## Filtered Download
 
-The repository has a seed-focused downloader at `scripts/download-gharchive-seed-filtered.ps1`. It streams hourly GH Archive files, keeps only events for repositories in `scripts/ml/real-project-foundation-seed.csv`, and writes coverage manifests.
+The repository has a seed-focused downloader at `scripts/download-gharchive-seed-filtered.ps1`. It streams hourly GH Archive files, keeps only events for repositories in the generated thesis seed at `tmp/training/foundation-seed.csv`, and writes coverage manifests.
 
 Downloader modes:
 
@@ -47,10 +42,9 @@ For a faster run, use the parallel wrapper. Four workers is a reasonable startin
 ```powershell
 .\scripts\download-gharchive-seed-filtered-parallel.ps1 `
   -Workers 4 `
-  -SeedPath ".\scripts\ml\real-project-foundation-seed.csv" `
+  -SeedPath ".\tmp\training\foundation-seed.csv" `
   -OutDir ".\tmp\gharchive" `
-  -Start "2022-01-10" `
-  -EndExclusive "2025-01-02"
+  -Start "2022-01-10"
 ```
 
 The wrapper writes per-shard coverage files, waits for all workers, then merges them into `tmp/gharchive/_coverage.csv` and `tmp/gharchive-seed-coverage.csv`. It preserves existing coverage rows from earlier runs unless a worker reports a newer status for the same hour.
@@ -59,12 +53,12 @@ Smoke test a tiny range first:
 
 ```powershell
 .\scripts\download-gharchive-seed-filtered.ps1 `
-  -SeedPath ".\scripts\ml\real-project-foundation-seed.csv" `
+  -SeedPath ".\tmp\training\foundation-seed.csv" `
   -OutDir ".\tmp\gharchive-smoke" `
   -Start "2023-01-01" `
   -EndExclusive "2023-01-04"
 
-npm run ml:bootstrap:real-projects -- --gharchive-source ".\tmp\gharchive-smoke"
+npm run ml:bootstrap:foundation -- --gharchive-source ".\tmp\gharchive-smoke"
 ```
 
 The smoke run is expected to validate the pipeline shape, not produce thesis-grade model quality.
@@ -73,13 +67,14 @@ For the real run:
 
 ```powershell
 .\scripts\download-gharchive-seed-filtered.ps1 `
-  -SeedPath ".\scripts\ml\real-project-foundation-seed.csv" `
+  -SeedPath ".\tmp\training\foundation-seed.csv" `
   -OutDir ".\tmp\gharchive" `
-  -Start "2021-01-01" `
-  -EndExclusive "2025-01-02"
+  -Start "2021-01-01"
 
-npm run ml:bootstrap:real-projects -- --gharchive-source ".\tmp\gharchive"
+npm run ml:bootstrap:foundation -- --gharchive-source ".\tmp\gharchive"
 ```
+
+By default, the downloader stops at the current local date, so it downloads through yesterday. Pass `-EndExclusive` only when you want to pin or backfill a specific range. The dataset helper will still use only complete local days for label-safe observation windows.
 
 Useful coverage checks:
 
@@ -95,21 +90,22 @@ Import-Csv ".\tmp\gharchive-seed-coverage.csv" |
 
 If coverage has download or filter failures, fix or rerun those hours before trusting inactive labels.
 
-## Continuous Training Policy
+## Offline Artifact Policy
 
-Continuous training is useful if it means continuous data collection plus scheduled retraining. It is risky if it means retraining immediately every time a user submits a new repository URL.
+Continuous or API-triggered training is intentionally out of scope for the current thesis/demo version. A submitted GitHub URL identifies a repository, but it does not provide a reliable inactive/active label. Labels come from historical GH Archive coverage after each observation date.
 
 Recommended workflow:
 
-1. Accept new user-provided repository URLs into a candidate queue.
-2. Normalize them to GitHub `owner/repo` identities.
-3. Add eligible repos to a seed file or seed table.
-4. Continuously or periodically download filtered GH Archive events for the tracked seed set.
-5. Rebuild labeled snapshots on a schedule, for example nightly or weekly.
-6. Train Logistic Regression and XGBoost from the rebuilt dataset.
-7. Promote the new model artifacts only when evaluation and guardrails pass.
+1. Generate the 5,000-repository foundation seed with active, dormant, and archived strata.
+2. Download filtered GH Archive events for that seed set.
+3. Build labeled historical snapshots.
+4. Use `notebooks/oss-maintenance-training.ipynb` as the six-step ML workflow and artifact export surface.
+5. Run `npm run ml:bootstrap:foundation -- --gharchive-source ".\tmp\gharchive"` to build snapshots and execute the notebook-backed artifact export. Add `--runner local` when using a local Python 3.14 environment instead of Docker.
+6. Run `npm run ml:stage-training` to promote the bundle into `deployment/training`.
 
-The production scorer should use trained model artifacts when available. Heuristic scoring remains a fallback for missing artifacts, artifact load failures, or insufficient labeled data.
+The dataset build also writes `tmp/training/repository-feature-cache.json`. Production uses that staged cache to choose the full-history artifact family and feed GHArchive-derived historical features into live repository scoring. Repositories without a cache row use the separate cold-start artifact family trained only on current GitHub/API-style snapshot features. Daily GH Archive downloads should update the offline cache directly; request-time scoring must not download or scan archive files.
+
+The production scorer should use staged model artifacts and the staged repository feature cache when available. Missing artifacts, artifact load failures, or insufficient labeled data are configuration or training readiness errors, not alternate runtime scoring modes.
 
 The GH Archive parser uses pushes, issues, PRs, releases/tags, stars, forks, issue comments, PR reviews, and PR review comments. Comments and reviews improve PR response-time features when those events are present in the filtered files.
 
@@ -120,12 +116,13 @@ Before a training run becomes the cached/latest model, require at least:
 - labeled real-project rows
 - both active and inactive classes
 - non-empty train, validation, and test slices
-- held-out metrics for Logistic Regression and XGBoost
+- held-out metrics for Logistic Regression and XGBoost in both full-history and cold-start regimes
+- `feature-set-v3-full-history` and `feature-set-v3-cold-start` model artifacts
 - acceptable AUROC, Brier score, and calibration behavior
 - no unexpected spike in missing features or failed repository resolution
 
-For thesis reporting, keep every training run artifact under `tmp/training/runs` or the configured runs directory, and record which artifact was promoted.
+For thesis reporting, keep every offline artifact under `tmp/training/runs` or the configured runs directory, and record which artifact was promoted.
 
 ## Operational Rule Of Thumb
 
-Use user URLs to expand the future training corpus. Use GH Archive coverage to create labels. Use scheduled retraining to refresh Logistic Regression and XGBoost. Use heuristics only as the explainable fallback when the model path is not trained or not available.
+Use user URLs only as candidates for a future training corpus. Use GH Archive coverage to create labels. Use the notebook-primary artifact workflow to train Logistic Regression and XGBoost. Promote a valid artifact bundle before enabling runtime scoring.

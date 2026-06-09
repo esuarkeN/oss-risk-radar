@@ -1,18 +1,22 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..", "..");
+const scoringRoot = path.join(repoRoot, "mltraining", "scoring");
 const scriptSeedPath = path.join(__dirname, "starter-seed-packages.csv");
+const KNOWN_COMMANDS = new Set(["ingest", "build-snapshots", "build-labels", "build-all"]);
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const args = {
     command: "build-all",
     gharchiveSources: [],
     observationStart: "2023-01-01",
     observationEnd: "2024-01-01",
+    observationEndProvided: false,
     observationIntervalMonths: "3",
     labelHorizonMonths: "12",
     sampleLimitPerEcosystem: "24",
@@ -20,11 +24,13 @@ function parseArgs(argv) {
     sampleSeed: "42",
     includeForks: false,
     replaceTrainingOutput: false,
+    featureCacheOutputPath: null,
     seedFileProvided: false,
     generateFoundationSeed: false,
-    foundationTargetRepositories: "2000",
+    foundationTargetRepositories: "5000",
     minimumRepositories: "0",
     minimumInactiveRepositories: "0",
+    runner: "docker",
   };
 
   const positionals = [];
@@ -57,12 +63,17 @@ function parseArgs(argv) {
         args.trainingOutputPath = next;
         index += 1;
         break;
+      case "--feature-cache-output-path":
+        args.featureCacheOutputPath = next;
+        index += 1;
+        break;
       case "--observation-start":
         args.observationStart = next;
         index += 1;
         break;
       case "--observation-end":
         args.observationEnd = next;
+        args.observationEndProvided = true;
         index += 1;
         break;
       case "--observation-interval-months":
@@ -107,19 +118,109 @@ function parseArgs(argv) {
         args.minimumInactiveRepositories = next;
         index += 1;
         break;
+      case "--runner":
+        if (!next) throw new Error("--runner requires a value");
+        if (!["docker", "local"].includes(next)) {
+          throw new Error("--runner must be either docker or local");
+        }
+        args.runner = next;
+        index += 1;
+        break;
       default:
         throw new Error(`unknown argument: ${current}`);
     }
   }
 
-  if (positionals.length > 0) {
+  if (positionals.length > 0 && KNOWN_COMMANDS.has(positionals[0])) {
     args.command = positionals[0];
   }
 
+  applyNpmForwardedConfig(args, positionals);
   args.outputDir = args.outputDir ?? path.join("tmp", "training", "oss-maintenance");
   args.trainingOutputPath = args.trainingOutputPath ?? path.join("tmp", "training", "snapshots.json");
+  args.featureCacheOutputPath = args.featureCacheOutputPath ?? path.join("tmp", "training", "repository-feature-cache.json");
   args.seedFile = args.seedFile ?? path.join("tmp", "training", "starter-seed-packages.csv");
   return args;
+}
+
+function npmConfig(name) {
+  return process.env[`npm_config_${name.replaceAll("-", "_")}`];
+}
+
+function npmBooleanConfig(name) {
+  const value = npmConfig(name);
+  return value === "true" || value === "1" || value === "";
+}
+
+function leakedNpmValues(positionals) {
+  return positionals.filter((value) => !KNOWN_COMMANDS.has(value));
+}
+
+function npmStringConfig(name, leakedValues) {
+  const value = npmConfig(name);
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+  if (value === "true" || value === "1") {
+    return leakedValues.shift();
+  }
+  return value;
+}
+
+function applyStringConfig(args, property, flagName, leakedValues) {
+  const value = npmStringConfig(flagName, leakedValues);
+  if (value !== undefined && value !== "") {
+    args[property] = value;
+  }
+}
+
+function applyNpmForwardedConfig(args, positionals) {
+  const leakedValues = leakedNpmValues(positionals);
+  const runner = npmStringConfig("runner", leakedValues);
+  if (runner) {
+    if (!["docker", "local"].includes(runner)) {
+      throw new Error("--runner must be either docker or local");
+    }
+    args.runner = runner;
+  }
+
+  const gharchiveSource = npmStringConfig("gharchive-source", leakedValues);
+  if (args.gharchiveSources.length === 0 && gharchiveSource) {
+    args.gharchiveSources.push(gharchiveSource);
+  }
+
+  applyStringConfig(args, "seedFile", "seed-file", leakedValues);
+  applyStringConfig(args, "outputDir", "output-dir", leakedValues);
+  applyStringConfig(args, "trainingOutputPath", "training-output-path", leakedValues);
+  applyStringConfig(args, "featureCacheOutputPath", "feature-cache-output-path", leakedValues);
+  applyStringConfig(args, "observationStart", "observation-start", leakedValues);
+  applyStringConfig(args, "observationEnd", "observation-end", leakedValues);
+  applyStringConfig(args, "observationIntervalMonths", "observation-interval-months", leakedValues);
+  applyStringConfig(args, "labelHorizonMonths", "label-horizon-months", leakedValues);
+  applyStringConfig(args, "sampleLimitPerEcosystem", "sample-limit-per-ecosystem", leakedValues);
+  applyStringConfig(args, "sampleSeed", "sample-seed", leakedValues);
+  applyStringConfig(args, "githubToken", "github-token", leakedValues);
+  applyStringConfig(args, "foundationTargetRepositories", "foundation-target-repositories", leakedValues);
+  applyStringConfig(args, "minimumRepositories", "minimum-repositories", leakedValues);
+  applyStringConfig(args, "minimumInactiveRepositories", "minimum-inactive-repositories", leakedValues);
+  if (npmConfig("observation-end") !== undefined) {
+    args.observationEndProvided = true;
+  }
+  if (npmConfig("sample-limit-per-ecosystem") !== undefined) {
+    args.sampleLimitPerEcosystemProvided = true;
+  }
+  if (npmConfig("seed-file") !== undefined) {
+    args.seedFileProvided = true;
+  }
+  if (npmBooleanConfig("include-forks")) {
+    args.includeForks = true;
+  }
+  if (npmBooleanConfig("replace-training-output")) {
+    args.replaceTrainingOutput = true;
+  }
+  if (npmBooleanConfig("generate-foundation-seed")) {
+    args.generateFoundationSeed = true;
+  }
 }
 
 function ensureStarterSeedFile(seedFile) {
@@ -148,10 +249,17 @@ function toContainerPath(value) {
   return `/workspace/${relative.split(path.sep).join("/")}`;
 }
 
+function toRunnerPath(value, runner) {
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  return runner === "docker" ? toContainerPath(value) : resolveRepoPath(value);
+}
+
 function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      cwd: repoRoot,
+      cwd: options.cwd ?? repoRoot,
       env: { ...process.env, ...options.env },
       stdio: "inherit",
       shell: false,
@@ -165,6 +273,121 @@ function runCommand(command, args, options = {}) {
       reject(new Error(`${command} exited with code ${code}`));
     });
   });
+}
+
+function parseDateOnly(value, flagName) {
+  const match = `${value ?? ""}`.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw new Error(`${flagName} must be a date in YYYY-MM-DD format`);
+  }
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+}
+
+function formatDateOnly(value) {
+  return value.toISOString().slice(0, 10);
+}
+
+function addMonths(value, months) {
+  const monthIndex = value.getUTCMonth() + months;
+  const year = value.getUTCFullYear() + Math.floor(monthIndex / 12);
+  const month = ((monthIndex % 12) + 12) % 12;
+  const day = Math.min(value.getUTCDate(), 28);
+  return new Date(Date.UTC(year, month, day));
+}
+
+function findLatestCompleteGharchiveDate(sources) {
+  const hoursByDate = new Map();
+  for (const source of sources) {
+    if (/^https?:\/\//i.test(source)) {
+      continue;
+    }
+    const resolved = resolveRepoPath(source);
+    if (!existsSync(resolved)) {
+      continue;
+    }
+    const stat = statSync(resolved);
+    if (!stat.isDirectory()) {
+      const name = path.basename(resolved);
+      const match = name.match(/^(\d{4}-\d{2}-\d{2})-(\d{1,2})\.json\.gz$/);
+      if (match) {
+        const hours = hoursByDate.get(match[1]) ?? new Set();
+        hours.add(Number(match[2]));
+        hoursByDate.set(match[1], hours);
+      }
+      continue;
+    }
+    for (const item of readdirSync(resolved, { withFileTypes: true })) {
+      if (item.isDirectory()) {
+        continue;
+      }
+      const match = item.name.match(/^(\d{4}-\d{2}-\d{2})-(\d{1,2})\.json\.gz$/);
+      if (!match) {
+        continue;
+      }
+      const hours = hoursByDate.get(match[1]) ?? new Set();
+      hours.add(Number(match[2]));
+      hoursByDate.set(match[1], hours);
+    }
+  }
+
+  const completeDates = [...hoursByDate.entries()]
+    .filter(([, hours]) => hours.size === 24)
+    .map(([date]) => date)
+    .sort();
+  return completeDates.at(-1) ?? null;
+}
+
+function latestSafeObservationEnd(args, latestCompleteCoverageDate) {
+  const observationStart = parseDateOnly(args.observationStart, "--observation-start");
+  const intervalMonths = parsePositiveInteger(args.observationIntervalMonths, "--observation-interval-months");
+  const labelHorizonMonths = parsePositiveInteger(args.labelHorizonMonths, "--label-horizon-months");
+  const latestCoverage = parseDateOnly(latestCompleteCoverageDate, "latest GHArchive coverage date");
+
+  let current = observationStart;
+  let latestSafe = null;
+  for (let guard = 0; guard < 1000; guard += 1) {
+    const requiredCoverageEnd = addMonths(current, labelHorizonMonths);
+    if (requiredCoverageEnd > latestCoverage) {
+      break;
+    }
+    latestSafe = current;
+    current = addMonths(current, intervalMonths);
+  }
+  return latestSafe ? formatDateOnly(latestSafe) : null;
+}
+
+function applyDynamicCoverageDefaults(args, commandNeedsHistory) {
+  if (!commandNeedsHistory.has(args.command) || args.gharchiveSources.length === 0) {
+    return;
+  }
+  const latestCompleteCoverageDate = findLatestCompleteGharchiveDate(args.gharchiveSources);
+  if (!latestCompleteCoverageDate) {
+    console.log("GHArchive coverage: no complete local daily coverage inferred; using supplied observation range");
+    return;
+  }
+
+  const labelHorizonMonths = parsePositiveInteger(args.labelHorizonMonths, "--label-horizon-months");
+  if (args.observationEndProvided) {
+    const requestedEnd = parseDateOnly(args.observationEnd, "--observation-end");
+    const requiredCoverageEnd = addMonths(requestedEnd, labelHorizonMonths);
+    const latestCoverage = parseDateOnly(latestCompleteCoverageDate, "latest GHArchive coverage date");
+    if (requiredCoverageEnd > latestCoverage) {
+      throw new Error(
+        `--observation-end ${args.observationEnd} needs GHArchive coverage through ${formatDateOnly(requiredCoverageEnd)} for a ${labelHorizonMonths}-month label horizon, but local complete coverage ends at ${latestCompleteCoverageDate}`
+      );
+    }
+    console.log(`GHArchive coverage: latest complete local date ${latestCompleteCoverageDate}; explicit observation end ${args.observationEnd} is labelable`);
+    return;
+  }
+
+  const inferredEnd = latestSafeObservationEnd(args, latestCompleteCoverageDate);
+  if (!inferredEnd) {
+    throw new Error(
+      `local GHArchive coverage through ${latestCompleteCoverageDate} is not enough to label any observation from ${args.observationStart} with a ${labelHorizonMonths}-month horizon`
+    );
+  }
+  args.observationEnd = inferredEnd;
+  console.log(`GHArchive coverage: latest complete local date ${latestCompleteCoverageDate}; inferred observation end ${args.observationEnd}`);
 }
 
 function summarizeDataset(datasetPath) {
@@ -229,6 +452,7 @@ function verifyDatasetSummary(args, summary) {
 export async function buildDataset(args) {
   const commandNeedsSeed = new Set(["ingest", "build-all"]);
   const commandNeedsHistory = new Set(["build-snapshots", "build-labels", "build-all"]);
+  applyDynamicCoverageDefaults(args, commandNeedsHistory);
   if (args.generateFoundationSeed && !commandNeedsSeed.has(args.command)) {
     throw new Error("--generate-foundation-seed can only be used with ingest or build-all");
   }
@@ -262,6 +486,8 @@ export async function buildDataset(args) {
     await generateFoundationSeed([
       "--output-file",
       seedFile,
+      "--metadata-output",
+      seedFile.replace(/\.csv$/i, ".metadata.json"),
       "--target-repositories",
       args.foundationTargetRepositories,
       ...(args.githubToken ? ["--github-token", args.githubToken] : []),
@@ -270,25 +496,17 @@ export async function buildDataset(args) {
   }
   const outputDir = resolveRepoPath(args.outputDir);
   const trainingOutputPath = resolveRepoPath(args.trainingOutputPath);
+  const featureCacheOutputPath = resolveRepoPath(args.featureCacheOutputPath);
   mkdirSync(outputDir, { recursive: true });
   mkdirSync(path.dirname(trainingOutputPath), { recursive: true });
+  mkdirSync(path.dirname(featureCacheOutputPath), { recursive: true });
 
-  const dockerArgs = [
-    "compose",
-    "run",
-    "--rm",
-    "--no-deps",
-    "--volume",
-    `${repoRoot}:/workspace`,
-    "--workdir",
-    "/workspace/mltraining/scoring",
-    "scoring",
-    "python",
+  const cliArgs = [
     "-m",
     "app.training.maintenance_dataset.cli",
     args.command,
     "--output-dir",
-    toContainerPath(outputDir),
+    toRunnerPath(outputDir, args.runner),
     "--observation-start",
     args.observationStart,
     "--observation-end",
@@ -302,29 +520,51 @@ export async function buildDataset(args) {
     "--sample-seed",
     args.sampleSeed,
     "--training-output-path",
-    toContainerPath(trainingOutputPath),
+    toRunnerPath(trainingOutputPath, args.runner),
+    "--feature-cache-output-path",
+    toRunnerPath(featureCacheOutputPath, args.runner),
   ];
 
   if (commandNeedsSeed.has(args.command)) {
-    dockerArgs.push("--seed-file", toContainerPath(seedFile));
+    cliArgs.push("--seed-file", toRunnerPath(seedFile, args.runner));
   }
   if (args.githubToken ?? process.env.GITHUB_TOKEN) {
-    dockerArgs.push("--github-token", args.githubToken ?? process.env.GITHUB_TOKEN);
+    cliArgs.push("--github-token", args.githubToken ?? process.env.GITHUB_TOKEN);
   }
   if (args.includeForks) {
-    dockerArgs.push("--include-forks");
+    cliArgs.push("--include-forks");
   }
   if (args.replaceTrainingOutput) {
-    dockerArgs.push("--replace-training-output");
+    cliArgs.push("--replace-training-output");
   }
   for (const source of args.gharchiveSources) {
-    dockerArgs.push("--gharchive-source", toContainerPath(source));
+    cliArgs.push("--gharchive-source", toRunnerPath(source, args.runner));
   }
+
+  const dockerArgs = [
+    "compose",
+    "run",
+    "--rm",
+    "--no-deps",
+    "--volume",
+    `${repoRoot}:/workspace`,
+    "--workdir",
+    "/workspace/mltraining/scoring",
+    "scoring",
+    "python",
+    ...cliArgs,
+  ];
 
   console.log(`seed file: ${path.relative(repoRoot, seedFile)}`);
   console.log(`dataset output dir: ${path.relative(repoRoot, outputDir)}`);
   console.log(`training snapshot export: ${path.relative(repoRoot, trainingOutputPath)}`);
-  await runCommand("docker", dockerArgs);
+  console.log(`repository feature cache: ${path.relative(repoRoot, featureCacheOutputPath)}`);
+  console.log(`dataset runner: ${args.runner}`);
+  if (args.runner === "docker") {
+    await runCommand("docker", dockerArgs);
+  } else {
+    await runCommand("python", cliArgs, { cwd: scoringRoot });
+  }
 
   if (args.command === "build-all" || args.command === "export") {
     if (!existsSync(trainingOutputPath)) {
@@ -339,7 +579,7 @@ export async function buildDataset(args) {
     verifyDatasetSummary(args, summary);
   }
 
-  return { seedFile, outputDir, trainingOutputPath };
+  return { seedFile, outputDir, trainingOutputPath, featureCacheOutputPath };
 }
 
 async function main() {
@@ -347,4 +587,6 @@ async function main() {
   await buildDataset(args);
 }
 
-await main();
+if (path.resolve(process.argv[1] ?? "") === __filename) {
+  await main();
+}

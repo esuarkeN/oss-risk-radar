@@ -44,9 +44,8 @@ class DependencySignalPayload(BaseModel):
     historical_features: dict[str, float] = Field(default_factory=dict)
 
 
-class ScoreHeuristicRequest(BaseModel):
+class DependencyBatchRequest(BaseModel):
     analysis_id: str
-    scoring_version: str = "heuristic-v1"
     dependencies: list[DependencySignalPayload]
 
 
@@ -86,7 +85,7 @@ class ScoreResult(BaseModel):
     risk_profile: RiskProfileResponse
 
 
-class ScoreHeuristicResponse(BaseModel):
+class ScoreModelResponse(BaseModel):
     analysis_id: str
     scoring_version: str
     generated_at: str
@@ -100,7 +99,6 @@ class ExtractedFeatureRow(BaseModel):
     ecosystem: str
     observed_at: str
     missing_signals: list[str]
-    heuristic_reference_score: float = Field(ge=0, le=100)
     feature_values: dict[str, float]
 
 
@@ -227,39 +225,6 @@ class XGBoostModelArtifact(BaseModel):
 ModelArtifact = LogisticRegressionModelArtifact | XGBoostModelArtifact
 
 
-class ModelTrainRequest(BaseModel):
-    model_name: str = "logistic-regression-baseline"
-    dataset_uri: str | None = None
-    snapshots: list[TrainingSnapshotInput] = Field(default_factory=list)
-    train_ratio: float = Field(default=0.75, gt=0, lt=1)
-    validation_ratio: float = Field(default=0.15, gt=0, lt=1)
-    calibration_bins: int = Field(default=10, ge=3, le=50)
-    threshold: float | None = Field(default=None, gt=0, lt=1)
-
-    @model_validator(mode="after")
-    def validate_data_source(self) -> "ModelTrainRequest":
-        if self.dataset_uri is None and not self.snapshots:
-            raise ValueError("either dataset_uri or snapshots must be provided")
-        if self.train_ratio + self.validation_ratio >= 1:
-            raise ValueError("train_ratio + validation_ratio must leave room for a test split")
-        return self
-
-
-class ScoreModelRequest(BaseModel):
-    analysis_id: str
+class ScoreModelRequest(DependencyBatchRequest):
     scoring_version: str = "model-v1"
-    dependencies: list[DependencySignalPayload]
     model_artifact: ModelArtifact
-
-
-class ModelTrainResponse(BaseModel):
-    status: str
-    model_name: str
-    model_version: str
-    trained_at: str
-    dataset_summary: DatasetSummary | None = None
-    split_summary: DatasetSplitSummary | None = None
-    metrics: EvaluationMetrics | None = None
-    calibration_bins: list[CalibrationBin] = Field(default_factory=list)
-    artifact: ModelArtifact | None = None
-    message: str

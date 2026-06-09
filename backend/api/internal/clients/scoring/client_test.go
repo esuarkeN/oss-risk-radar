@@ -77,3 +77,25 @@ func TestToDependencySignalPreservesKnownFreshLastPushAge(t *testing.T) {
 		t.Fatalf("expected last push age 0, got %d", *input.Repository.LastPushAgeDays)
 	}
 }
+
+func TestToDependencySignalPreservesHistoricalFeatures(t *testing.T) {
+	input := toDependencySignal(analysis.DependencyRecord{
+		ID:             "dep_1",
+		PackageName:    "demo/repo",
+		PackageVersion: "repository profile",
+		Ecosystem:      "unknown",
+		Direct:         true,
+		HistoricalFeatures: map[string]float64{
+			"contributors_90d":                  12,
+			"stale_open_issues_count_at_obs":    3,
+			"pr_merge_latency_median_days_365d": 4.5,
+		},
+	})
+
+	if input.HistoricalFeatures["contributors_90d"] != 12 {
+		t.Fatalf("expected historical features to be serialized, got %#v", input.HistoricalFeatures)
+	}
+	if input.HistoricalFeatures["pr_merge_latency_median_days_365d"] != 4.5 {
+		t.Fatalf("expected PR latency feature to be serialized, got %#v", input.HistoricalFeatures)
+	}
+}

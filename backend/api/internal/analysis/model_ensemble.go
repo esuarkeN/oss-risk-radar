@@ -11,6 +11,32 @@ type modelScoreSet struct {
 	scores map[string]RiskProfile
 }
 
+func modelArtifactFeatureRegime(run TrainingRunArtifact) string {
+	if run.ModelArtifact == nil {
+		return featureRegimeFullHistory
+	}
+	switch run.ModelArtifact.FeatureVersion {
+	case "feature-set-v3-cold-start":
+		return featureRegimeColdStart
+	case "feature-set-v3-full-history":
+		return featureRegimeFullHistory
+	}
+	if strings.Contains(run.ModelName, "cold-start") {
+		return featureRegimeColdStart
+	}
+	return featureRegimeFullHistory
+}
+
+func filterModelArtifactsByFeatureRegime(runs []TrainingRunArtifact, featureRegime string) []TrainingRunArtifact {
+	filtered := make([]TrainingRunArtifact, 0, len(runs))
+	for _, run := range runs {
+		if modelArtifactFeatureRegime(run) == featureRegime {
+			filtered = append(filtered, run)
+		}
+	}
+	return filtered
+}
+
 func latestModelArtifactsForScoring(runs []TrainingRunArtifact, requestedModelName string) []TrainingRunArtifact {
 	requestedModels := requestedTrainingModelNames(requestedModelName, "all")
 	requested := map[string]bool{}
@@ -53,13 +79,13 @@ func latestModelArtifactsForScoring(runs []TrainingRunArtifact, requestedModelNa
 	return selected
 }
 
-func combineModelScoreSets(dependencies []DependencyRecord, scoreSets []modelScoreSet, failedModels []string) map[string]RiskProfile {
+func combineModelScoreSets(dependencies []DependencyRecord, scoreSets []modelScoreSet, failedModels []string) (map[string]RiskProfile, error) {
 	if len(scoreSets) == 0 {
-		return nil
+		return nil, fmt.Errorf("no model score sets were available")
 	}
 	if len(scoreSets) == 1 {
 		run := scoreSets[0].run
-		scores := completeRiskProfiles(dependencies, scoreSets[0].scores, "model", run.ModelName)
+		scores := scoreSets[0].scores
 		for dependencyID, profile := range scores {
 			profile.ModelResults = []ModelRiskProfile{modelRiskProfileFrom(run, profile)}
 			if len(failedModels) > 0 {
@@ -67,7 +93,7 @@ func combineModelScoreSets(dependencies []DependencyRecord, scoreSets []modelSco
 			}
 			scores[dependencyID] = profile
 		}
-		return scores
+		return scores, nil
 	}
 
 	results := make(map[string]RiskProfile, len(dependencies))
@@ -88,13 +114,12 @@ func combineModelScoreSets(dependencies []DependencyRecord, scoreSets []modelSco
 			modelResults = append(modelResults, modelRiskProfileFrom(scoreSet.run, profile))
 		}
 		if len(modelProfiles) == 0 {
-			results[dependency.ID] = fallbackRiskProfile(dependency, fmt.Errorf("all model scorers omitted this dependency"))
-			continue
+			return nil, fmt.Errorf("all model scorers omitted dependency %s", dependency.ID)
 		}
 
 		results[dependency.ID] = ensembleRiskProfile(modelProfiles, modelResults, modelNames, failedModels)
 	}
-	return results
+	return results, nil
 }
 
 func ensembleRiskProfile(
@@ -142,8 +167,8 @@ func ensembleRiskProfile(
 		MaintenanceOutlook12MScore: roundRiskValue(maintenanceOutlookScore),
 		SecurityPostureScore:       roundRiskValue(securityPostureScore),
 		ConfidenceScore:            roundRiskValue(confidenceScore),
-		RiskBucket:                 fallbackBucket(inactivityRiskScore),
-		ActionLevel:                fallbackActionLevel(inactivityRiskScore),
+		RiskBucket:                 riskBucketForScore(inactivityRiskScore),
+		ActionLevel:                actionLevelForScore(inactivityRiskScore),
 		ScoringMethod:              "model_ensemble",
 		ScoringModel:               strings.Join(modelNames, "+"),
 		ModelResults:               modelResults,
@@ -194,7 +219,7 @@ func modelRiskProfileFrom(run TrainingRunArtifact, profile RiskProfile) ModelRis
 
 func modelAgreementFactor(modelResults []ModelRiskProfile) ExplanationFactor {
 	if len(modelResults) == 0 {
-		return fallbackFactor("Model ensemble", "neutral", 0, "No model outputs were available for comparison.")
+		return explanationFactor("Model ensemble", "neutral", 0, "No model outputs were available for comparison.")
 	}
 	minimum := modelResults[0].InactivityRiskScore
 	maximum := modelResults[0].InactivityRiskScore
@@ -211,7 +236,7 @@ func modelAgreementFactor(modelResults []ModelRiskProfile) ExplanationFactor {
 	if spread >= 20 {
 		direction = "increase"
 	}
-	return fallbackFactor(
+	return explanationFactor(
 		"Model agreement",
 		direction,
 		roundRiskValue(18+spread/2),

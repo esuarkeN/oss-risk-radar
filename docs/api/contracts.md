@@ -2,7 +2,11 @@
 
 Frontend contract reference:
 
-- `shared/packages/schemas/openapi/oss-risk-radar.v1.yaml`
+- `shared/packages/schemas/openapi/public-api.yaml`
+
+Internal scoring contract reference:
+
+- `shared/packages/schemas/openapi/scoring-internal.yaml`
 
 Key resource concepts:
 

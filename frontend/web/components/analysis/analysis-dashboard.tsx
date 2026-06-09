@@ -40,7 +40,7 @@ export function AnalysisDashboard({ analysis, dependencies }: { analysis: Analys
           <h1 className="text-4xl font-bold tracking-tight text-slate-950">Analysis Overview</h1>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             {analysis.submission.kind === "demo"
-              ? "Demo analysis based on mocked dependency extraction, repository mapping, and heuristic scoring."
+              ? "Demo analysis based on mocked dependency extraction, repository mapping, and model-artifact scoring."
               : `Repository submission for ${analysis.submission.repositoryUrl}`}
           </p>
         </Card>

@@ -24,11 +24,11 @@ jobs:
       - uses: actions/checkout@v6.0.2
       - uses: actions/setup-python@v6.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Install scoring dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "./mltraining/scoring[dev]"
+          pip install -c mltraining/scoring/constraints-py314.txt "./mltraining/scoring[dev]"
       - name: Test scoring service
         run: cd mltraining/scoring && python -m pytest tests
 
@@ -47,6 +47,24 @@ jobs:
       - name: Build frontend
         run: npm run build:web
 
+  notebook-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.14"
+      - name: Install notebook dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -c mltraining/scoring/constraints-py314.txt "./mltraining/scoring[notebook]"
+      - name: Execute notebook smoke run
+        run: npm run ml:notebook:execute:ci
+
   compose-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -60,19 +78,17 @@ jobs:
           go-version: "1.25.0"
       - uses: actions/setup-python@v6.2.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Install frontend dependencies
         run: npm ci
       - name: Install scoring dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "./mltraining/scoring[dev]"
+          pip install -c mltraining/scoring/constraints-py314.txt "./mltraining/scoring[dev]"
       - name: Start full stack
         run: node scripts/dev/start.mjs --no-wait
       - name: Smoke test API
         run: curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost:8080/health
-      - name: Smoke test scoring
-        run: curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost:8090/health
       - name: Smoke test web
         run: curl --fail --retry 20 --retry-delay 3 --retry-all-errors http://localhost:3000
 

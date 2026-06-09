@@ -1,9 +1,9 @@
 ﻿[CmdletBinding()]
 param(
-  [string]$SeedPath = ".\scripts\ml\real-project-foundation-seed.csv",
+  [string]$SeedPath = ".\tmp\training\foundation-seed.csv",
   [string]$OutDir = ".\tmp\gharchive",
   [datetime]$Start = "2021-01-01",
-  [datetime]$EndExclusive = "2025-01-02",
+  [datetime]$EndExclusive = (Get-Date).Date,
   [string]$RepoColumn = "",
   [string]$SeedCoveragePath = ".\tmp\gharchive-seed-coverage.csv",
   [string]$RawDir = ".\tmp\gharchive-raw",

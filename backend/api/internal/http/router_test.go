@@ -20,7 +20,7 @@ import (
 
 type fakeRouterScorer struct{}
 
-func (fakeRouterScorer) Score(_ context.Context, _ string, dependencies []analysis.DependencyRecord) (map[string]analysis.RiskProfile, error) {
+func (fakeRouterScorer) ScoreModel(_ context.Context, _ string, dependencies []analysis.DependencyRecord, _ analysis.TrainingRunModelArtifact) (map[string]analysis.RiskProfile, error) {
 	results := make(map[string]analysis.RiskProfile, len(dependencies))
 	for _, dependency := range dependencies {
 		results[dependency.ID] = analysis.RiskProfile{
@@ -37,56 +37,12 @@ func (fakeRouterScorer) Score(_ context.Context, _ string, dependencies []analys
 
 func (fakeRouterScorer) Ready(context.Context) error { return nil }
 
-func (fakeRouterScorer) TrainModel(_ context.Context, snapshots []analysis.TrainingSnapshotRecord, modelName string) (analysis.TrainingRunArtifact, error) {
-	if modelName == "" {
-		modelName = "xgboost-baseline"
-	}
-	algorithm := "xgboost"
-	if modelName == "logistic-regression-baseline" {
-		algorithm = "logistic_regression"
-	}
-	return analysis.TrainingRunArtifact{
-		Status:       "completed",
-		ModelName:    modelName,
-		ModelVersion: "0.2.0",
-		TrainedAt:    time.Now().UTC().Format(time.RFC3339Nano),
-		DatasetSummary: &analysis.TrainingRunDatasetSummary{
-			TotalRows:     len(snapshots),
-			LabeledRows:   0,
-			UnlabeledRows: len(snapshots),
-			FeatureNames:  []string{"repository_archived"},
-		},
-		CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.2, EmpiricalRate: 0.1}},
-		ModelArtifact: &analysis.TrainingRunModelArtifact{
-			ModelName:      modelName,
-			ModelVersion:   "0.2.0",
-			FeatureVersion: "feature-set-v1",
-			TrainedAt:      time.Now().UTC().Format(time.RFC3339Nano),
-			Threshold:      0.5,
-			Algorithm:      algorithm,
-			FeatureNames:   []string{"repository_archived"},
-			Coefficients:   []float64{0.7},
-			Intercept:      0,
-			Standardization: analysis.TrainingRunStandardizationProfile{
-				Means:  []float64{0},
-				Scales: []float64{1},
-			},
-			BoosterJSON:     "fixture",
-			TreeCount:       1,
-			MaxDepth:        2,
-			LearningRate:    0.08,
-			CalibrationBins: []analysis.TrainingCalibrationBin{{LowerBound: 0, UpperBound: 0.5, Count: len(snapshots), AveragePrediction: 0.2, EmpiricalRate: 0.1}},
-		},
-		Message: "fixture",
-	}, nil
-}
-
 func TestHealthEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
-		MethodologyVersion: "heuristic-v1",
+		MethodologyVersion: "model-v1",
 		Store:              storage.NewMemoryStore(),
 		Scorer:             fakeRouterScorer{},
 		UploadDir:          t.TempDir(),
@@ -110,11 +66,15 @@ func TestCreateAnalysisEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	tempDir := t.TempDir()
+	runsDir := filepath.Join(tempDir, "runs")
+	writeRouterModelArtifactBundle(t, runsDir)
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
-		MethodologyVersion: "heuristic-v1",
+		MethodologyVersion: "model-v1",
 		Store:              storage.NewMemoryStore(),
 		Scorer:             fakeRouterScorer{},
-		UploadDir:          t.TempDir(),
+		UploadDir:          tempDir,
+		TrainingRunsDir:    runsDir,
 		WorkerPollInterval: 10 * time.Millisecond,
 		RetryDelay:         10 * time.Millisecond,
 	})
@@ -154,11 +114,64 @@ func TestCreateAnalysisEndpoint(t *testing.T) {
 	t.Fatalf("analysis did not complete in time")
 }
 
+func writeRouterModelArtifactBundle(t *testing.T, runsDir string) {
+	t.Helper()
+	cachedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	trainedAt := cachedAt.Format(time.RFC3339Nano)
+	for _, modelName := range []string{"logistic-regression-full-history", "xgboost-full-history", "logistic-regression-cold-start", "xgboost-cold-start"} {
+		algorithm := "logistic_regression"
+		if strings.HasPrefix(modelName, "xgboost") {
+			algorithm = "xgboost"
+		}
+		featureVersion := "feature-set-v3-full-history"
+		if strings.Contains(modelName, "cold-start") {
+			featureVersion = "feature-set-v3-cold-start"
+		}
+		run := analysis.TrainingRunArtifact{
+			DatasetHash:  "router-fixture-hash",
+			ArtifactPath: filepath.Join(runsDir, modelName+".json"),
+			CachedAt:     cachedAt,
+			Status:       "completed",
+			ModelName:    modelName,
+			ModelVersion: "0.2.0",
+			TrainedAt:    trainedAt,
+			ModelArtifact: &analysis.TrainingRunModelArtifact{
+				ModelName:      modelName,
+				ModelVersion:   "0.2.0",
+				FeatureVersion: featureVersion,
+				TrainedAt:      trainedAt,
+				Threshold:      0.5,
+				Algorithm:      algorithm,
+				FeatureNames:   []string{"has_repository_mapping"},
+				Coefficients:   []float64{1},
+				Standardization: analysis.TrainingRunStandardizationProfile{
+					Means:  []float64{0},
+					Scales: []float64{1},
+				},
+				BoosterJSON:  "fixture",
+				TreeCount:    1,
+				MaxDepth:     2,
+				LearningRate: 0.08,
+			},
+		}
+		payload, err := json.MarshalIndent(run, "", "  ")
+		if err != nil {
+			t.Fatalf("failed to marshal model fixture: %v", err)
+		}
+		if err := os.MkdirAll(runsDir, 0o755); err != nil {
+			t.Fatalf("failed to create model fixture dir: %v", err)
+		}
+		if err := os.WriteFile(run.ArtifactPath, payload, 0o644); err != nil {
+			t.Fatalf("failed to write model fixture: %v", err)
+		}
+	}
+}
+
 func TestCreateAnalysisEndpointReusesExistingRepositoryAnalysis(t *testing.T) {
 	ctx := context.Background()
 	store := storage.NewMemoryStore()
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
-		MethodologyVersion: "heuristic-v1",
+		MethodologyVersion: "model-v1",
 		Store:              store,
 		Scorer:             fakeRouterScorer{},
 		UploadDir:          t.TempDir(),
@@ -217,7 +230,7 @@ func TestCreateAnalysisEndpointForceBypassesExistingRepositoryAnalysis(t *testin
 	ctx := context.Background()
 	store := storage.NewMemoryStore()
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
-		MethodologyVersion: "heuristic-v1",
+		MethodologyVersion: "model-v1",
 		Store:              store,
 		Scorer:             fakeRouterScorer{},
 		UploadDir:          t.TempDir(),
@@ -278,41 +291,21 @@ func TestCreateAnalysisEndpointForceBypassesExistingRepositoryAnalysis(t *testin
 	}
 }
 
-func TestTriggerTrainingRunEndpoint(t *testing.T) {
+func TestTrainingRunMutationEndpointIsNotRegistered(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	tempDir := t.TempDir()
-	datasetPath := filepath.Join(tempDir, "snapshots.json")
 	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
-		MethodologyVersion:  "heuristic-v1",
-		Store:               storage.NewMemoryStore(),
-		Scorer:              fakeRouterScorer{},
-		UploadDir:           tempDir,
-		TrainingDatasetPath: datasetPath,
-		TrainingRunsDir:     tempDir + "/runs",
-		WorkerPollInterval:  10 * time.Millisecond,
-		RetryDelay:          10 * time.Millisecond,
+		MethodologyVersion: "model-v1",
+		Store:              storage.NewMemoryStore(),
+		Scorer:             fakeRouterScorer{},
+		UploadDir:          tempDir,
+		WorkerPollInterval: 10 * time.Millisecond,
+		RetryDelay:         10 * time.Millisecond,
 	})
-	writeRouterTrainingDataset(t, datasetPath)
 	service.Start(ctx)
 	router := NewRouter(config.Config{ServiceName: "oss-risk-radar-api", AllowedOrigin: "http://localhost:3000"}, slog.Default(), service)
-
-	created, _, err := service.CreateAnalysis(ctx, analysis.AnalysisSubmission{Kind: analysis.SubmissionDemo})
-	if err != nil {
-		t.Fatalf("CreateAnalysis returned error: %v", err)
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		item, getErr := service.GetAnalysis(ctx, created.ID)
-		if getErr != nil {
-			t.Fatalf("GetAnalysis returned error: %v", getErr)
-		}
-		if item.Status == analysis.AnalysisStatusCompleted {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
 
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/training/runs", strings.NewReader(`{"force":false}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -320,71 +313,8 @@ func TestTriggerTrainingRunEndpoint(t *testing.T) {
 
 	router.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK {
+	if response.Code != http.StatusMethodNotAllowed {
 		body, _ := io.ReadAll(response.Body)
-		t.Fatalf("expected 200, got %d: %s", response.Code, string(body))
-	}
-
-	var payload analysis.TriggerTrainingRunResponse
-	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
-		t.Fatalf("failed to decode response: %v", err)
-	}
-	if payload.Run.ArtifactPath == "" {
-		t.Fatalf("expected cached artifact path, got %#v", payload)
-	}
-	if len(payload.Runs) != 2 {
-		t.Fatalf("expected both default model runs, got %#v", payload.Runs)
-	}
-}
-
-func writeRouterTrainingDataset(t *testing.T, datasetPath string) {
-	t.Helper()
-
-	active := false
-	inactive := true
-	snapshots := []analysis.TrainingSnapshotRecord{
-		routerTrainingSnapshot("router-real-active-001", "2021-01-01T00:00:00Z", "facebook/react", active),
-		routerTrainingSnapshot("router-real-active-002", "2021-04-01T00:00:00Z", "django/django", active),
-		routerTrainingSnapshot("router-real-inactive-001", "2021-07-01T00:00:00Z", "request/request", inactive),
-		routerTrainingSnapshot("router-real-inactive-002", "2021-10-01T00:00:00Z", "atom/atom", inactive),
-	}
-	payload, err := json.MarshalIndent(struct {
-		UpdatedAt time.Time                         `json:"updatedAt"`
-		Snapshots []analysis.TrainingSnapshotRecord `json:"snapshots"`
-	}{UpdatedAt: time.Date(2026, 5, 12, 0, 0, 0, 0, time.UTC), Snapshots: snapshots}, "", "  ")
-	if err != nil {
-		t.Fatalf("failed to marshal training dataset: %v", err)
-	}
-	if err := os.WriteFile(datasetPath, payload, 0o644); err != nil {
-		t.Fatalf("failed to write training dataset: %v", err)
-	}
-}
-
-func routerTrainingSnapshot(id string, observedAt string, fullName string, label bool) analysis.TrainingSnapshotRecord {
-	lastPushAgeDays := 10
-	if label {
-		lastPushAgeDays = 720
-	}
-	return analysis.TrainingSnapshotRecord{
-		AnalysisID:       "router-fixture-" + id,
-		ObservedAt:       observedAt,
-		LabelInactive12M: &label,
-		Dependency: analysis.TrainingDependencySignalSnapshot{
-			DependencyID:   id,
-			PackageName:    fullName,
-			PackageVersion: "repository-snapshot",
-			Ecosystem:      "github",
-			Direct:         true,
-			Repository: &analysis.TrainingRepositorySignalSnapshot{
-				FullName:        fullName,
-				URL:             "https://github.com/" + fullName,
-				DefaultBranch:   "main",
-				Archived:        label,
-				Stars:           1000,
-				Forks:           100,
-				OpenIssues:      50,
-				LastPushAgeDays: &lastPushAgeDays,
-			},
-		},
+		t.Fatalf("expected 405, got %d: %s", response.Code, string(body))
 	}
 }

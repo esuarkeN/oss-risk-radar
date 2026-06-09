@@ -127,7 +127,12 @@ def test_dataset_builder_exports_existing_training_snapshot_format(tmp_path) -> 
     assert len(snapshots) == 4
     validated = [TrainingSnapshotInput.model_validate(item) for item in snapshots]
     assert all(item.dependency.historical_features for item in validated)
+    assert all("direct_dependents_count_at_obs" not in item.dependency.historical_features for item in validated)
+    assert all("ecosystem_download_tier_at_obs" not in item.dependency.historical_features for item in validated)
     assert any(item.label_inactive_12m is False for item in validated)
+    cache_payload = json.loads(builder.paths.repository_feature_cache.read_text(encoding="utf-8"))
+    assert cache_payload["repositories"]
+    assert cache_payload["repositories"][0]["featureValues"]["contributors_90d"] >= 0
 
 
 def test_dataset_builder_merges_export_into_existing_training_snapshots(tmp_path) -> None:

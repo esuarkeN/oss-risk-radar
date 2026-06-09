@@ -441,6 +441,12 @@ func snapshotsFromAnalysis(item AnalysisRecord) []TrainingSnapshotRecord {
 			}
 			snapshot.Dependency.Scorecard = &TrainingScorecardSnapshot{Score: &score, Checks: checks}
 		}
+		if len(dependency.HistoricalFeatures) > 0 {
+			snapshot.Dependency.HistoricalFeatures = make(map[string]float64, len(dependency.HistoricalFeatures))
+			for key, value := range dependency.HistoricalFeatures {
+				snapshot.Dependency.HistoricalFeatures[key] = value
+			}
+		}
 
 		result = append(result, snapshot)
 	}

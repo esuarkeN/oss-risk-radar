@@ -25,6 +25,9 @@ type RepositorySnapshot struct {
 	RecentContributors90d         *int
 	ContributorConcentration      *float64
 	PullRequestMedianResponseDays *float64
+	PullRequestMedianMergeDays    *float64
+	IssueResolutionMedianDays     *float64
+	StaleIssueShare               *float64
 	LastPushAgeDays               int
 	LastReleaseAgeDays            *int
 	ReleaseCadenceDays            *int

@@ -8,10 +8,12 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 function parseArgs(argv) {
   const args = {
     outputFile: path.join("tmp", "training", "foundation-seed.csv"),
-    targetRepositories: 2000,
+    metadataOutputFile: null,
+    targetRepositories: 5000,
     githubToken: process.env.GITHUB_TOKEN ?? "",
     pageSize: 100,
     includeArchived: true,
+    requireLicense: true,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -32,6 +34,13 @@ function parseArgs(argv) {
         args.targetRepositories = Number.parseInt(next, 10);
         index += 1;
         break;
+      case "--metadata-output":
+        if (!next) {
+          throw new Error("--metadata-output requires a value");
+        }
+        args.metadataOutputFile = next;
+        index += 1;
+        break;
       case "--github-token":
         if (!next) {
           throw new Error("--github-token requires a value");
@@ -48,6 +57,9 @@ function parseArgs(argv) {
         break;
       case "--exclude-archived":
         args.includeArchived = false;
+        break;
+      case "--allow-unlicensed":
+        args.requireLicense = false;
         break;
       default:
         throw new Error(`unknown argument: ${current}`);
@@ -66,6 +78,10 @@ function parseArgs(argv) {
 
 function resolveRepoPath(value) {
   return path.isAbsolute(value) ? value : path.resolve(repoRoot, value);
+}
+
+function defaultMetadataOutputPath(outputFile) {
+  return outputFile.replace(/\.csv$/i, ".metadata.json");
 }
 
 function formatDate(value) {
@@ -201,7 +217,18 @@ function toSeedRow(item, sourceLabel) {
     source: `github-search:${sourceLabel}`,
     repository_url: item.html_url,
     repository_full_name: item.full_name,
+    license_spdx_id: item.license?.spdx_id ?? "",
   };
+}
+
+function isEligibleOssRepository(item, args) {
+  if (!item?.full_name || !item?.html_url) {
+    return false;
+  }
+  if (args.requireLicense && !item.license) {
+    return false;
+  }
+  return true;
 }
 
 async function collectRepositories(args) {
@@ -213,6 +240,7 @@ async function collectRepositories(args) {
 
   for (const bucket of buckets) {
     let added = 0;
+    let skippedUnlicensed = 0;
     let page = 1;
     while (added < bucket.target && page <= 10 && repositories.size < args.targetRepositories) {
       const params = new URLSearchParams({
@@ -229,7 +257,10 @@ async function collectRepositories(args) {
       }
 
       for (const item of items) {
-        if (!item?.full_name || !item?.html_url) {
+        if (!isEligibleOssRepository(item, args)) {
+          if (args.requireLicense && item?.full_name && !item.license) {
+            skippedUnlicensed += 1;
+          }
           continue;
         }
         if (repositories.has(item.full_name.toLowerCase())) {
@@ -246,7 +277,7 @@ async function collectRepositories(args) {
       await sleep(750);
     }
 
-    bucketSummaries.push({ label: bucket.label, added });
+    bucketSummaries.push({ label: bucket.label, target: bucket.target, query: bucket.query, added, skippedUnlicensed });
     if (repositories.size >= args.targetRepositories) {
       break;
     }
@@ -256,6 +287,7 @@ async function collectRepositories(args) {
     for (const bucket of buildFallbackBuckets(args.includeArchived)) {
       let page = 1;
       let added = 0;
+      let skippedUnlicensed = 0;
       while (page <= 10 && repositories.size < args.targetRepositories) {
         const params = new URLSearchParams({
           q: bucket.query,
@@ -271,7 +303,10 @@ async function collectRepositories(args) {
         }
 
         for (const item of items) {
-          if (!item?.full_name || !item?.html_url) {
+          if (!isEligibleOssRepository(item, args)) {
+            if (args.requireLicense && item?.full_name && !item.license) {
+              skippedUnlicensed += 1;
+            }
             continue;
           }
           if (repositories.has(item.full_name.toLowerCase())) {
@@ -288,7 +323,7 @@ async function collectRepositories(args) {
         await sleep(750);
       }
 
-      bucketSummaries.push({ label: bucket.label, added });
+      bucketSummaries.push({ label: bucket.label, target: null, query: bucket.query, added, skippedUnlicensed, fallback: true });
       if (repositories.size >= args.targetRepositories) {
         break;
       }
@@ -310,7 +345,8 @@ function writeSeedFile(outputFile, rows) {
     "popularity_tier",
     "source",
     "repository_url",
-    "repository_full_name"
+    "repository_full_name",
+    "license_spdx_id"
   ];
   const lines = [header.join(",")];
   for (const row of rows) {
@@ -322,6 +358,7 @@ function writeSeedFile(outputFile, rows) {
 export async function generateFoundationSeed(rawArgs = process.argv.slice(2)) {
   const args = parseArgs(rawArgs);
   const outputFile = resolveRepoPath(args.outputFile);
+  const metadataOutputFile = resolveRepoPath(args.metadataOutputFile ?? defaultMetadataOutputPath(args.outputFile));
   const { rows, bucketSummaries } = await collectRepositories(args);
   if (rows.length < args.targetRepositories) {
     throw new Error(
@@ -331,16 +368,37 @@ export async function generateFoundationSeed(rawArgs = process.argv.slice(2)) {
   }
 
   writeSeedFile(outputFile, rows);
+  writeFileSync(
+    metadataOutputFile,
+    `${JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        outputFile: path.relative(repoRoot, outputFile).split(path.sep).join("/"),
+        targetRepositories: args.targetRepositories,
+        rowsWritten: rows.length,
+        includeArchived: args.includeArchived,
+        requireLicense: args.requireLicense,
+        pageSize: args.pageSize,
+        samplingFrame:
+          "GitHub Search repositories filtered to public, non-fork repositories across active, dormant, and archived strata; seed bucket is sampling provenance, not a training label.",
+        bucketSummaries,
+      },
+      null,
+      2
+    )}\n`,
+    "utf-8"
+  );
 
   const inactiveCandidates = rows.filter((row) => row.source.includes("dormant") || row.source.includes("archived")).length;
   console.log(`foundation seed: ${path.relative(repoRoot, outputFile)}`);
+  console.log(`foundation seed metadata: ${path.relative(repoRoot, metadataOutputFile)}`);
   console.log(`repositories written: ${rows.length}`);
   console.log(`inactive-biased candidates: ${inactiveCandidates}`);
   for (const bucket of bucketSummaries) {
-    console.log(`bucket ${bucket.label}: ${bucket.added}`);
+    console.log(`bucket ${bucket.label}: ${bucket.added}${bucket.skippedUnlicensed ? ` (${bucket.skippedUnlicensed} unlicensed skipped)` : ""}`);
   }
 
-  return { outputFile, rowsWritten: rows.length, inactiveCandidates };
+  return { outputFile, metadataOutputFile, rowsWritten: rows.length, inactiveCandidates };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

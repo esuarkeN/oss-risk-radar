@@ -19,7 +19,7 @@ func SummarizeScoringMethods(dependencies []DependencyRecord) []ScoringMethodSum
 		profile := dependency.RiskProfile
 		method := strings.TrimSpace(profile.ScoringMethod)
 		if method == "" {
-			method = "heuristic"
+			method = "model"
 		}
 
 		if method == "model_ensemble" {
@@ -52,14 +52,10 @@ func SummarizeScoringMethods(dependencies []DependencyRecord) []ScoringMethodSum
 			continue
 		}
 
-		role := "primary"
-		if method == "heuristic" || method == "failsafe" {
-			role = "fallback"
-		}
 		accumulator := scoringMethodSummaryFor(byKey, ScoringMethodSummary{
 			Method:    method,
 			ModelName: profile.ScoringModel,
-			Role:      role,
+			Role:      "primary",
 		})
 		accumulator.summary.DependencyCount++
 	}
@@ -103,17 +99,17 @@ func scoringMethodPriority(summary ScoringMethodSummary) int {
 		return 0
 	}
 	switch summary.ModelName {
-	case "xgboost-baseline":
+	case "xgboost-full-history":
 		return 1
-	case "logistic-regression-baseline":
+	case "logistic-regression-full-history":
 		return 2
+	case "xgboost-cold-start":
+		return 3
+	case "logistic-regression-cold-start":
+		return 4
 	}
 	switch summary.Method {
 	case "model":
-		return 3
-	case "heuristic":
-		return 4
-	case "failsafe":
 		return 5
 	default:
 		return 6

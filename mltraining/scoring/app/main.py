@@ -7,6 +7,6 @@ from app.config import settings
 app = FastAPI(
     title="OSS Risk Radar Scoring Service",
     version=settings.service_version,
-    description="Explainable heuristic and model scoring service for OSS dependency inactivity risk triage.",
+    description="Model-artifact scoring service for OSS dependency inactivity risk triage.",
 )
 app.include_router(router)

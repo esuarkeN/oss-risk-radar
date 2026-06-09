@@ -118,6 +118,9 @@ type RepositorySnapshot struct {
 	RecentContributors90d         *int       `json:"recentContributors90d,omitempty"`
 	ContributorConcentration      *float64   `json:"contributorConcentration,omitempty"`
 	PullRequestMedianResponseDays *float64   `json:"pullRequestMedianResponseDays,omitempty"`
+	PullRequestMedianMergeDays    *float64   `json:"pullRequestMedianMergeDays,omitempty"`
+	IssueResolutionMedianDays     *float64   `json:"issueResolutionMedianDays,omitempty"`
+	StaleIssueShare               *float64   `json:"staleIssueShare,omitempty"`
 	LastPushAgeDays               int        `json:"-"`
 	LastReleaseAgeDays            *int       `json:"-"`
 	ReleaseCadenceDays            *int       `json:"-"`
@@ -203,6 +206,9 @@ type DependencyRecord struct {
 	Direct              bool                `json:"direct"`
 	Repository          *RepositorySnapshot `json:"repository,omitempty"`
 	Scorecard           *ScorecardSnapshot  `json:"scorecard,omitempty"`
+	HistoricalFeatures  map[string]float64  `json:"historicalFeatures,omitempty"`
+	FeatureRegime       string              `json:"featureRegime,omitempty"`
+	HistoricalCacheHit  bool                `json:"historicalCacheHit,omitempty"`
 	RiskProfile         *RiskProfile        `json:"riskProfile,omitempty"`
 	DependencyPath      []string            `json:"dependencyPath"`
 	RawSignalsAvailable bool                `json:"rawSignalsAvailable"`

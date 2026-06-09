@@ -11,11 +11,12 @@ def serialize_logistic_regression_model(
     trained_at: str,
     threshold: float,
     calibration_bins: list[CalibrationBin],
+    feature_version: str = FEATURE_VERSION,
 ) -> LogisticRegressionModelArtifact:
     return LogisticRegressionModelArtifact(
         model_name=model.model_name,
         model_version=model.model_version,
-        feature_version=FEATURE_VERSION,
+        feature_version=feature_version,
         trained_at=trained_at,
         threshold=threshold,
         feature_names=list(model.feature_names),
@@ -48,11 +49,12 @@ def serialize_xgboost_model(
     trained_at: str,
     threshold: float,
     calibration_bins: list[CalibrationBin],
+    feature_version: str = FEATURE_VERSION,
 ) -> XGBoostModelArtifact:
     return XGBoostModelArtifact(
         model_name=model.model_name,
         model_version=model.model_version,
-        feature_version=FEATURE_VERSION,
+        feature_version=feature_version,
         trained_at=trained_at,
         threshold=threshold,
         feature_names=list(model.feature_names),
