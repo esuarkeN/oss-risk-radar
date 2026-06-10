@@ -6,7 +6,7 @@ RUN go mod download
 COPY backend/api ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api ./cmd/api
 
-FROM alpine:3.23
+FROM alpine:3.24
 WORKDIR /app
 COPY --from=build /out/api /app/api
 COPY deployment/training /app/seed/training
