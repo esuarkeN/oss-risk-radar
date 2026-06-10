@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - uses: actions/setup-node@v6.4.0
         with:
@@ -134,7 +134,7 @@ jobs:
           fi
 
       - name: Upload model artifact bundle
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: oss-risk-radar-model-artifacts-${{ github.run_id }}
           retention-days: 30
@@ -150,7 +150,7 @@ jobs:
 
       - name: Open artifact promotion PR
         if: steps.changes.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: automation/model-artifacts-${{ github.run_id }}
           delete-branch: true
