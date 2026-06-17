@@ -14,6 +14,7 @@ function parseArgs(argv) {
     pageSize: 100,
     includeArchived: true,
     requireLicense: true,
+    minimumStars: 100,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -55,6 +56,13 @@ function parseArgs(argv) {
         args.pageSize = Number.parseInt(next, 10);
         index += 1;
         break;
+      case "--minimum-stars":
+        if (!next) {
+          throw new Error("--minimum-stars requires a value");
+        }
+        args.minimumStars = Number.parseInt(next, 10);
+        index += 1;
+        break;
       case "--exclude-archived":
         args.includeArchived = false;
         break;
@@ -71,6 +79,9 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(args.pageSize) || args.pageSize < 1 || args.pageSize > 100) {
     throw new Error("--page-size must be an integer between 1 and 100");
+  }
+  if (!Number.isInteger(args.minimumStars) || args.minimumStars < 1) {
+    throw new Error("--minimum-stars must be an integer >= 1");
   }
 
   return args;
@@ -140,68 +151,121 @@ async function requestGitHubJson(url, token) {
   return response.json();
 }
 
-function buildBuckets(targetRepositories, includeArchived) {
+function boundedStarRange(minimumStars, lowerBound, upperBound) {
+  const effectiveLowerBound = Math.max(minimumStars, lowerBound);
+  if (effectiveLowerBound > upperBound) {
+    return null;
+  }
+  return `stars:${effectiveLowerBound}..${upperBound}`;
+}
+
+function minimumStarRange(minimumStars, lowerBound) {
+  return `stars:>=${Math.max(minimumStars, lowerBound)}`;
+}
+
+function pushBucket(buckets, { label, target, query }) {
+  if (!query) {
+    return;
+  }
+  buckets.push({ label, target, query });
+}
+
+function buildBuckets(targetRepositories, includeArchived, minimumStars) {
   const now = new Date();
   const activeSince = formatDate(shiftDays(now, -365));
   const dormantBefore = formatDate(shiftDays(now, -730));
-  const buckets = [
-    {
-      label: "active-high",
-      target: Math.round(targetRepositories * 0.2),
-      query: `is:public fork:false archived:false stars:>=500 pushed:>=${activeSince}`
-    },
-    {
-      label: "active-medium",
-      target: Math.round(targetRepositories * 0.15),
-      query: `is:public fork:false archived:false stars:50..499 pushed:>=${activeSince}`
-    },
-    {
-      label: "active-low",
-      target: Math.round(targetRepositories * 0.1),
-      query: `is:public fork:false archived:false stars:10..49 pushed:>=${activeSince}`
-    },
-    {
-      label: "dormant-high",
-      target: Math.round(targetRepositories * 0.2),
-      query: `is:public fork:false archived:false stars:100..99999 pushed:<=${dormantBefore}`
-    },
-    {
-      label: "dormant-low",
-      target: Math.round(targetRepositories * 0.15),
-      query: `is:public fork:false archived:false stars:10..99 pushed:<=${dormantBefore}`
-    }
-  ];
+  const buckets = [];
+
+  pushBucket(buckets, {
+    label: "active-elite",
+    target: Math.round(targetRepositories * 0.05),
+    query: `is:public fork:false archived:false ${minimumStarRange(minimumStars, 5000)} pushed:>=${activeSince}`,
+  });
+  pushBucket(buckets, {
+    label: "active-high",
+    target: Math.round(targetRepositories * 0.1),
+    query: boundedStarRange(minimumStars, 1000, 4999)
+      ? `is:public fork:false archived:false ${boundedStarRange(minimumStars, 1000, 4999)} pushed:>=${activeSince}`
+      : null,
+  });
+  pushBucket(buckets, {
+    label: "active-medium",
+    target: Math.round(targetRepositories * 0.1),
+    query: boundedStarRange(minimumStars, 500, 999)
+      ? `is:public fork:false archived:false ${boundedStarRange(minimumStars, 500, 999)} pushed:>=${activeSince}`
+      : null,
+  });
+  pushBucket(buckets, {
+    label: "active-foundation",
+    target: Math.round(targetRepositories * 0.2),
+    query: boundedStarRange(minimumStars, 100, 499)
+      ? `is:public fork:false archived:false ${boundedStarRange(minimumStars, 100, 499)} pushed:>=${activeSince}`
+      : null,
+  });
+  pushBucket(buckets, {
+    label: "dormant-high",
+    target: Math.round(targetRepositories * 0.07),
+    query: `is:public fork:false archived:false ${minimumStarRange(minimumStars, 1000)} pushed:<=${dormantBefore}`,
+  });
+  pushBucket(buckets, {
+    label: "dormant-medium",
+    target: Math.round(targetRepositories * 0.08),
+    query: boundedStarRange(minimumStars, 500, 999)
+      ? `is:public fork:false archived:false ${boundedStarRange(minimumStars, 500, 999)} pushed:<=${dormantBefore}`
+      : null,
+  });
+  pushBucket(buckets, {
+    label: "dormant-foundation",
+    target: Math.round(targetRepositories * 0.2),
+    query: boundedStarRange(minimumStars, 100, 499)
+      ? `is:public fork:false archived:false ${boundedStarRange(minimumStars, 100, 499)} pushed:<=${dormantBefore}`
+      : null,
+  });
 
   if (includeArchived) {
-    buckets.push({
-      label: "archived",
-      target: Math.round(targetRepositories * 0.2),
-      query: "is:public fork:false archived:true stars:>=10"
+    pushBucket(buckets, {
+      label: "archived-high",
+      target: Math.round(targetRepositories * 0.05),
+      query: `is:public fork:false archived:true ${minimumStarRange(minimumStars, 1000)}`,
+    });
+    pushBucket(buckets, {
+      label: "archived-medium",
+      target: Math.round(targetRepositories * 0.05),
+      query: boundedStarRange(minimumStars, 500, 999)
+        ? `is:public fork:false archived:true ${boundedStarRange(minimumStars, 500, 999)}`
+        : null,
+    });
+    pushBucket(buckets, {
+      label: "archived-foundation",
+      target: Math.round(targetRepositories * 0.1),
+      query: boundedStarRange(minimumStars, 100, 499)
+        ? `is:public fork:false archived:true ${boundedStarRange(minimumStars, 100, 499)}`
+        : null,
     });
   }
 
   return buckets;
 }
 
-function buildFallbackBuckets(includeArchived) {
+function buildFallbackBuckets(includeArchived, minimumStars) {
   const now = new Date();
   const recentSince = formatDate(shiftDays(now, -540));
   const dormantBefore = formatDate(shiftDays(now, -1095));
   const fallbacks = [
     {
       label: "fallback-active",
-      query: `is:public fork:false archived:false stars:>=10 pushed:>=${recentSince}`
+      query: `is:public fork:false archived:false stars:>=${minimumStars} pushed:>=${recentSince}`
     },
     {
       label: "fallback-dormant",
-      query: `is:public fork:false archived:false stars:>=5 pushed:<=${dormantBefore}`
+      query: `is:public fork:false archived:false stars:>=${minimumStars} pushed:<=${dormantBefore}`
     }
   ];
 
   if (includeArchived) {
     fallbacks.push({
       label: "fallback-archived",
-      query: "is:public fork:false archived:true stars:>=5"
+      query: `is:public fork:false archived:true stars:>=${minimumStars}`
     });
   }
 
@@ -228,6 +292,9 @@ function isEligibleOssRepository(item, args) {
   if (args.requireLicense && !item.license) {
     return false;
   }
+  if ((item.stargazers_count ?? 0) < args.minimumStars) {
+    return false;
+  }
   return true;
 }
 
@@ -236,11 +303,12 @@ async function collectRepositories(args) {
   const bucketSummaries = [];
   const searchEndpoint = "https://api.github.com/search/repositories";
   const perPage = args.pageSize;
-  const buckets = buildBuckets(args.targetRepositories, args.includeArchived);
+  const buckets = buildBuckets(args.targetRepositories, args.includeArchived, args.minimumStars);
 
   for (const bucket of buckets) {
     let added = 0;
     let skippedUnlicensed = 0;
+    let skippedBelowMinimumStars = 0;
     let page = 1;
     while (added < bucket.target && page <= 10 && repositories.size < args.targetRepositories) {
       const params = new URLSearchParams({
@@ -261,6 +329,9 @@ async function collectRepositories(args) {
           if (args.requireLicense && item?.full_name && !item.license) {
             skippedUnlicensed += 1;
           }
+          if ((item?.stargazers_count ?? 0) < args.minimumStars) {
+            skippedBelowMinimumStars += 1;
+          }
           continue;
         }
         if (repositories.has(item.full_name.toLowerCase())) {
@@ -277,17 +348,25 @@ async function collectRepositories(args) {
       await sleep(750);
     }
 
-    bucketSummaries.push({ label: bucket.label, target: bucket.target, query: bucket.query, added, skippedUnlicensed });
+    bucketSummaries.push({
+      label: bucket.label,
+      target: bucket.target,
+      query: bucket.query,
+      added,
+      skippedUnlicensed,
+      skippedBelowMinimumStars,
+    });
     if (repositories.size >= args.targetRepositories) {
       break;
     }
   }
 
   if (repositories.size < args.targetRepositories) {
-    for (const bucket of buildFallbackBuckets(args.includeArchived)) {
+    for (const bucket of buildFallbackBuckets(args.includeArchived, args.minimumStars)) {
       let page = 1;
       let added = 0;
       let skippedUnlicensed = 0;
+      let skippedBelowMinimumStars = 0;
       while (page <= 10 && repositories.size < args.targetRepositories) {
         const params = new URLSearchParams({
           q: bucket.query,
@@ -307,6 +386,9 @@ async function collectRepositories(args) {
             if (args.requireLicense && item?.full_name && !item.license) {
               skippedUnlicensed += 1;
             }
+            if ((item?.stargazers_count ?? 0) < args.minimumStars) {
+              skippedBelowMinimumStars += 1;
+            }
             continue;
           }
           if (repositories.has(item.full_name.toLowerCase())) {
@@ -323,7 +405,15 @@ async function collectRepositories(args) {
         await sleep(750);
       }
 
-      bucketSummaries.push({ label: bucket.label, target: null, query: bucket.query, added, skippedUnlicensed, fallback: true });
+      bucketSummaries.push({
+        label: bucket.label,
+        target: null,
+        query: bucket.query,
+        added,
+        skippedUnlicensed,
+        skippedBelowMinimumStars,
+        fallback: true,
+      });
       if (repositories.size >= args.targetRepositories) {
         break;
       }
@@ -378,9 +468,10 @@ export async function generateFoundationSeed(rawArgs = process.argv.slice(2)) {
         rowsWritten: rows.length,
         includeArchived: args.includeArchived,
         requireLicense: args.requireLicense,
+        minimumStars: args.minimumStars,
         pageSize: args.pageSize,
         samplingFrame:
-          "GitHub Search repositories filtered to public, non-fork repositories across active, dormant, and archived strata; seed bucket is sampling provenance, not a training label.",
+          `GitHub Search repositories filtered to public, non-fork repositories with at least ${args.minimumStars} stars across active, dormant, and archived strata; seed bucket is sampling provenance, not a training label.`,
         bucketSummaries,
       },
       null,
@@ -393,9 +484,14 @@ export async function generateFoundationSeed(rawArgs = process.argv.slice(2)) {
   console.log(`foundation seed: ${path.relative(repoRoot, outputFile)}`);
   console.log(`foundation seed metadata: ${path.relative(repoRoot, metadataOutputFile)}`);
   console.log(`repositories written: ${rows.length}`);
+  console.log(`minimum stars: ${args.minimumStars}`);
   console.log(`inactive-biased candidates: ${inactiveCandidates}`);
   for (const bucket of bucketSummaries) {
-    console.log(`bucket ${bucket.label}: ${bucket.added}${bucket.skippedUnlicensed ? ` (${bucket.skippedUnlicensed} unlicensed skipped)` : ""}`);
+    console.log(
+      `bucket ${bucket.label}: ${bucket.added}` +
+      `${bucket.skippedUnlicensed ? ` (${bucket.skippedUnlicensed} unlicensed skipped)` : ""}` +
+      `${bucket.skippedBelowMinimumStars ? ` (${bucket.skippedBelowMinimumStars} below-star-threshold skipped)` : ""}`
+    );
   }
 
   return { outputFile, metadataOutputFile, rowsWritten: rows.length, inactiveCandidates };

@@ -134,27 +134,36 @@ For repository-first foundation runs, use `ecosystem=github` plus `repository_ur
 To generate the thesis repository foundation seed from the GitHub Search API:
 
 ```powershell
-npm run ml:seed:foundation -- `
+node scripts/ml/generate-foundation-seed.mjs `
   --target-repositories 5000 `
+  --minimum-stars 100 `
   --github-token $env:GITHUB_TOKEN `
-  --output-file .\tmp\training\foundation-seed.csv
+  --output-file .\tmp\training-foundation\foundation-seed.csv `
+  --metadata-output .\tmp\training-foundation\foundation-seed.metadata.json
 ```
 
-The generator writes `tmp/training/foundation-seed.metadata.json` with the search strata, targets, license filter, and bucket counts. The default sampling frame is public, non-fork GitHub repositories with a license object, stratified across active, dormant, and archived seed buckets. Those buckets are sampling provenance only; they are not the label.
+The generator writes `foundation-seed.metadata.json` with the search strata, targets, license filter, minimum star threshold, and bucket counts. The default sampling frame is public, non-fork GitHub repositories with at least 100 stars and a license object, stratified across active, dormant, and archived seed buckets. Those buckets are sampling provenance only; they are not the label.
 
 A repository from the archived seed bucket can still contribute earlier active or pre-archival snapshots. The main model is trained from rows before the outcome, with `label_inactive_12m` describing whether inactivity or archival happens in the following 12 months.
 
 To build and train from that seed in one pass:
 
 ```powershell
-npm run ml:bootstrap:foundation -- `
-  --github-token $env:GITHUB_TOKEN `
-  --gharchive-source .\tmp\gharchive `
-  --output-dir .\tmp\training\oss-maintenance `
-  --training-output-path .\tmp\training\snapshots.json
+node scripts/ml/bootstrap-training.mjs `
+  --seed-file .\tmp\training-foundation\foundation-seed.csv `
+  --gharchive-source .\tmp\gharchive-foundation `
+  --output-dir .\tmp\training-foundation\oss-maintenance `
+  --training-output-path .\tmp\training-foundation\snapshots.json `
+  --feature-cache-output-path .\tmp\training-foundation\repository-feature-cache.json `
+  --sample-limit-per-ecosystem 5000 `
+  --minimum-repositories 4500 `
+  --minimum-inactive-repositories 250 `
+  --replace-training-output `
+  --force `
+  --runner local
 ```
 
-The plain `npm run ml:bootstrap -- --gharchive-source ...` path intentionally remains a small starter run for local smoke tests. Use `ml:bootstrap:foundation` for the thesis/training base because it asks the GitHub Search API for a broad active, dormant, and archived repository mix. The default foundation seed is intentionally inactive-heavy: about 45% active repositories and 55% dormant or archived repositories before sampling.
+The plain `npm run ml:bootstrap -- --gharchive-source ...` path intentionally remains a small starter run for local smoke tests. Use the foundation seed and separate `tmp/training-foundation` outputs for the thesis/training base because it asks the GitHub Search API for a broad active, dormant, and archived repository mix. The default foundation seed is intentionally inactive-heavy: about 45% active repositories and 55% dormant or archived repositories before sampling.
 
 When `--generate-foundation-seed` is enabled, the repo helper now enforces:
 

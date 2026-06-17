@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 import gzip
 from io import BytesIO, StringIO, TextIOWrapper
 import json
 from pathlib import Path
+import re
 from typing import Iterable
 from urllib.request import urlopen
 
 from app.training.maintenance_dataset.adapters import parse_datetime
 from app.training.maintenance_dataset.entities import CommitEvent, IssueState, NormalizedEvent, PullRequestState, RepositoryHistory
+
+
+_GHARCHIVE_FILE_PATTERN = re.compile(r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})-(?P<hour>\d{1,2})")
+_REPO_NAME_PATTERN = re.compile(r'"repo"\s*:\s*\{[^{}]*"name"\s*:\s*"([^"]+)"')
 
 
 def normalize_repo_name(value: str | None) -> str | None:
@@ -36,13 +41,18 @@ class GHArchiveAdapter:
         normalized_names = {name.lower() for name in repository_names} if repository_names else None
         histories: dict[str, RepositoryHistory] = {}
         for source in sources:
-            for line in self._iter_lines(source):
-                payload = json.loads(line)
-                repo_name = normalize_repo_name(payload.get("repo", {}).get("name"))
+            for line in self._iter_lines(source, start=start, end=end):
+                repo_name = self._extract_repo_name(line) if normalized_names is not None else None
+                if normalized_names is not None and (repo_name is None or repo_name not in normalized_names):
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
                 if repo_name is None:
-                    continue
-                if normalized_names is not None and repo_name not in normalized_names:
-                    continue
+                    repo_name = normalize_repo_name(payload.get("repo", {}).get("name"))
+                    if repo_name is None:
+                        continue
                 event = self._normalize_event(payload, repo_name)
                 if event is None:
                     continue
@@ -60,18 +70,50 @@ class GHArchiveAdapter:
             history.commits.sort(key=lambda item: item.occurred_at)
         return histories
 
-    def _iter_lines(self, source: str) -> Iterable[str]:
+    def _iter_lines(self, source: str, start: datetime | None = None, end: datetime | None = None) -> Iterable[str]:
         if source.startswith("http://") or source.startswith("https://"):
             yield from self._iter_lines_from_remote(source)
             return
 
         path = Path(source)
         if path.is_dir():
-            files = sorted(item for item in path.rglob("*") if item.is_file() and self._is_supported_file(item))
+            files = sorted(
+                item
+                for item in path.rglob("*")
+                if item.is_file() and self._is_supported_file(item) and self._file_overlaps_window(item, start, end)
+            )
             for item in files:
                 yield from self._iter_lines_from_file(item)
             return
+        if not self._file_overlaps_window(path, start, end):
+            return
         yield from self._iter_lines_from_file(path)
+
+    def _extract_repo_name(self, line: str) -> str | None:
+        match = _REPO_NAME_PATTERN.search(line)
+        if match is None:
+            return None
+        return normalize_repo_name(match.group(1).replace("\\/", "/"))
+
+    def _file_overlaps_window(self, path: Path, start: datetime | None, end: datetime | None) -> bool:
+        if start is None and end is None:
+            return True
+        match = _GHARCHIVE_FILE_PATTERN.search(path.name)
+        if match is None:
+            return True
+        file_start = datetime(
+            int(match.group("year")),
+            int(match.group("month")),
+            int(match.group("day")),
+            int(match.group("hour")),
+            tzinfo=UTC,
+        )
+        file_end = file_start + timedelta(hours=1)
+        if start is not None and file_end < start.astimezone(UTC):
+            return False
+        if end is not None and file_start > end.astimezone(UTC):
+            return False
+        return True
 
     def _iter_lines_from_remote(self, source: str) -> Iterable[str]:
         with urlopen(source, timeout=20) as response:
@@ -87,10 +129,13 @@ class GHArchiveAdapter:
 
     def _iter_lines_from_file(self, path: Path) -> Iterable[str]:
         if path.suffix == ".gz":
-            with gzip.open(path, "rt", encoding="utf-8-sig") as handle:
-                for line in handle:
-                    if line.strip():
-                        yield line
+            try:
+                with gzip.open(path, "rt", encoding="utf-8-sig") as handle:
+                    for line in handle:
+                        if line.strip():
+                            yield line
+            except (EOFError, OSError, gzip.BadGzipFile, UnicodeDecodeError):
+                return
             return
 
         with path.open("r", encoding="utf-8-sig") as handle:

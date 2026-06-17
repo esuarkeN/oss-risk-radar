@@ -21,6 +21,7 @@ from app.training.maintenance_dataset.entities import (
     PackageRepositoryLinkRecord,
     PackageVersionRecord,
     RegistryPackageMetadata,
+    RepositoryHistory,
     RepositoryRecord,
     SnapshotFeatureRow,
     SnapshotLabelRow,
@@ -86,6 +87,7 @@ class DatasetBuildConfig:
     training_output_path: str | Path | None = None
     feature_cache_output_path: str | Path | None = None
     merge_existing_training_output: bool = True
+    offline_repository_metadata: bool = False
 
 
 @dataclass(slots=True)
@@ -201,11 +203,11 @@ class DatasetBuilder:
             "package_repository_links": len(links),
         }
 
-    def build_snapshots(self) -> dict[str, int]:
+    def build_snapshots(self, histories: dict[str, RepositoryHistory] | None = None) -> dict[str, int]:
         repositories = self._load_repositories()
         packages = self._load_packages()
         links = self._select_primary_links(self._load_links(), packages)
-        histories = self._load_histories(repositories)
+        histories = histories if histories is not None else self._load_histories(repositories)
 
         snapshots: list[ObservationSnapshot] = []
         feature_rows: list[SnapshotFeatureRow] = []
@@ -241,10 +243,10 @@ class DatasetBuilder:
         write_jsonl(self.paths.snapshot_features, feature_rows)
         return {"snapshots": len(snapshots), "snapshot_features": len(feature_rows)}
 
-    def build_labels(self) -> dict[str, int]:
+    def build_labels(self, histories: dict[str, RepositoryHistory] | None = None) -> dict[str, int]:
         repositories = self._load_repositories()
         packages = self._load_packages()
-        histories = self._load_histories(repositories)
+        histories = histories if histories is not None else self._load_histories(repositories)
         labels: list[SnapshotLabelRow] = []
         for snapshot in self._load_observation_snapshots():
             repository = repositories[snapshot.repository_id]
@@ -344,8 +346,9 @@ class DatasetBuilder:
     def build_all(self) -> dict[str, int]:
         summary: dict[str, int] = {}
         summary.update(self.ingest_candidates())
-        summary.update(self.build_snapshots())
-        summary.update(self.build_labels())
+        histories = self._load_histories(self._load_repositories())
+        summary.update(self.build_snapshots(histories=histories))
+        summary.update(self.build_labels(histories=histories))
         summary.update(self.export_training_dataset())
         return summary
 
@@ -359,6 +362,12 @@ class DatasetBuilder:
 
     def _load_registry_metadata(self, candidate: PackageCandidate) -> RegistryPackageMetadata:
         ecosystem = normalize_ecosystem(candidate.ecosystem)
+        if self.config.offline_repository_metadata:
+            return RegistryPackageMetadata(
+                repository_url=normalize_repository_url(candidate.repository_url),
+                source_url=None,
+                versions=[],
+            )
         if ecosystem == "github":
             return RegistryPackageMetadata(
                 repository_url=normalize_repository_url(candidate.repository_url),
@@ -394,6 +403,8 @@ class DatasetBuilder:
                 direct_dependents_count=candidate.direct_dependents_count,
                 source_url=None,
             )
+        if self.config.offline_repository_metadata:
+            return ResolvedRepositoryMetadata(repository_url=None, repository_full_name=None)
         try:
             resolved = self.adapters.depsdev.resolve_repository(candidate.ecosystem, candidate.package_name, version)
             if resolved is not None:
@@ -434,6 +445,8 @@ class DatasetBuilder:
         return "registry-fallback"
 
     def _load_github_repository(self, repository_url: str) -> GitHubRepositoryMetadata | None:
+        if self.config.offline_repository_metadata:
+            return None
         try:
             return self.adapters.github.get_repository(repository_url)
         except Exception:

@@ -266,10 +266,23 @@ for ($d = $Start.Date; $d -lt $EndExclusive.Date; $d = $d.AddDays(1)) {
     }
     else {
       Write-Host "GET  $fileName"
-      & curl.exe -L --fail --silent --show-error --retry 5 --retry-delay 5 --connect-timeout 30 -o $rawFile $url
+      $curlOutput = @()
+      $curlExitCode = 0
+      try {
+        $curlOutput = & curl.exe -L --fail --silent --show-error --retry 5 --retry-delay 5 --connect-timeout 30 -o $rawFile $url 2>&1
+        $curlExitCode = $LASTEXITCODE
+      }
+      catch {
+        $curlOutput += $_.Exception.Message
+        $curlExitCode = if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 1 }
+      }
 
-      if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Download failed: $url"
+      if ($curlExitCode -ne 0) {
+        $curlMessage = ($curlOutput | Where-Object { $_ } | ForEach-Object { "$_" }) -join " "
+        if ([string]::IsNullOrWhiteSpace($curlMessage)) {
+          $curlMessage = "curl exit code $curlExitCode"
+        }
+        Write-Warning "Download failed: $url ($curlMessage)"
         "$fileName,$($d.ToString('yyyy-MM-dd')),$h,0,download_failed" | Add-Content $CoveragePath -Encoding UTF8
         if ((Test-Path $rawFile) -and -not $KeepRaw) { Remove-Item $rawFile -Force }
         continue

@@ -22,12 +22,14 @@ export function parseArgs(argv) {
     sampleLimitPerEcosystem: "24",
     sampleLimitPerEcosystemProvided: false,
     sampleSeed: "42",
+    offlineRepositoryMetadata: false,
     includeForks: false,
     replaceTrainingOutput: false,
     featureCacheOutputPath: null,
     seedFileProvided: false,
     generateFoundationSeed: false,
     foundationTargetRepositories: "5000",
+    foundationMinimumStars: "100",
     minimumRepositories: "0",
     minimumInactiveRepositories: "0",
     runner: "docker",
@@ -100,6 +102,9 @@ export function parseArgs(argv) {
       case "--include-forks":
         args.includeForks = true;
         break;
+      case "--offline-repository-metadata":
+        args.offlineRepositoryMetadata = true;
+        break;
       case "--replace-training-output":
         args.replaceTrainingOutput = true;
         break;
@@ -108,6 +113,10 @@ export function parseArgs(argv) {
         break;
       case "--foundation-target-repositories":
         args.foundationTargetRepositories = next;
+        index += 1;
+        break;
+      case "--foundation-minimum-stars":
+        args.foundationMinimumStars = next;
         index += 1;
         break;
       case "--minimum-repositories":
@@ -201,6 +210,7 @@ function applyNpmForwardedConfig(args, positionals) {
   applyStringConfig(args, "sampleSeed", "sample-seed", leakedValues);
   applyStringConfig(args, "githubToken", "github-token", leakedValues);
   applyStringConfig(args, "foundationTargetRepositories", "foundation-target-repositories", leakedValues);
+  applyStringConfig(args, "foundationMinimumStars", "foundation-minimum-stars", leakedValues);
   applyStringConfig(args, "minimumRepositories", "minimum-repositories", leakedValues);
   applyStringConfig(args, "minimumInactiveRepositories", "minimum-inactive-repositories", leakedValues);
   if (npmConfig("observation-end") !== undefined) {
@@ -214,6 +224,9 @@ function applyNpmForwardedConfig(args, positionals) {
   }
   if (npmBooleanConfig("include-forks")) {
     args.includeForks = true;
+  }
+  if (npmBooleanConfig("offline-repository-metadata")) {
+    args.offlineRepositoryMetadata = true;
   }
   if (npmBooleanConfig("replace-training-output")) {
     args.replaceTrainingOutput = true;
@@ -461,6 +474,13 @@ export async function buildDataset(args) {
       args.foundationTargetRepositories,
       "--foundation-target-repositories"
     );
+    const foundationMinimumStars = parsePositiveInteger(
+      args.foundationMinimumStars,
+      "--foundation-minimum-stars"
+    );
+    if (foundationMinimumStars < 1) {
+      throw new Error("--foundation-minimum-stars must be an integer >= 1");
+    }
     if (!args.seedFileProvided) {
       args.seedFile = path.join("tmp", "training", "foundation-seed.csv");
     }
@@ -490,6 +510,8 @@ export async function buildDataset(args) {
       seedFile.replace(/\.csv$/i, ".metadata.json"),
       "--target-repositories",
       args.foundationTargetRepositories,
+      "--minimum-stars",
+      args.foundationMinimumStars,
       ...(args.githubToken ? ["--github-token", args.githubToken] : []),
     ]);
     seedFile = resolveRepoPath(seedFile);
@@ -533,6 +555,9 @@ export async function buildDataset(args) {
   }
   if (args.includeForks) {
     cliArgs.push("--include-forks");
+  }
+  if (args.offlineRepositoryMetadata) {
+    cliArgs.push("--offline-repository-metadata");
   }
   if (args.replaceTrainingOutput) {
     cliArgs.push("--replace-training-output");

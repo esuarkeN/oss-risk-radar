@@ -38,6 +38,11 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--github-token", default=None, help="GitHub token for repository metadata enrichment.")
     parser.add_argument("--include-forks", action="store_true", help="Keep forked repositories in the sampled candidate set.")
+    parser.add_argument(
+        "--offline-repository-metadata",
+        action="store_true",
+        help="Use repository identities from the seed file without live registry, deps.dev, or GitHub enrichment.",
+    )
 
 
 def _parse_date(value: str) -> datetime:
@@ -60,6 +65,7 @@ def main() -> int:
         training_output_path=args.training_output_path,
         feature_cache_output_path=args.feature_cache_output_path,
         merge_existing_training_output=not args.replace_training_output,
+        offline_repository_metadata=args.offline_repository_metadata,
     )
     builder = DatasetBuilder(config=config, adapters=PipelineAdapters.live(github_token=args.github_token))
 

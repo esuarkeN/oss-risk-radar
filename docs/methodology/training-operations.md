@@ -25,7 +25,7 @@ For the current default thesis workflow, feature lookback starts two years befor
 
 ## Filtered Download
 
-The repository has a seed-focused downloader at `scripts/download-gharchive-seed-filtered.ps1`. It streams hourly GH Archive files, keeps only events for repositories in the generated thesis seed at `tmp/training/foundation-seed.csv`, and writes coverage manifests.
+The repository has a seed-focused downloader at `scripts/download-gharchive-seed-filtered.ps1`. It streams hourly GH Archive files, keeps only events for repositories in the generated thesis seed, and writes coverage manifests. For the 5,000-repository thesis corpus, keep the long-run outputs under `tmp/training-foundation` and `tmp/gharchive-foundation` so the smaller local smoke corpus remains untouched.
 
 Downloader modes:
 
@@ -42,23 +42,24 @@ For a faster run, use the parallel wrapper. Four workers is a reasonable startin
 ```powershell
 .\scripts\download-gharchive-seed-filtered-parallel.ps1 `
   -Workers 4 `
-  -SeedPath ".\tmp\training\foundation-seed.csv" `
-  -OutDir ".\tmp\gharchive" `
-  -Start "2022-01-10"
+  -SeedPath ".\tmp\training-foundation\foundation-seed.csv" `
+  -OutDir ".\tmp\gharchive-foundation" `
+  -SeedCoveragePath ".\tmp\training-foundation\gharchive-seed-coverage.csv" `
+  -Start "2021-01-01"
 ```
 
-The wrapper writes per-shard coverage files, waits for all workers, then merges them into `tmp/gharchive/_coverage.csv` and `tmp/gharchive-seed-coverage.csv`. It preserves existing coverage rows from earlier runs unless a worker reports a newer status for the same hour.
+The wrapper writes per-shard coverage files, waits for all workers, then merges them into `tmp/gharchive-foundation/_coverage.csv` and `tmp/training-foundation/gharchive-seed-coverage.csv`. It preserves existing coverage rows from earlier runs unless a worker reports a newer status for the same hour.
 
 Smoke test a tiny range first:
 
 ```powershell
 .\scripts\download-gharchive-seed-filtered.ps1 `
-  -SeedPath ".\tmp\training\foundation-seed.csv" `
+  -SeedPath ".\tmp\training-foundation\foundation-seed.csv" `
   -OutDir ".\tmp\gharchive-smoke" `
   -Start "2023-01-01" `
   -EndExclusive "2023-01-04"
 
-npm run ml:bootstrap:foundation -- --gharchive-source ".\tmp\gharchive-smoke"
+node scripts/ml/bootstrap-training.mjs --seed-file ".\tmp\training-foundation\foundation-seed.csv" --gharchive-source ".\tmp\gharchive-smoke"
 ```
 
 The smoke run is expected to validate the pipeline shape, not produce thesis-grade model quality.
@@ -67,11 +68,23 @@ For the real run:
 
 ```powershell
 .\scripts\download-gharchive-seed-filtered.ps1 `
-  -SeedPath ".\tmp\training\foundation-seed.csv" `
-  -OutDir ".\tmp\gharchive" `
+  -SeedPath ".\tmp\training-foundation\foundation-seed.csv" `
+  -OutDir ".\tmp\gharchive-foundation" `
+  -SeedCoveragePath ".\tmp\training-foundation\gharchive-seed-coverage.csv" `
   -Start "2021-01-01"
 
-npm run ml:bootstrap:foundation -- --gharchive-source ".\tmp\gharchive"
+node scripts/ml/bootstrap-training.mjs `
+  --seed-file ".\tmp\training-foundation\foundation-seed.csv" `
+  --gharchive-source ".\tmp\gharchive-foundation" `
+  --output-dir ".\tmp\training-foundation\oss-maintenance" `
+  --training-output-path ".\tmp\training-foundation\snapshots.json" `
+  --feature-cache-output-path ".\tmp\training-foundation\repository-feature-cache.json" `
+  --sample-limit-per-ecosystem 5000 `
+  --minimum-repositories 4500 `
+  --minimum-inactive-repositories 250 `
+  --replace-training-output `
+  --force `
+  --runner local
 ```
 
 By default, the downloader stops at the current local date, so it downloads through yesterday. Pass `-EndExclusive` only when you want to pin or backfill a specific range. The dataset helper will still use only complete local days for label-safe observation windows.
@@ -79,11 +92,11 @@ By default, the downloader stops at the current local date, so it downloads thro
 Useful coverage checks:
 
 ```powershell
-Import-Csv ".\tmp\gharchive\_coverage.csv" |
+Import-Csv ".\tmp\gharchive-foundation\_coverage.csv" |
   Group-Object status |
   Select-Object Name, Count
 
-Import-Csv ".\tmp\gharchive-seed-coverage.csv" |
+Import-Csv ".\tmp\training-foundation\gharchive-seed-coverage.csv" |
   Sort-Object {[int]$_.matched_events} |
   Select-Object -First 20
 ```
@@ -96,12 +109,12 @@ Continuous or API-triggered training is intentionally out of scope for the curre
 
 Recommended workflow:
 
-1. Generate the 5,000-repository foundation seed with active, dormant, and archived strata.
+1. Generate the 5,000-repository foundation seed with active, dormant, and archived strata, `stars >= 100`, `fork:false`, and a required license.
 2. Download filtered GH Archive events for that seed set.
 3. Build labeled historical snapshots.
 4. Use `notebooks/oss-maintenance-training.ipynb` as the six-step ML workflow and artifact export surface.
-5. Run `npm run ml:bootstrap:foundation -- --gharchive-source ".\tmp\gharchive"` to build snapshots and execute the notebook-backed artifact export. Add `--runner local` when using a local Python 3.14 environment instead of Docker.
-6. Run `npm run ml:stage-training` to promote the bundle into `deployment/training`.
+5. Run the foundation bootstrap against `tmp/gharchive-foundation` to build snapshots and execute the notebook-backed artifact export.
+6. Run `node scripts/ml/stage-training-artifacts.mjs --source-dir ".\tmp\training-foundation" --summary-output ".\tmp\training-foundation\pipeline-summary.json" --required-feature-version feature-set-v3 --minimum-repositories 4500 --minimum-inactive-repositories 250` to promote the bundle into `deployment/training`.
 
 The dataset build also writes `tmp/training/repository-feature-cache.json`. Production uses that staged cache to choose the full-history artifact family and feed GHArchive-derived historical features into live repository scoring. Repositories without a cache row use the separate cold-start artifact family trained only on current GitHub/API-style snapshot features. Daily GH Archive downloads should update the offline cache directly; request-time scoring must not download or scan archive files.
 
