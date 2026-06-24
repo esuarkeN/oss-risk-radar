@@ -1,21 +1,41 @@
-import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+type Tone = "danger" | "warning" | "success" | "neutral";
 
 interface SummaryCardProps {
   label: string;
   value: string | number;
   caption: string;
+  tone?: Tone;
 }
 
-export function SummaryCard({ label, value, caption }: SummaryCardProps) {
+const toneAccent: Record<Tone, string> = {
+  danger:  "bg-[hsl(var(--danger))]",
+  warning: "bg-[hsl(var(--warning))]",
+  success: "bg-[hsl(var(--success))]",
+  neutral: "bg-[hsl(var(--border))]",
+};
+
+const toneValue: Record<Tone, string> = {
+  danger:  "text-[hsl(var(--danger))]",
+  warning: "text-[hsl(var(--warning))]",
+  success: "text-[hsl(var(--success))]",
+  neutral: "text-[hsl(var(--foreground))]",
+};
+
+export function SummaryCard({ label, value, caption, tone = "neutral" }: SummaryCardProps) {
   return (
-    <Card className="min-h-40 border-line bg-panel p-5">
-      <div className="flex h-full flex-col justify-between gap-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
-        <div>
-          <p className="text-5xl font-semibold leading-none tracking-tight text-foreground">{value}</p>
-          <p className="mt-3 text-sm leading-6 text-muted">{caption}</p>
-        </div>
+    <div className="relative overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-4">
+      <div className={cn("absolute inset-y-0 left-0 w-[3px] rounded-l-xl", toneAccent[tone])} />
+      <div className="flex flex-col gap-2.5 pl-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+          {label}
+        </p>
+        <p className={cn("text-4xl font-extrabold leading-none tracking-tight", toneValue[tone])}>
+          {value}
+        </p>
+        <p className="text-xs leading-5 text-[hsl(var(--muted))]">{caption}</p>
       </div>
-    </Card>
+    </div>
   );
 }

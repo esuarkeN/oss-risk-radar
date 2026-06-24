@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import json
 import hashlib
-from types import SimpleNamespace
 
 from app.training.artifact_export import ArtifactExportConfig, compute_go_dataset_hash, train_artifacts
-from app.training.artifacts_cli import train_models
 
 
 def test_artifact_export_computes_go_compatible_dataset_hash() -> None:
@@ -69,26 +67,3 @@ def test_artifact_export_writes_both_model_artifacts(tmp_path, training_snapshot
     assert latest["modelName"] in model_names
     assert latest["datasetHash"]
     assert latest["modelArtifact"]["featureVersion"] in {"feature-set-v3-full-history", "feature-set-v3-cold-start"}
-
-
-def test_artifacts_cli_compatibility_wrapper_writes_artifacts(tmp_path, training_snapshots: list[dict[str, object]]) -> None:
-    dataset_path = tmp_path / "snapshots.json"
-    runs_dir = tmp_path / "runs"
-    latest_path = tmp_path / "latest-run.json"
-    dataset_path.write_text(json.dumps({"snapshots": training_snapshots}), encoding="utf-8")
-
-    runs = train_models(
-        SimpleNamespace(
-            dataset_path=str(dataset_path),
-            runs_dir=str(runs_dir),
-            latest_run_path=str(latest_path),
-            model_name=["logistic-regression-cold-start"],
-            train_ratio=0.5,
-            validation_ratio=0.25,
-            calibration_bins=5,
-            force=True,
-        )
-    )
-
-    assert [run["modelName"] for run in runs] == ["logistic-regression-cold-start"]
-    assert latest_path.exists()

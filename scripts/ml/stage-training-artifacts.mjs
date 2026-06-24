@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..", "..");
 const REQUIRED_MODEL_NAMES = [
   "logistic-regression-full-history",
@@ -11,6 +12,7 @@ const REQUIRED_MODEL_NAMES = [
   "xgboost-cold-start",
 ];
 const REQUIRED_FEATURE_VERSIONS = new Set(["feature-set-v3-full-history", "feature-set-v3-cold-start"]);
+const DATASET_HASH_HISTORICAL_FEATURES = ["repo_archived_at_obs"];
 
 function parseArgs(argv) {
   const args = {
@@ -24,6 +26,11 @@ function parseArgs(argv) {
     requireBothModels: true,
     summaryOutput: null,
     requiredFeatureVersion: "",
+    baselineDir: path.join("deployment", "training"),
+    maxAurocDrop: 0.02,
+    maxBrierIncrease: 0.02,
+    comparisonOutput: path.join("tmp", "training", "promotion-comparison.json"),
+    requirePromotionGate: true,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -77,6 +84,29 @@ function parseArgs(argv) {
         if (!next) throw new Error("--required-feature-version requires a value");
         args.requiredFeatureVersion = next;
         index += 1;
+        break;
+      case "--baseline-dir":
+        if (!next) throw new Error("--baseline-dir requires a value");
+        args.baselineDir = next;
+        index += 1;
+        break;
+      case "--max-auroc-drop":
+        if (!next) throw new Error("--max-auroc-drop requires a value");
+        args.maxAurocDrop = parseNonNegativeNumber(next, "--max-auroc-drop");
+        index += 1;
+        break;
+      case "--max-brier-increase":
+        if (!next) throw new Error("--max-brier-increase requires a value");
+        args.maxBrierIncrease = parseNonNegativeNumber(next, "--max-brier-increase");
+        index += 1;
+        break;
+      case "--comparison-output":
+        if (!next) throw new Error("--comparison-output requires a value");
+        args.comparisonOutput = next;
+        index += 1;
+        break;
+      case "--skip-promotion-gate":
+        args.requirePromotionGate = false;
         break;
       default:
         throw new Error(`unknown argument: ${current}`);
@@ -236,6 +266,9 @@ function modelFeatureNames(runArtifacts) {
       names.add(feature);
     }
   }
+  for (const feature of DATASET_HASH_HISTORICAL_FEATURES) {
+    names.add(feature);
+  }
   return names;
 }
 
@@ -285,7 +318,7 @@ function normalizeSnapshotHistoricalFeatures(snapshot, allowedFeatureNames) {
   };
 }
 
-function normalizedSnapshotPayload(payload, runArtifacts) {
+export function normalizedSnapshotPayload(payload, runArtifacts) {
   const allowedFeatureNames = modelFeatureNames(runArtifacts);
   if (Array.isArray(payload)) {
     return payload.map((snapshot) => normalizeSnapshotHistoricalFeatures(snapshot, allowedFeatureNames));
@@ -393,6 +426,75 @@ function copyRunArtifact(source, target, args) {
   writeJson(target, normalizedRunArtifact(source, args));
 }
 
+function parseNonNegativeNumber(value, flagName) {
+  const parsed = Number.parseFloat(`${value ?? ""}`.trim());
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${flagName} must be a number >= 0`);
+  }
+  return parsed;
+}
+
+export function compareModelMetrics(candidateArtifacts, baselineArtifacts, thresholds = {}) {
+  const maxAurocDrop = thresholds.maxAurocDrop ?? 0.02;
+  const maxBrierIncrease = thresholds.maxBrierIncrease ?? 0.02;
+  const candidateByModel = new Map(candidateArtifacts.map(({ run }) => [run.modelName, run]));
+  const baselineByModel = new Map(baselineArtifacts.map(({ run }) => [run.modelName, run]));
+  const models = REQUIRED_MODEL_NAMES.map((modelName) => {
+    const candidate = candidateByModel.get(modelName);
+    const baseline = baselineByModel.get(modelName);
+    const candidateAuroc = Number(candidate?.metrics?.rocAuc);
+    const baselineAuroc = Number(baseline?.metrics?.rocAuc);
+    const candidateBrier = Number(candidate?.metrics?.brierScore);
+    const baselineBrier = Number(baseline?.metrics?.brierScore);
+    const metricsPresent = [candidateAuroc, baselineAuroc, candidateBrier, baselineBrier].every(Number.isFinite);
+    const aurocDrop = metricsPresent ? baselineAuroc - candidateAuroc : null;
+    const brierIncrease = metricsPresent ? candidateBrier - baselineBrier : null;
+    const tolerance = 1e-12;
+    const passed = metricsPresent && aurocDrop <= maxAurocDrop + tolerance && brierIncrease <= maxBrierIncrease + tolerance;
+    return {
+      modelName,
+      passed,
+      candidate: candidate ? { datasetHash: candidate.datasetHash, rocAuc: candidateAuroc, brierScore: candidateBrier } : null,
+      baseline: baseline ? { datasetHash: baseline.datasetHash, rocAuc: baselineAuroc, brierScore: baselineBrier } : null,
+      aurocDrop,
+      brierIncrease,
+    };
+  });
+  return {
+    passed: models.every((model) => model.passed),
+    thresholds: { maxAurocDrop, maxBrierIncrease },
+    models,
+  };
+}
+
+function evaluatePromotionGate(candidateArtifacts, args) {
+  if (!args.requirePromotionGate) {
+    return { passed: true, skipped: true, reason: "promotion gate explicitly skipped" };
+  }
+  const baselineDir = resolveRepoPath(args.baselineDir);
+  const baselineLatestPath = path.join(baselineDir, "latest-run.json");
+  const baselineRunsDir = path.join(baselineDir, "runs");
+  if (!existsSync(baselineLatestPath) || !existsSync(baselineRunsDir)) {
+    throw new Error(`promotion baseline is incomplete: ${baselineDir}`);
+  }
+  const baselineLatest = readJson(baselineLatestPath);
+  const baselineArtifacts = validateRunArtifacts(baselineRunsDir, { ...args, requireBothModels: true }, baselineLatest);
+  const comparison = {
+    generatedAt: new Date().toISOString(),
+    candidateSource: relativeRepoPath(resolveRepoPath(args.sourceDir)),
+    baselineSource: relativeRepoPath(baselineDir),
+    ...compareModelMetrics(candidateArtifacts, baselineArtifacts, args),
+  };
+  if (args.comparisonOutput) {
+    writeJson(resolveRepoPath(args.comparisonOutput), comparison);
+  }
+  if (!comparison.passed) {
+    const failed = comparison.models.filter((model) => !model.passed).map((model) => model.modelName);
+    throw new Error(`artifact promotion gate failed for: ${failed.join(", ")}; current staged bundle retained`);
+  }
+  return comparison;
+}
+
 function stageArtifacts(args) {
   const sourceDir = resolveRepoPath(args.sourceDir);
   const targetDir = resolveRepoPath(args.targetDir);
@@ -412,6 +514,7 @@ function stageArtifacts(args) {
   const latestRun = readJson(sourceLatestRunPath);
   const runArtifactsToStage = validateRunArtifacts(sourceRunsDir, args, latestRun);
   const completedModelCount = new Set(runArtifactsToStage.map((item) => item.run.modelName)).size;
+  const promotion = evaluatePromotionGate(runArtifactsToStage, args);
   if (args.clean && existsSync(targetDir)) {
     for (const item of readdirSync(targetDir, { withFileTypes: true })) {
       if (item.name === "README.md") continue;
@@ -467,6 +570,7 @@ function stageArtifacts(args) {
     featureCacheCopied,
     featureCacheSource,
     runArtifacts,
+    promotion,
   };
 }
 
@@ -529,9 +633,11 @@ function buildPipelineSummary(result) {
       runCount: result.runCount,
       completedModelCount: result.completedModelCount,
     },
+    promotion: result.promotion,
   };
 }
 
+if (path.resolve(process.argv[1] ?? "") === __filename) {
 try {
   const args = parseArgs(process.argv.slice(2));
   const result = stageArtifacts(args);
@@ -549,4 +655,5 @@ try {
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
+}
 }

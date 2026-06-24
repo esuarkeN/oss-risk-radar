@@ -29,14 +29,6 @@ func ParseArtifact(fileName string, content []byte) (Result, error) {
 	}
 }
 
-func MustParseArtifact(fileName string, content []byte) Result {
-	result, err := ParseArtifact(fileName, content)
-	if err != nil {
-		panic(err)
-	}
-	return result
-}
-
 type packageLockDocument struct {
 	Name         string                        `json:"name"`
 	Packages     map[string]packageLockPackage `json:"packages"`

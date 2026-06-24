@@ -18,8 +18,8 @@ const themeBootScript = `
     root.classList.toggle("dark", theme === "dark");
     root.dataset.theme = theme;
   } catch (error) {
-    document.documentElement.classList.remove("dark");
-    document.documentElement.dataset.theme = "light";
+    document.documentElement.classList.add("dark");
+    document.documentElement.dataset.theme = "dark";
   }
 })();
 `;
@@ -35,11 +35,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body className="bg-background font-sans text-foreground antialiased transition-colors duration-200">
+      <body className="bg-background font-sans text-foreground antialiased">
         <ToastProvider>
-          <main className="mx-auto flex min-h-screen w-full max-w-[1440px] flex-col gap-6 px-4 py-4 lg:px-8 lg:py-6">
-            {children}
-          </main>
+          {children}
         </ToastProvider>
       </body>
     </html>

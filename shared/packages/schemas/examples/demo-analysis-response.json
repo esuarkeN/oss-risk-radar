@@ -1,47 +1,30 @@
 {
   "analysis": {
-    "id": "anl_demo_01",
+    "id": "analysis_demo_001",
     "status": "completed",
     "createdAt": "2026-04-02T00:00:00Z",
-    "updatedAt": "2026-04-02T00:00:03Z",
-    "jobId": "job_demo_01",
-    "source": {
+    "updatedAt": "2026-04-02T00:00:12Z",
+    "submission": {
       "kind": "demo",
-      "label": "Demo: Node Web Application"
+      "repositoryUrl": "https://github.com/example/oss-risk-radar-demo"
     },
     "summary": {
       "dependencyCount": 4,
-      "highRiskCount": 1,
+      "highRiskCount": 2,
       "mappedRepositoryCount": 4,
       "scoreAvailabilityCount": 4,
-      "riskDistribution": [
-        { "name": "low", "count": 1 },
-        { "name": "elevated", "count": 2 },
-        { "name": "high", "count": 1 },
-        { "name": "critical", "count": 0 }
-      ],
-      "ecosystemBreakdown": [
-        { "name": "npm", "count": 3 },
-        { "name": "pypi", "count": 1 }
-      ],
-      "actionBreakdown": [
-        { "name": "monitor", "count": 2 },
-        { "name": "review", "count": 1 },
-        { "name": "replace_candidate", "count": 1 }
-      ]
+      "riskDistribution": {
+        "low": 1,
+        "medium": 1,
+        "high": 1,
+        "critical": 1
+      },
+      "ecosystemBreakdown": {
+        "npm": 2,
+        "pypi": 1,
+        "go": 1
+      }
     },
-    "methodology": {
-      "scoreVersion": "model-v1",
-      "scoredAt": "2026-04-02T00:00:03Z",
-      "caveatCount": 2,
-      "missingSignalCount": 3
-    }
-  },
-  "job": {
-    "id": "job_demo_01",
-    "analysisId": "anl_demo_01",
-    "status": "completed",
-    "createdAt": "2026-04-02T00:00:00Z",
-    "updatedAt": "2026-04-02T00:00:03Z"
+    "dependencies": []
   }
 }

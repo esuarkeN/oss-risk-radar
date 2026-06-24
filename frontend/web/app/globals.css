@@ -2,32 +2,32 @@
 @config "../tailwind.config.ts";
 
 :root {
-  --background: 0 0% 96%;
-  --foreground: 0 0% 8%;
+  --background: 220 22% 97%;
+  --foreground: 222 24% 10%;
   --card: 0 0% 100%;
   --panel: 0 0% 100%;
-  --panel-alt: 70 12% 93%;
-  --muted: 0 0% 39%;
-  --border: 0 0% 84%;
-  --accent: 145 67% 29%;
-  --success: 160 84% 39%;
-  --warning: 34 93% 46%;
-  --danger: 352 76% 50%;
+  --panel-alt: 220 18% 92%;
+  --muted: 218 12% 46%;
+  --border: 218 18% 84%;
+  --accent: 239 84% 62%;
+  --success: 152 52% 38%;
+  --warning: 37 85% 44%;
+  --danger: 354 78% 50%;
   color-scheme: light;
 }
 
 .dark {
-  --background: 60 4% 9%;
-  --foreground: 78 22% 94%;
-  --card: 60 5% 12%;
-  --panel: 60 5% 12%;
-  --panel-alt: 78 7% 17%;
-  --muted: 70 9% 70%;
-  --border: 70 5% 25%;
-  --accent: 79 100% 63%;
-  --success: 151 72% 52%;
-  --warning: 40 95% 57%;
-  --danger: 352 90% 67%;
+  --background: 222 18% 8%;
+  --foreground: 214 28% 90%;
+  --card: 220 22% 12%;
+  --panel: 220 22% 12%;
+  --panel-alt: 220 18% 16%;
+  --muted: 215 16% 58%;
+  --border: 218 22% 22%;
+  --accent: 239 84% 67%;
+  --success: 152 48% 48%;
+  --warning: 37 90% 55%;
+  --danger: 354 86% 57%;
   color-scheme: dark;
 }
 
@@ -42,22 +42,9 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-image:
-    linear-gradient(hsl(var(--border) / 0.26) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--border) / 0.22) 1px, transparent 1px),
-    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--panel-alt)) 100%);
-  background-attachment: fixed;
   background-color: hsl(var(--background));
-  background-size: 44px 44px, 44px 44px, 100% 100%;
   color: hsl(var(--foreground));
-  transition: background-color 220ms ease, color 220ms ease, background-image 220ms ease;
-}
-
-.dark body {
-  background-image:
-    linear-gradient(hsl(var(--border) / 0.28) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(var(--border) / 0.22) 1px, transparent 1px),
-    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(78 7% 12%) 100%);
+  transition: background-color 220ms ease, color 220ms ease;
 }
 
 button,
@@ -76,66 +63,55 @@ a {
   background: hsl(var(--accent) / 0.22);
 }
 
-.dark .text-slate-950,
-.dark .text-slate-900,
-.dark .text-slate-800,
-.dark .text-slate-700 {
-  color: hsl(var(--foreground));
+@keyframes glow-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
-.dark .text-slate-600,
-.dark .text-slate-500,
-.dark .text-slate-400,
-.dark .text-slate-300 {
-  color: hsl(var(--muted));
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.dark .text-sky-800,
-.dark .text-sky-700 {
-  color: hsl(var(--accent));
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.dark .hover\:text-slate-950:hover,
-.dark .hover\:text-sky-900:hover,
-.dark .hover\:text-sky-800:hover {
-  color: hsl(var(--foreground));
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-.dark .border-slate-200,
-.dark .border-slate-200\/80,
-.dark .border-slate-300,
-.dark .border-slate-100,
-.dark .border-white\/10,
-.dark .border-white\/20,
-.dark .border-white\/6 {
-  border-color: hsl(var(--border) / 0.9);
+@keyframes flow-dash {
+  to { stroke-dashoffset: -20; }
 }
 
-.dark .bg-white,
-.dark .bg-white\/90,
-.dark .bg-white\/5,
-.dark .bg-white\/10,
-.dark .bg-slate-50,
-.dark .bg-slate-50\/50,
-.dark .bg-slate-100 {
-  background-color: hsl(var(--panel) / 0.94);
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
 }
 
-.dark .bg-slate-950,
-.dark .bg-slate-950\/30,
-.dark .bg-slate-950\/40 {
-  background-color: hsl(var(--panel-alt) / 0.96);
+.animate-slide-up {
+  animation: slide-up 300ms ease-out both;
 }
 
-.dark .hover\:bg-sky-50:hover,
-.dark .hover\:bg-sky-50\/50:hover,
-.dark .hover\:bg-white\/10:hover {
-  background-color: hsl(var(--panel-alt) / 0.92);
+.animate-fade-in {
+  animation: fade-in 200ms ease-out both;
 }
 
-.dark .bg-amber-300\/10,
-.dark .bg-emerald-400\/10,
-.dark .bg-sky-400\/10,
-.dark .bg-rose-400\/10 {
-  backdrop-filter: blur(10px);
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--panel-alt)) 25%,
+    hsl(var(--border) / 0.6) 50%,
+    hsl(var(--panel-alt)) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* React Flow edge animation for hot paths */
+.react-flow__edge.animated path {
+  stroke-dasharray: 5 5;
+  animation: flow-dash 0.8s linear infinite;
 }

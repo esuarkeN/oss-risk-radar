@@ -10,6 +10,18 @@ const scoringRoot = path.join(repoRoot, "mltraining", "scoring");
 const scriptSeedPath = path.join(__dirname, "starter-seed-packages.csv");
 const KNOWN_COMMANDS = new Set(["ingest", "build-snapshots", "build-labels", "build-all"]);
 
+function localPythonCommand() {
+  const configured = process.env.PYTHON?.trim();
+  if (configured) return configured;
+  const virtualEnvironmentPython = path.join(
+    repoRoot,
+    ".venv",
+    process.platform === "win32" ? "Scripts/python.exe" : "bin/python",
+  );
+  if (existsSync(virtualEnvironmentPython)) return virtualEnvironmentPython;
+  return process.platform === "win32" ? "python" : "python3";
+}
+
 export function parseArgs(argv) {
   const args = {
     command: "build-all",
@@ -588,7 +600,7 @@ export async function buildDataset(args) {
   if (args.runner === "docker") {
     await runCommand("docker", dockerArgs);
   } else {
-    await runCommand("python", cliArgs, { cwd: scoringRoot });
+    await runCommand(localPythonCommand(), cliArgs, { cwd: scoringRoot });
   }
 
   if (args.command === "build-all" || args.command === "export") {

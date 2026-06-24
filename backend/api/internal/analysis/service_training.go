@@ -34,12 +34,15 @@ func (s *Service) BootstrapTrainingArtifacts(datasetSeedPath string, featureCach
 	}
 
 	if s.trainingRuns != nil {
-		seeded, err := s.trainingRuns.BootstrapFromSeed(runsSeedDir, latestRunSeedPath, mergeExisting)
+		// Runtime training is intentionally disabled. Keep the staged offline bundle
+		// authoritative so obsolete local runs and latest pointers cannot survive a
+		// seed update.
+		seeded, err := s.trainingRuns.BootstrapFromSeed(runsSeedDir, latestRunSeedPath, false)
 		if err != nil {
 			return err
 		}
 		if seeded && s.logger != nil {
-			s.logger.Info("seeded training run artifacts", slog.String("runs_dir", runsSeedDir), slog.String("latest_run_path", latestRunSeedPath), slog.Bool("merge_existing", mergeExisting))
+			s.logger.Info("synchronized staged training run artifacts", slog.String("runs_dir", runsSeedDir), slog.String("latest_run_path", latestRunSeedPath))
 		}
 	}
 

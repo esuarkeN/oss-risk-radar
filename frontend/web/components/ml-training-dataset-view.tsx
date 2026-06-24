@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/format";
-import { formatTrainingRate, formatTrainingSplit, formatTrainingStatus } from "@/lib/ml-evaluation";
+import { formatTrainingMetric, formatTrainingRate, formatTrainingSplit, formatTrainingStatus } from "@/lib/ml-evaluation";
+import type { GetTrainingEffectsResponse, TrainingEffectMetric } from "@/lib/types";
 import { useMlEvaluationState } from "@/lib/use-ml-evaluation-state";
+import { cn } from "@/lib/utils";
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -27,8 +29,181 @@ function formatCoverage(labeledRows?: number, totalRows?: number) {
   return `${Math.round(((labeledRows ?? 0) / totalRows) * 100)}%`;
 }
 
+function formatEffectValue(value: number) {
+  return value.toFixed(3);
+}
+
+function formatMedianValue(value: number) {
+  const absolute = Math.abs(value);
+  if (absolute > 0 && absolute < 1) {
+    return value.toFixed(3);
+  }
+  if (absolute < 100) {
+    return value.toFixed(1);
+  }
+  return Math.round(value).toLocaleString();
+}
+
+function effectTone(effect: TrainingEffectMetric): "low" | "medium" | "high" | "critical" | "neutral" {
+  if (effect.ignored || effect.direction === "ignored" || effect.direction === "neutral") {
+    return "neutral";
+  }
+  if (effect.direction === "healthy") {
+    return "low";
+  }
+  return effect.strength === "strong" ? "critical" : "high";
+}
+
+function effectDirectionLabel(effect: TrainingEffectMetric) {
+  if (effect.ignored || effect.direction === "ignored") {
+    return "ignored";
+  }
+  if (effect.direction === "healthy") {
+    return "healthy indicator";
+  }
+  if (effect.direction === "inactive") {
+    return "inactive indicator";
+  }
+  return "neutral";
+}
+
+function EffectBar({ effect }: { effect: TrainingEffectMetric }) {
+  const width = `${Math.min(50, Math.abs(effect.effectSize) * 50)}%`;
+  const isHealthy = effect.effectSize < 0;
+  const isInactive = effect.effectSize > 0;
+
+  return (
+    <div className="relative h-3 min-w-[12rem] rounded-full bg-line/70">
+      <div className="absolute left-1/2 top-[-3px] h-5 w-px bg-muted/45" />
+      {effect.effectSize !== 0 ? (
+        <div
+          className={cn(
+            "absolute top-0 h-3 rounded-full",
+            effect.ignored
+              ? "bg-muted/40"
+              : isHealthy
+                ? "bg-emerald-500/80"
+                : isInactive
+                  ? "bg-rose-500/80"
+                  : "bg-muted/50",
+          )}
+          style={isHealthy ? { right: "50%", width } : { left: "50%", width }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ModelAlignmentBadges({ effect }: { effect: TrainingEffectMetric }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {effect.xgboostImportance !== undefined ? (
+        <Badge tone="neutral" className="normal-case tracking-[0.06em]">
+          XGB {formatTrainingRate(effect.xgboostImportance, 1)}
+        </Badge>
+      ) : null}
+      {effect.logisticCoefficient !== undefined ? (
+        <Badge tone={effect.logisticCoefficient >= 0 ? "high" : "low"} className="normal-case tracking-[0.06em]">
+          LR {formatTrainingMetric(effect.logisticCoefficient)}
+        </Badge>
+      ) : null}
+      {effect.note ? (
+        <Badge tone="neutral" className="normal-case tracking-[0.06em]">
+          note
+        </Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function TrainingEffectsSection({
+  effects,
+  loading,
+}: {
+  effects: GetTrainingEffectsResponse | null;
+  loading: boolean;
+}) {
+  const rows = effects?.effects ?? [];
+
+  return (
+    <Card className="space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-muted">Effect Sizes</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Which training signals separate active from inactive projects</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+            r compares inactive vs active labels; negative means the metric is more common in active/healthy projects.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Badge tone="low">healthy left</Badge>
+          <Badge tone="critical">inactive right</Badge>
+          <Badge tone="neutral">{effects?.labeledSnapshots ?? 0} labeled rows</Badge>
+        </div>
+      </div>
+
+      {rows.length ? (
+        <div className="overflow-x-auto">
+          <table className="min-w-[980px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
+                <th className="pb-3 pr-4">Metric</th>
+                <th className="pb-3 pr-4">Effect</th>
+                <th className="pb-3 pr-4">Direction</th>
+                <th className="pb-3 pr-4">Active median</th>
+                <th className="pb-3 pr-4">Inactive median</th>
+                <th className="pb-3 pr-4">Model alignment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((effect) => (
+                <tr
+                  key={effect.key}
+                  className={cn(
+                    "border-b border-line/70 align-top last:border-b-0",
+                    effect.ignored ? "text-muted" : "text-foreground",
+                  )}
+                >
+                  <td className="w-[260px] py-4 pr-4">
+                    <p className="font-semibold text-foreground">{effect.label}</p>
+                    <p className="mt-1 text-xs text-muted">{effect.features.join(", ")}</p>
+                    {effect.note ? <p className="mt-2 text-xs leading-5 text-muted">{effect.note}</p> : null}
+                  </td>
+                  <td className="w-[260px] py-4 pr-4">
+                    <div className="flex items-center gap-3">
+                      <EffectBar effect={effect} />
+                      <span className="w-14 text-right font-semibold text-foreground">{formatEffectValue(effect.effectSize)}</span>
+                    </div>
+                  </td>
+                  <td className="py-4 pr-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Badge tone={effectTone(effect)}>{effect.strength}</Badge>
+                      <Badge tone="neutral" className="normal-case tracking-[0.06em]">
+                        {effectDirectionLabel(effect)}
+                      </Badge>
+                    </div>
+                  </td>
+                  <td className="py-4 pr-4 font-semibold text-foreground">{formatMedianValue(effect.activeMedian)}</td>
+                  <td className="py-4 pr-4 font-semibold text-foreground">{formatMedianValue(effect.inactiveMedian)}</td>
+                  <td className="py-4 pr-4">
+                    <ModelAlignmentBadges effect={effect} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">
+          {loading ? "Loading effect sizes from the staged training base." : "No labeled training rows are available for effect-size reporting."}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export function MlTrainingDatasetView() {
-  const { dataset, latestRun: run, loading, error, refresh } = useMlEvaluationState();
+  const { dataset, effects, latestRun: run, loading, error, refresh } = useMlEvaluationState();
   const [repositorySearch, setRepositorySearch] = useState("");
 
   const featureNames = run?.datasetSummary?.featureNames ?? [];
@@ -159,6 +334,8 @@ export function MlTrainingDatasetView() {
           </p>
         </Card>
       </section>
+
+      <TrainingEffectsSection effects={effects} loading={loading} />
 
       <Card className="space-y-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

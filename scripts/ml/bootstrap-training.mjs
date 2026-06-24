@@ -2,154 +2,15 @@ import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { buildDataset, parseArgs as parseBuildDatasetArgs } from "./build-dataset.mjs";
+import { parseArgs as parseBuildDatasetArgs } from "./build-dataset.mjs";
 import { trainArtifacts } from "./train-artifacts.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..", "..");
 
-function parseBootstrapArgs(argv) {
-  const args = {
-    force: false,
-    modelName: null,
-    datasetArgs: [],
-    datasetPath: path.join("tmp", "training", "snapshots.json"),
-    featureCacheOutputPath: path.join("tmp", "training", "repository-feature-cache.json"),
-    runsDir: path.join("tmp", "training", "runs"),
-    latestRunPath: path.join("tmp", "training", "latest-run.json"),
-    minimumValidationRows: null,
-    minimumTestRows: null,
-    minimumInactiveRate: null,
-    runner: null,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const current = argv[index];
-    const next = argv[index + 1];
-    if (current === "--force") {
-      args.force = true;
-      continue;
-    }
-    if (current === "--model-name") {
-      if (!next) throw new Error("--model-name requires a value");
-      args.modelName = next;
-      index += 1;
-      continue;
-    }
-    if (current === "--training-output-path") {
-      if (!next) throw new Error("--training-output-path requires a value");
-      args.datasetPath = next;
-      args.datasetArgs.push(current, next);
-      index += 1;
-      continue;
-    }
-    if (current === "--feature-cache-output-path") {
-      if (!next) throw new Error("--feature-cache-output-path requires a value");
-      args.featureCacheOutputPath = next;
-      args.datasetArgs.push(current, next);
-      index += 1;
-      continue;
-    }
-    if (current === "--runner") {
-      if (!next) throw new Error("--runner requires a value");
-      if (!["docker", "local"].includes(next)) {
-        throw new Error("--runner must be either docker or local");
-      }
-      args.runner = next;
-      args.datasetArgs.push(current, next);
-      index += 1;
-      continue;
-    }
-    if (current === "--minimum-validation-rows") {
-      if (!next) throw new Error("--minimum-validation-rows requires a value");
-      args.minimumValidationRows = parseIntegerFlag(next, "--minimum-validation-rows");
-      index += 1;
-      continue;
-    }
-    if (current === "--minimum-test-rows") {
-      if (!next) throw new Error("--minimum-test-rows requires a value");
-      args.minimumTestRows = parseIntegerFlag(next, "--minimum-test-rows");
-      index += 1;
-      continue;
-    }
-    if (current === "--minimum-inactive-rate") {
-      if (!next) throw new Error("--minimum-inactive-rate requires a value");
-      args.minimumInactiveRate = parseRateFlag(next, "--minimum-inactive-rate");
-      index += 1;
-      continue;
-    }
-    args.datasetArgs.push(current);
-  }
-
-  applyNpmForwardedConfig(args);
-  const isFoundationBootstrap = args.datasetArgs.includes("--generate-foundation-seed") || npmBooleanConfig("generate-foundation-seed");
-  args.minimumValidationRows ??= isFoundationBootstrap ? 25 : 1;
-  args.minimumTestRows ??= isFoundationBootstrap ? 25 : 1;
-  args.minimumInactiveRate ??= isFoundationBootstrap ? 0.01 : 0;
-  return args;
-}
-
-function npmConfig(name) {
-  return process.env[`npm_config_${name.replaceAll("-", "_")}`];
-}
-
-function npmBooleanConfig(name) {
-  const value = npmConfig(name);
-  return value === "true" || value === "1" || value === "";
-}
-
-function npmStringConfig(name, leakedValues) {
-  const value = npmConfig(name);
-  if (value === undefined || value === "") {
-    return undefined;
-  }
-  if (value === "true" || value === "1") {
-    return leakedValues.shift();
-  }
-  return value;
-}
-
-function applyNpmForwardedConfig(args) {
-  const leakedValues = args.datasetArgs.filter((value) => !value.startsWith("--"));
-  const runner = npmStringConfig("runner", leakedValues);
-  if (runner) {
-    if (!["docker", "local"].includes(runner)) {
-      throw new Error("--runner must be either docker or local");
-    }
-    args.runner = runner;
-  }
-
-  const modelName = npmStringConfig("model-name", leakedValues);
-  if (modelName) {
-    args.modelName = modelName;
-  }
-  const trainingOutputPath = npmStringConfig("training-output-path", leakedValues);
-  if (trainingOutputPath) {
-    args.datasetPath = trainingOutputPath;
-  }
-  const featureCacheOutputPath = npmStringConfig("feature-cache-output-path", leakedValues);
-  if (featureCacheOutputPath) {
-    args.featureCacheOutputPath = featureCacheOutputPath;
-  }
-  if (npmConfig("minimum-validation-rows") !== undefined) {
-    args.minimumValidationRows = parseIntegerFlag(npmConfig("minimum-validation-rows"), "--minimum-validation-rows");
-  }
-  if (npmConfig("minimum-test-rows") !== undefined) {
-    args.minimumTestRows = parseIntegerFlag(npmConfig("minimum-test-rows"), "--minimum-test-rows");
-  }
-  if (npmConfig("minimum-inactive-rate") !== undefined) {
-    args.minimumInactiveRate = parseRateFlag(npmConfig("minimum-inactive-rate"), "--minimum-inactive-rate");
-  }
-  if (npmBooleanConfig("force")) {
-    args.force = true;
-  }
-}
-
 function parseIntegerFlag(value, flagName) {
   const parsed = Number.parseInt(`${value ?? ""}`.trim(), 10);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(`${flagName} must be an integer >= 0`);
-  }
+  if (!Number.isInteger(parsed) || parsed < 0) throw new Error(`${flagName} must be an integer >= 0`);
   return parsed;
 }
 
@@ -161,66 +22,131 @@ function parseRateFlag(value, flagName) {
   return parsed;
 }
 
+function parseBootstrapArgs(argv) {
+  const args = {
+    datasetMode: "rebuild",
+    force: false,
+    modelName: null,
+    runsDir: path.join("tmp", "training", "runs"),
+    latestRunPath: path.join("tmp", "training", "latest-run.json"),
+    minimumSnapshots: 3,
+    minimumValidationRows: null,
+    minimumTestRows: null,
+    minimumInactiveRate: null,
+    executionTimeout: "900",
+    datasetArgs: [],
+  };
+  const valueFlags = new Map([
+    ["--dataset-mode", "datasetMode"],
+    ["--model-name", "modelName"],
+    ["--runs-dir", "runsDir"],
+    ["--latest-run-path", "latestRunPath"],
+    ["--minimum-snapshots", "minimumSnapshots"],
+    ["--minimum-validation-rows", "minimumValidationRows"],
+    ["--minimum-test-rows", "minimumTestRows"],
+    ["--minimum-inactive-rate", "minimumInactiveRate"],
+    ["--execution-timeout", "executionTimeout"],
+  ]);
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const current = argv[index];
+    if (current === "--force") {
+      args.force = true;
+      continue;
+    }
+    if (valueFlags.has(current)) {
+      const next = argv[index + 1];
+      if (!next) throw new Error(`${current} requires a value`);
+      const property = valueFlags.get(current);
+      args[property] = next;
+      index += 1;
+      continue;
+    }
+    args.datasetArgs.push(current);
+  }
+
+  if (args.datasetArgs.includes("--generate-foundation-seed")) {
+    throw new Error("foundation seed acquisition is explicit; run npm run ml:seed:foundation before bootstrap");
+  }
+  if (!["rebuild", "smoke"].includes(args.datasetMode)) {
+    throw new Error("bootstrap dataset mode must be rebuild or smoke");
+  }
+  args.minimumSnapshots = parseIntegerFlag(args.minimumSnapshots, "--minimum-snapshots");
+  if (args.minimumValidationRows !== null) {
+    args.minimumValidationRows = parseIntegerFlag(args.minimumValidationRows, "--minimum-validation-rows");
+  }
+  if (args.minimumTestRows !== null) {
+    args.minimumTestRows = parseIntegerFlag(args.minimumTestRows, "--minimum-test-rows");
+  }
+  if (args.minimumInactiveRate !== null) {
+    args.minimumInactiveRate = parseRateFlag(args.minimumInactiveRate, "--minimum-inactive-rate");
+  }
+  parseIntegerFlag(args.executionTimeout, "--execution-timeout");
+  return args;
+}
+
 function resolveRepoPath(value) {
   return path.isAbsolute(value) ? value : path.resolve(repoRoot, value);
 }
 
 function verifyHostArtifacts(args) {
+  const datasetPath = resolveRepoPath(args.datasetPath);
+  const featureCachePath = resolveRepoPath(args.featureCacheOutputPath);
   const latestRunPath = resolveRepoPath(args.latestRunPath);
-  if (!existsSync(resolveRepoPath(args.datasetPath))) {
-    throw new Error(`expected dataset file at ${resolveRepoPath(args.datasetPath)}`);
+  for (const requiredPath of [datasetPath, featureCachePath, latestRunPath]) {
+    if (!existsSync(requiredPath)) throw new Error(`expected notebook output at ${requiredPath}`);
   }
-  if (!existsSync(resolveRepoPath(args.featureCacheOutputPath))) {
-    throw new Error(`expected repository feature cache at ${resolveRepoPath(args.featureCacheOutputPath)}`);
+  const latest = JSON.parse(readFileSync(latestRunPath, "utf-8"));
+  if (!latest.metrics || !latest.splitSummary || !latest.datasetHash) {
+    throw new Error("latest model artifact is missing metrics, split summary, or dataset hash");
   }
-  if (!existsSync(latestRunPath)) {
-    throw new Error(`expected latest cached run pointer at ${latestRunPath}`);
+  if (latest.splitSummary.validationRows < args.minimumValidationRows) {
+    throw new Error(`validation rows ${latest.splitSummary.validationRows} are below ${args.minimumValidationRows}`);
   }
-
-  const latestPayload = JSON.parse(readFileSync(latestRunPath, "utf-8"));
-  if (!latestPayload.metrics || !latestPayload.splitSummary) {
-    throw new Error("latest model artifact is missing metrics or split summary");
+  if (latest.splitSummary.testRows < args.minimumTestRows) {
+    throw new Error(`test rows ${latest.splitSummary.testRows} are below ${args.minimumTestRows}`);
   }
-  if (latestPayload.splitSummary.validationRows < args.minimumValidationRows) {
-    throw new Error(
-      `offline training produced only ${latestPayload.splitSummary.validationRows} validation rows, below the required ${args.minimumValidationRows}`
-    );
+  if (latest.metrics.positiveRate < args.minimumInactiveRate) {
+    throw new Error(`inactive rate ${latest.metrics.positiveRate} is below ${args.minimumInactiveRate}`);
   }
-  if (latestPayload.splitSummary.testRows < args.minimumTestRows) {
-    throw new Error(
-      `offline training produced only ${latestPayload.splitSummary.testRows} test rows, below the required ${args.minimumTestRows}`
-    );
-  }
-  if (latestPayload.metrics.positiveRate < args.minimumInactiveRate) {
-    throw new Error(
-      `offline training produced an inactive 12m rate of ${latestPayload.metrics.positiveRate}, below the required ${args.minimumInactiveRate}`
-    );
-  }
-  return latestPayload;
+  return latest;
 }
 
-async function bootstrap() {
-  const args = parseBootstrapArgs(process.argv.slice(2));
-  const datasetArgs = parseDatasetArgs(args.datasetArgs);
-  if (!args.runner && datasetArgs.runner !== "docker") {
-    args.runner = datasetArgs.runner;
-  }
-  args.datasetPath = datasetArgs.trainingOutputPath;
-  args.featureCacheOutputPath = datasetArgs.featureCacheOutputPath;
-  await buildDataset(datasetArgs);
-  await trainArtifacts([
-    "--dataset-path",
-    args.datasetPath,
-    "--runs-dir",
-    args.runsDir,
-    "--latest-run-path",
-    args.latestRunPath,
-    ...(args.runner ? ["--runner", args.runner] : []),
+async function bootstrap(rawArgs) {
+  const args = parseBootstrapArgs(rawArgs);
+  const dataset = parseBuildDatasetArgs(["build-all", ...args.datasetArgs]);
+  const foundation = resolveRepoPath(dataset.seedFile).includes(path.join("tmp", "training-foundation"));
+  args.minimumValidationRows ??= foundation ? 25 : 1;
+  args.minimumTestRows ??= foundation ? 25 : 1;
+  args.minimumInactiveRate ??= foundation ? 0.01 : 0;
+  args.datasetPath = dataset.trainingOutputPath;
+  args.featureCacheOutputPath = dataset.featureCacheOutputPath;
+
+  const trainArgs = [
+    "--dataset-mode", args.datasetMode,
+    "--dataset-path", dataset.trainingOutputPath,
+    "--feature-cache-path", dataset.featureCacheOutputPath,
+    "--intermediate-dir", dataset.outputDir,
+    "--seed-file", dataset.seedFile,
+    "--runs-dir", args.runsDir,
+    "--latest-run-path", args.latestRunPath,
+    "--observation-start", dataset.observationStart,
+    "--observation-end", dataset.observationEnd,
+    "--observation-interval-months", dataset.observationIntervalMonths,
+    "--label-horizon-months", dataset.labelHorizonMonths,
+    "--sample-limit-per-ecosystem", dataset.sampleLimitPerEcosystem,
+    "--sample-seed", dataset.sampleSeed,
+    "--minimum-repositories", dataset.minimumRepositories,
+    "--minimum-snapshots", `${args.minimumSnapshots}`,
+    "--execution-timeout", args.executionTimeout,
+    "--runner", dataset.runner,
+    ...dataset.gharchiveSources.flatMap((source) => ["--gharchive-source", source]),
+    ...(dataset.replaceTrainingOutput ? ["--replace-training-output"] : ["--merge-training-output"]),
     ...(args.force ? ["--force"] : []),
     ...(args.modelName ? ["--model-name", args.modelName] : []),
-  ]);
+  ];
+  await trainArtifacts(trainArgs);
   const latest = verifyHostArtifacts(args);
-
   console.log(`offline training status: ${latest.status}`);
   console.log(`model: ${latest.modelName} ${latest.modelVersion}`);
   console.log(`splits: ${latest.splitSummary.trainRows}/${latest.splitSummary.validationRows}/${latest.splitSummary.testRows}`);
@@ -229,12 +155,8 @@ async function bootstrap() {
   console.log(`latest run pointer: ${path.relative(repoRoot, resolveRepoPath(args.latestRunPath))}`);
 }
 
-function parseDatasetArgs(datasetArgs) {
-  return parseBuildDatasetArgs(["build-all", ...datasetArgs]);
-}
-
 try {
-  await bootstrap();
+  await bootstrap(process.argv.slice(2));
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

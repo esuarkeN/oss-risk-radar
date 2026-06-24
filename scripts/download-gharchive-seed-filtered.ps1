@@ -165,6 +165,11 @@ function Filter-GhArchiveFile {
         }
       }
     }
+    if ($count -eq 0) {
+      # GZipStream emits no header when nothing is written. A blank line keeps
+      # zero-match hours valid gzip files and is ignored by JSONL readers.
+      $writer.WriteLine()
+    }
   }
   finally {
     $writer.Dispose()
@@ -256,7 +261,6 @@ for ($d = $Start.Date; $d -lt $EndExclusive.Date; $d = $d.AddDays(1)) {
     $hadOutput = Test-Path $outFile
 
     if ($hadOutput -and -not $ForceRefilter -and -not $AugmentExisting) {
-      Write-Host "SKIP $fileName"
       "$fileName,$($d.ToString('yyyy-MM-dd')),$h,0,skipped_existing" | Add-Content $CoveragePath -Encoding UTF8
       continue
     }
@@ -284,7 +288,9 @@ for ($d = $Start.Date; $d -lt $EndExclusive.Date; $d = $d.AddDays(1)) {
         }
         Write-Warning "Download failed: $url ($curlMessage)"
         "$fileName,$($d.ToString('yyyy-MM-dd')),$h,0,download_failed" | Add-Content $CoveragePath -Encoding UTF8
-        if ((Test-Path $rawFile) -and -not $KeepRaw) { Remove-Item $rawFile -Force }
+        # A failed transfer is never a reusable cache entry. KeepRaw applies
+        # only after a complete download has passed curl's success checks.
+        if (Test-Path $rawFile) { Remove-Item $rawFile -Force }
         continue
       }
     }

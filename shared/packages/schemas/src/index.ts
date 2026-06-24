@@ -110,6 +110,9 @@ export interface RepositorySnapshot {
   recentContributors90d?: number;
   contributorConcentration?: number;
   pullRequestMedianResponseDays?: number;
+  pullRequestMedianMergeDays?: number;
+  issueResolutionMedianDays?: number;
+  staleIssueShare?: number;
 }
 
 export interface ScorecardSnapshot {
@@ -137,6 +140,8 @@ export interface DependencyRecord {
   repository?: RepositorySnapshot;
   scorecard?: ScorecardSnapshot;
   historicalFeatures?: Record<string, number>;
+  featureRegime?: "full-history" | "cold-start" | string;
+  historicalCacheHit?: boolean;
   riskProfile?: RiskProfile;
   dependencyPath: string[];
   rawSignalsAvailable: boolean;
@@ -177,6 +182,7 @@ export interface JobRecord {
   updatedAt: string;
   message: string;
   attempts?: number;
+  maxAttempts?: number;
   lastError?: string;
 }
 
@@ -269,6 +275,32 @@ export interface TrainingDatasetRepositorySummary {
 export interface GetTrainingDatasetSummaryResponse {
   dataset: TrainingDatasetSummary;
 }
+
+export interface TrainingEffectMetric {
+  key: string;
+  label: string;
+  effectSize: number;
+  strength: "strong" | "medium" | "weak" | "none" | "ignored" | string;
+  direction: "healthy" | "inactive" | "neutral" | "ignored" | string;
+  activeMedian: number;
+  inactiveMedian: number;
+  activeCount: number;
+  inactiveCount: number;
+  features: string[];
+  xgboostImportance?: number;
+  logisticCoefficient?: number;
+  ignored?: boolean;
+  note?: string;
+}
+
+export interface GetTrainingEffectsResponse {
+  effects: TrainingEffectMetric[];
+  labeledSnapshots: number;
+  activeCount: number;
+  inactiveCount: number;
+  datasetHash: string;
+}
+
 export interface TrainingRunDatasetSummary {
   totalRows: number;
   labeledRows: number;

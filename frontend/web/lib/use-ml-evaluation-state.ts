@@ -2,11 +2,12 @@
 
 import { startTransition, useEffect, useRef, useState } from "react";
 
-import { getLatestTrainingRun, getTrainingDatasetSummary, listTrainingRuns } from "@/lib/api";
-import type { TrainingDatasetSummary, TrainingRunArtifact } from "@/lib/types";
+import { getLatestTrainingRun, getTrainingDatasetSummary, getTrainingEffects, listTrainingRuns } from "@/lib/api";
+import type { GetTrainingEffectsResponse, TrainingDatasetSummary, TrainingRunArtifact } from "@/lib/types";
 
 interface MlEvaluationState {
   dataset: TrainingDatasetSummary | null;
+  effects: GetTrainingEffectsResponse | null;
   latestRun: TrainingRunArtifact | null;
   runs: TrainingRunArtifact[];
   loading: boolean;
@@ -17,6 +18,7 @@ export function useMlEvaluationState() {
   const requestIdRef = useRef(0);
   const [state, setState] = useState<MlEvaluationState>({
     dataset: null,
+    effects: null,
     latestRun: null,
     runs: [],
     loading: true,
@@ -34,8 +36,9 @@ export function useMlEvaluationState() {
     }
 
     try {
-      const [datasetSummary, latestRun, runHistory] = await Promise.all([
+      const [datasetSummary, trainingEffects, latestRun, runHistory] = await Promise.all([
         getTrainingDatasetSummary().catch(() => null),
+        getTrainingEffects().catch(() => null),
         getLatestTrainingRun().catch(() => null),
         listTrainingRuns().catch(() => []),
       ]);
@@ -47,6 +50,7 @@ export function useMlEvaluationState() {
       startTransition(() => {
         setState({
           dataset: datasetSummary,
+          effects: trainingEffects,
           latestRun,
           runs: runHistory,
           loading: false,

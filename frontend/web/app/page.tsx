@@ -1,123 +1,319 @@
-import { ArrowRight, GitBranch, ShieldCheck, Workflow } from "lucide-react";
+import {
+  ArrowRight,
+  CircleDot,
+  GitBranch,
+  Network,
+  ShieldCheck,
+  Workflow,
+  Zap,
+  Search,
+  BookOpen,
+  BarChart3,
+} from "lucide-react";
 import Link from "next/link";
 
-import { SiteHeader } from "@/components/site-header";
-import { SubmissionForm } from "@/components/submission-form";
+import { CreateAnalysisForm } from "@/components/landing/create-analysis-form";
+import { ThemeToggle } from "@/components/theme-toggle";
 
-const landingCards = [
-  { title: "Repository overview", body: "Rank tracked repositories and package snapshots.", href: "/repositories" },
-  { title: "Methodology", body: "Inspect signal definitions and scoring boundaries.", href: "/methodology" },
-  { title: "ML results", body: "Review model quality, calibration, and cached runs.", href: "/ml-evaluation" },
+const navLinks = [
+  { href: "/repositories", label: "Repositories" },
+  { href: "/methodology", label: "Methodology" },
+  { href: "/ml-evaluation", label: "ML Results" },
+  { href: "/about", label: "About" },
 ];
 
-const signalRows = [
-  { label: "last push age", value: "217d", tone: "text-warning" },
-  { label: "maintainer depth", value: "2", tone: "text-danger" },
-  { label: "release cadence", value: "slow", tone: "text-warning" },
-  { label: "scorecard", value: "7.1", tone: "text-success" },
+const stats = [
+  { value: "12+", label: "Signal sources per package" },
+  { value: "4", label: "Risk buckets" },
+  { value: "0.82", label: "Ensemble AUROC" },
+  { value: "npm · PyPI · Go", label: "Supported ecosystems" },
 ];
 
-function SignalMap() {
-  return (
-    <div className="relative min-h-[360px] overflow-hidden rounded-lg border border-line bg-foreground p-5 text-background md:min-h-[430px]">
-      <div className="absolute inset-0 opacity-[0.18] [background-image:linear-gradient(hsl(var(--background))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--background))_1px,transparent_1px)] [background-size:32px_32px]" />
-      <div className="relative z-10 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-background/60">Signal Map</p>
-          <h2 className="mt-2 max-w-sm text-3xl font-semibold leading-tight tracking-tight">react / dependency health scan</h2>
-        </div>
-        <span className="rounded-md border border-background/20 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-background/80">
-          high watch
-        </span>
-      </div>
+const features = [
+  {
+    icon: Network,
+    color: "text-accent bg-accent/10",
+    title: "Dependency Tree Visualization",
+    body: "Interactive graph of your full transitive closure. Pan, zoom, click any node to drill into its risk profile.",
+  },
+  {
+    icon: ShieldCheck,
+    color: "text-danger bg-danger/10",
+    title: "ML Risk Scoring",
+    body: "XGBoost and logistic regression ensemble calibrated on historical maintenance outcomes — not just CVE presence.",
+  },
+  {
+    icon: Zap,
+    color: "text-success bg-success/10",
+    title: "Multi-source Signals",
+    body: "Repository health, release cadence, contributor count, OpenSSF checks, and scorecard data — unified in one view.",
+  },
+  {
+    icon: Search,
+    color: "text-warning bg-warning/10",
+    title: "Path Explorer",
+    body: "Trace exactly how a vulnerable or fragile package enters your codebase through the transitive dependency chain.",
+  },
+  {
+    icon: BarChart3,
+    color: "text-accent bg-accent/10",
+    title: "12-month Outlook",
+    body: "Forward-looking maintenance score predicts packages likely to go unmaintained within the next year.",
+  },
+  {
+    icon: BookOpen,
+    color: "text-warning bg-warning/10",
+    title: "Evidence Layer",
+    body: "Every score is traceable to raw observed signals. No black box — full auditability for security review.",
+  },
+];
 
-      <div className="absolute left-[12%] top-[42%] h-24 w-24 rounded-full border border-accent/80 bg-accent/15 shadow-[0_0_0_18px_hsl(var(--accent)/0.08)]" />
-      <div className="absolute left-[43%] top-[28%] h-16 w-16 rounded-full border border-background/30 bg-background/10" />
-      <div className="absolute bottom-[24%] right-[18%] h-20 w-20 rounded-full border border-warning/80 bg-warning/15" />
-      <div className="absolute bottom-[14%] left-[34%] h-10 w-10 rounded-full border border-danger/80 bg-danger/20" />
-      <div className="absolute left-[21%] top-[53%] h-px w-[38%] rotate-[-19deg] bg-background/24" />
-      <div className="absolute left-[51%] top-[43%] h-px w-[28%] rotate-[31deg] bg-background/24" />
-      <div className="absolute left-[38%] bottom-[27%] h-px w-[32%] rotate-[8deg] bg-background/24" />
-
-      <div className="absolute bottom-5 left-5 right-5 z-10 grid gap-2 sm:grid-cols-2">
-        {signalRows.map((row) => (
-          <div key={row.label} className="rounded-md border border-background/15 bg-background/10 px-3 py-3 backdrop-blur">
-            <p className="text-xs uppercase tracking-[0.14em] text-background/55">{row.label}</p>
-            <p className={`mt-2 text-2xl font-semibold ${row.tone}`}>{row.value}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+const manifestFormats = [
+  "package-lock.json",
+  "requirements.txt",
+  "poetry.lock",
+  "go.mod",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+];
 
 export default function HomePage() {
   return (
-    <>
-      <SiteHeader />
-      <section className="grid gap-6 lg:min-h-[calc(100vh-7.5rem)] lg:grid-cols-[0.94fr_1.06fr] lg:items-stretch">
-        <div className="flex flex-col justify-between gap-6 py-4 lg:py-8">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">OSS Risk Radar</p>
-            <h1 className="mt-5 max-w-3xl text-5xl font-semibold leading-[0.95] tracking-tight md:text-7xl">
-              Maintenance risk intelligence for open-source dependencies.
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-muted">
-              Score a repository, inspect the dependency evidence, and keep the training base growing from real analyses.
-            </p>
-          </div>
+    <div className="flex min-h-screen flex-col bg-[hsl(var(--background))]">
+      {/* Sticky nav */}
+      <header className="sticky top-0 z-40 flex h-14 items-center border-b border-[hsl(var(--border))] bg-[hsl(var(--panel)/0.90)] px-6 backdrop-blur-md">
+        <Link href="/" className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-[hsl(var(--accent))]">
+            <CircleDot className="h-4 w-4 text-white" />
+          </span>
+          <span className="text-sm font-bold tracking-tight text-[hsl(var(--foreground))]">
+            OSS Risk Radar
+          </span>
+          <span className="hidden rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--accent))] ring-1 ring-[hsl(var(--accent)/0.35)] sm:inline-flex">
+            BETA
+          </span>
+        </Link>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+        <nav className="ml-8 hidden items-center gap-1 sm:flex">
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="rounded-md px-3 py-1.5 text-sm text-[hsl(var(--muted))] transition-colors hover:bg-[hsl(var(--panel-alt))] hover:text-[hsl(var(--foreground))]"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="ml-auto flex items-center gap-3">
+          <ThemeToggle />
+          <Link
+            href="#analyze"
+            className="hidden rounded-[7px] bg-[hsl(var(--accent))] px-4 py-1.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 sm:inline-flex"
+          >
+            New analysis →
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <section className="relative overflow-hidden px-6 pb-16 pt-20 text-center lg:pb-24 lg:pt-28">
+        {/* Radial glow behind headline */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-[520px] [background:radial-gradient(ellipse_80%_50%_at_50%_-5%,hsl(var(--accent)/0.10),transparent)]"
+        />
+
+        <div className="relative mx-auto max-w-3xl">
+          <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-[hsl(var(--accent)/0.3)] bg-[hsl(var(--accent)/0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-[hsl(var(--accent))]">
+            Supply Chain Risk Intelligence
+          </span>
+
+          <h1 className="animate-slide-up text-[clamp(2.25rem,5vw,3.75rem)] font-extrabold leading-[1.08] tracking-[-0.03em] text-[hsl(var(--foreground))]">
+            Know your{" "}
+            <span className="text-[hsl(var(--accent))]">dependency risk</span>
+            <br />
+            before it ships
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-xl text-[1.0625rem] leading-7 text-[hsl(var(--muted))]">
+            OSS Risk Radar surfaces operationally fragile dependencies in your
+            software supply chain — scored by ML, grounded in public signals,
+            built for engineering and security teams.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-xs text-[hsl(var(--muted))]">
             {[
-              ["Evidence", "traceable"],
-              ["Model path", "calibrated"],
-              ["Posture", "conservative"],
-            ].map(([label, value]) => (
-              <div key={label} className="border-l border-line pl-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
-                <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
-              </div>
+              "deps.dev enrichment",
+              "GitHub signal extraction",
+              "OpenSSF Scorecard",
+              "XGBoost + LR ensemble",
+            ].map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1.5 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-1"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" />
+                {tag}
+              </span>
             ))}
           </div>
         </div>
-
-        <div className="grid gap-4 xl:grid-cols-[0.92fr_1.08fr]">
-          <SignalMap />
-          <SubmissionForm />
-        </div>
       </section>
 
-      <section className="grid gap-3 border-t border-line pt-6 md:grid-cols-3">
-        {landingCards.map((item, index) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="group rounded-lg border border-line bg-panel p-5 transition hover:border-accent/60 hover:bg-panelAlt"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">0{index + 1}</span>
-              <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-1 group-hover:text-accent" />
+      {/* Stats strip */}
+      <div className="mx-6 mb-16 overflow-hidden rounded-xl border border-[hsl(var(--border))] lg:mx-auto lg:max-w-5xl">
+        <div className="grid divide-x divide-[hsl(var(--border))] sm:grid-cols-4">
+          {stats.map((stat) => (
+            <div key={stat.label} className="px-8 py-6 text-center">
+              <p className="text-[1.75rem] font-extrabold tracking-tight text-[hsl(var(--foreground))]">
+                {stat.value}
+              </p>
+              <p className="mt-1 text-xs text-[hsl(var(--muted))]">{stat.label}</p>
             </div>
-            <h2 className="mt-8 text-xl font-semibold tracking-tight text-foreground">{item.title}</h2>
-            <p className="mt-3 text-sm leading-6 text-muted">{item.body}</p>
-          </Link>
-        ))}
+          ))}
+        </div>
+      </div>
+
+      {/* Submission form */}
+      <div id="analyze" className="px-6 pb-16 lg:pb-20">
+        <div className="mx-auto max-w-2xl">
+          <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-7 shadow-panel">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-[hsl(var(--accent))]">
+              Start an analysis
+            </p>
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-[hsl(var(--foreground))]">
+              Paste a repository URL or upload a manifest
+            </h2>
+            <p className="mt-1 text-sm text-[hsl(var(--muted))]">
+              Analysis typically completes in 30–90 seconds.
+            </p>
+            <div className="mt-5">
+              <CreateAnalysisForm />
+            </div>
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {manifestFormats.map((fmt) => (
+                <span
+                  key={fmt}
+                  className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-2 py-0.5 font-mono text-[11px] text-[hsl(var(--muted))]"
+                >
+                  {fmt}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Features grid */}
+      <section className="border-t border-[hsl(var(--border))] bg-[hsl(var(--panel))] px-6 py-16 lg:py-20">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+            What you get
+          </div>
+          <h2 className="mb-3 text-center text-[1.75rem] font-bold tracking-tight text-[hsl(var(--foreground))]">
+            End-to-end supply chain clarity
+          </h2>
+          <p className="mx-auto mb-12 max-w-md text-center text-sm leading-6 text-[hsl(var(--muted))]">
+            From raw manifest to scored dependency tree — in under two minutes.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map((f) => {
+              const Icon = f.icon;
+              return (
+                <div
+                  key={f.title}
+                  className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] p-5 transition-colors hover:border-[hsl(var(--accent)/0.35)] hover:bg-[hsl(var(--accent)/0.04)]"
+                >
+                  <div
+                    className={`mb-4 flex h-9 w-9 items-center justify-center rounded-[9px] ${f.color}`}
+                  >
+                    <Icon className="h-4.5 w-4.5" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-[hsl(var(--foreground))]">
+                    {f.title}
+                  </h3>
+                  <p className="mt-2 text-[13px] leading-5 text-[hsl(var(--muted))]">
+                    {f.body}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </section>
 
-      <section className="grid gap-3 border-t border-line py-6 text-sm text-muted md:grid-cols-3">
-        <div className="flex items-center gap-3">
-          <GitBranch className="h-4 w-4 text-accent" />
-          repository and manifest intake
-        </div>
-        <div className="flex items-center gap-3">
-          <Workflow className="h-4 w-4 text-accent" />
-          dependency graph context
-        </div>
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="h-4 w-4 text-accent" />
-          review-first risk framing
+      {/* Quick links strip */}
+      <section className="border-t border-[hsl(var(--border))] px-6 py-10">
+        <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-3">
+          {[
+            {
+              href: "/repositories",
+              num: "01",
+              title: "Repository overview",
+              body: "Rank tracked repositories and package snapshots by maintenance signal.",
+            },
+            {
+              href: "/methodology",
+              num: "02",
+              title: "Methodology",
+              body: "Inspect signal definitions, scoring boundaries, and model feature layer.",
+            },
+            {
+              href: "/ml-evaluation",
+              num: "03",
+              title: "ML results",
+              body: "Review model quality, calibration metrics, and cached training runs.",
+            },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="group flex flex-col justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-5 transition-all hover:border-[hsl(var(--accent)/0.4)] hover:bg-[hsl(var(--accent)/0.04)]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <span className="font-mono text-xs text-[hsl(var(--muted))]">
+                  {item.num}
+                </span>
+                <ArrowRight className="h-4 w-4 text-[hsl(var(--muted))] transition group-hover:translate-x-0.5 group-hover:text-[hsl(var(--accent))]" />
+              </div>
+              <div className="mt-8">
+                <h2 className="text-sm font-semibold tracking-tight text-[hsl(var(--foreground))]">
+                  {item.title}
+                </h2>
+                <p className="mt-2 text-[13px] leading-5 text-[hsl(var(--muted))]">
+                  {item.body}
+                </p>
+              </div>
+            </Link>
+          ))}
         </div>
       </section>
-    </>
+
+      {/* Footer strip */}
+      <footer className="border-t border-[hsl(var(--border))]">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-5">
+          <p className="text-xs text-[hsl(var(--muted))]">
+            OSS Risk Radar · Decision support, not definitive trust scores.
+          </p>
+          <div className="flex flex-wrap gap-5 text-xs text-[hsl(var(--muted))]">
+            <span className="flex items-center gap-1.5">
+              <GitBranch className="h-3.5 w-3.5 text-[hsl(var(--accent))]" />
+              Repository and manifest intake
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Workflow className="h-3.5 w-3.5 text-[hsl(var(--accent))]" />
+              Dependency graph context
+            </span>
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-[hsl(var(--accent))]" />
+              Review-first risk framing
+            </span>
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }

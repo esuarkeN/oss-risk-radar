@@ -137,20 +137,17 @@ export function CreateAnalysisForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-line bg-panel p-5 shadow-panel lg:p-6">
-      <div className="flex items-start justify-between gap-4">
+    <form onSubmit={handleSubmit} className="space-y-0">
+      <div className="flex items-start justify-between gap-4 mb-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Start Analysis</p>
-          <h2 className="mt-3 text-2xl font-semibold leading-tight tracking-tight md:text-3xl">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--accent))]">Intake mode</p>
+          <h2 className="mt-2 text-lg font-bold leading-tight tracking-tight text-[hsl(var(--foreground))]">
             Run an OSS risk read.
           </h2>
         </div>
-        <div className="hidden min-w-32 border-l border-line pl-4 text-right text-xs uppercase tracking-[0.14em] text-muted sm:block">
-          live intake
-        </div>
       </div>
 
-      <div className="mt-6 grid gap-2 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3">
         {submissionModes.map((option) => {
           const selected = option.kind === mode;
           const Icon = option.icon;
@@ -159,25 +156,25 @@ export function CreateAnalysisForm() {
               key={option.kind}
               type="button"
               onClick={() => setMode(option.kind)}
-              className={`rounded-md border px-4 py-4 text-left transition ${
+              className={`rounded-[9px] border px-4 py-3.5 text-left transition ${
                 selected
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-line bg-panelAlt/70 text-foreground hover:border-accent/35 hover:bg-panelAlt"
+                  ? "border-[hsl(var(--accent)/0.5)] bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]"
+                  : "border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] text-[hsl(var(--foreground))] hover:border-[hsl(var(--accent)/0.3)]"
               }`}
             >
               <Icon className="h-4 w-4" />
-              <p className="mt-3 text-sm font-semibold tracking-tight">{option.label}</p>
-              <p className={`mt-2 text-xs leading-5 ${selected ? "text-background/70" : "text-muted"}`}>{option.description}</p>
+              <p className="mt-2.5 text-sm font-semibold tracking-tight">{option.label}</p>
+              <p className={`mt-1 text-xs leading-5 ${selected ? "text-[hsl(var(--accent)/0.75)]" : "text-[hsl(var(--muted))]"}`}>{option.description}</p>
             </button>
           );
         })}
       </div>
 
-      <div className="mt-5 rounded-lg border border-line bg-panelAlt/75 p-4">
+      <div className="mt-4 rounded-[9px] border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] p-4">
         {mode === "repository_url" ? (
           <div className="space-y-4">
             <div>
-              <label htmlFor="repositoryUrl" className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+              <label htmlFor="repositoryUrl" className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
                 GitHub repository URL
               </label>
               <Input
@@ -190,12 +187,12 @@ export function CreateAnalysisForm() {
                 className="mt-2"
               />
             </div>
-            <label className="flex items-center gap-3 text-sm text-muted">
+            <label className="flex items-center gap-3 text-sm text-[hsl(var(--muted))]">
               <input
                 type="checkbox"
                 checked={includeTransitiveDependencies}
                 onChange={(event) => setIncludeTransitiveDependencies(event.target.checked)}
-                className="h-4 w-4 rounded border-line bg-transparent"
+                className="h-4 w-4 rounded border-[hsl(var(--border))] bg-transparent"
               />
               Include transitive dependencies when available.
             </label>
@@ -204,8 +201,8 @@ export function CreateAnalysisForm() {
 
         {mode === "upload" ? (
           <div className="space-y-4">
-            <div className="rounded-lg border border-dashed border-line bg-panel/70 p-4">
-              <label htmlFor="artifact" className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+            <div className="rounded-[9px] border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-4">
+              <label htmlFor="artifact" className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
                 Dependency artifact
               </label>
               <Input
@@ -269,8 +266,8 @@ export function CreateAnalysisForm() {
         ) : null}
       </div>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-sm text-muted">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm text-[hsl(var(--muted))]">
           Triage signal only. Evidence stays reviewable.
         </div>
         <Button type="submit" disabled={submitting}>

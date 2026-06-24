@@ -1,13 +1,23 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 import { DependencyPathExplorer } from "@/components/dependency-path-explorer";
 import { EvidenceList, FactorList, RiskScorePill } from "@/components/analysis/detail-sections";
+import { WorkspaceLayout } from "@/components/workspace-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getDependencies, getDependency, getDependencyGraph } from "@/lib/api";
 import { formatConfidence, formatDate, formatOutlookScore, formatScore, titleCase } from "@/lib/format";
 import { formatTrainingMetric } from "@/lib/ml-evaluation";
+
+const BUCKET_SCORE_COLORS: Record<string, string> = {
+  critical: "text-[hsl(var(--danger))]",
+  high:     "text-[hsl(var(--warning))]",
+  medium:   "text-[hsl(354_60%_65%)]",
+  low:      "text-[hsl(var(--success))]",
+  unscored: "text-[hsl(var(--muted))]",
+};
 
 export default async function DependencyDetailPage({
   params
@@ -22,203 +32,277 @@ export default async function DependencyDetailPage({
       getDependencies(id),
       getDependencyGraph(id)
     ]);
+
     const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
     const graphEdgeCount = graph?.edges?.length ?? 0;
     const missingSignals = dependency.riskProfile?.missingSignals ?? [];
     const modelResults = dependency.riskProfile?.modelResults ?? [];
+    const bucket = dependency.riskProfile?.riskBucket ?? "unscored";
+    const scoreColor = BUCKET_SCORE_COLORS[bucket] ?? BUCKET_SCORE_COLORS.unscored;
 
     return (
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Dependency Detail</p>
-            <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950">{dependency.packageName}</h1>
-            <p className="mt-2 text-sm text-slate-500">
-              {dependency.packageVersion} · {dependency.ecosystem} · {dependency.direct ? "direct" : "transitive"}
-            </p>
-          </div>
-          <Link href={`/analyses/${id}`} className="text-sm uppercase tracking-[0.18em] text-sky-700">
+      <WorkspaceLayout>
+        <div className="space-y-5">
+          {/* Back nav */}
+          <Link
+            href={`/analyses/${id}`}
+            className="inline-flex items-center gap-1.5 text-sm text-[hsl(var(--muted))] transition hover:text-[hsl(var(--foreground))]"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
             Back to analysis
           </Link>
-        </div>
 
-        <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-          <Card className="space-y-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <RiskScorePill dependency={dependency} />
-              <Badge tone="neutral">{titleCase(dependency.riskProfile?.actionLevel ?? "monitor")}</Badge>
-              {dependency.parsedFromUploadId ? <Badge tone="neutral">Upload provenance attached</Badge> : null}
-            </div>
-            <div className="grid gap-4 md:grid-cols-4">
+          {/* Hero bar */}
+          <section className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-5">
+            <div className="flex flex-wrap items-start justify-between gap-6">
+              {/* Left: package identity */}
               <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">12m outlook</p>
-                <p className="mt-2 text-3xl font-bold text-slate-950">{formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Security posture</p>
-                <p className="mt-2 text-3xl font-bold text-slate-950">{formatScore(dependency.riskProfile?.securityPostureScore ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Confidence</p>
-                <p className="mt-2 text-3xl font-bold text-slate-950">{formatConfidence(dependency.riskProfile?.confidenceScore ?? 0)}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Raw signals</p>
-                <p className="mt-2 text-3xl font-bold text-slate-950">{dependency.rawSignals?.length ?? 0}</p>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Mapped repository</p>
-                <p className="mt-2 font-semibold text-slate-950">{dependency.repository?.fullName ?? "Unavailable"}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Last push {dependency.repository ? formatDate(dependency.repository.lastPushAt) : "unknown"}
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <Badge tone={bucket as Parameters<typeof Badge>[0]["tone"]}>{bucket}</Badge>
+                  <Badge tone={dependency.direct ? "medium" : "neutral"}>
+                    {dependency.direct ? "◆ Direct" : "↳ Transitive"}
+                  </Badge>
+                  <Badge tone="neutral">{dependency.ecosystem}</Badge>
+                  {dependency.parsedFromUploadId && <Badge tone="neutral">Upload-backed</Badge>}
+                </div>
+                <h1 className="text-2xl font-extrabold tracking-tight text-[hsl(var(--foreground))] leading-tight">
+                  {dependency.packageName}
+                </h1>
+                <p className="mt-1 font-mono text-sm text-[hsl(var(--muted))]">
+                  {dependency.packageVersion}
+                  {dependency.repository?.fullName
+                    ? ` · ${dependency.repository.fullName}`
+                    : ""}
                 </p>
-                {dependency.repository?.lastReleaseAt ? (
-                  <p className="mt-1 text-sm text-slate-500">Last release {formatDate(dependency.repository.lastReleaseAt)}</p>
-                ) : null}
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Repository facts</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  {dependency.repository?.stars ?? 0} stars · {dependency.repository?.forks ?? 0} forks · {dependency.repository?.openIssues ?? 0} open issues
-                </p>
-                <p className="mt-1 text-sm text-slate-500">Archived: {dependency.repository?.archived ? "yes" : "no"}</p>
-                {dependency.repository?.recentContributors90d !== undefined ? (
-                  <p className="mt-1 text-sm text-slate-500">Recent contributors (90d): {dependency.repository.recentContributors90d}</p>
-                ) : null}
-              </div>
-            </div>
-          </Card>
-
-          <Card className="space-y-5">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Coverage and caveats</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {missingSignals.length ? (
-                  missingSignals.map((signal) => (
-                    <Badge key={signal} tone="neutral">
-                      {signal}
-                    </Badge>
-                  ))
-                ) : (
-                  <Badge tone="low">No major missing signals in this snapshot</Badge>
+                {dependency.riskProfile?.actionLevel && (
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+                    Action: {titleCase(dependency.riskProfile.actionLevel.replace(/_/g, " "))}
+                  </p>
                 )}
               </div>
-              <div className="mt-4 space-y-3 text-sm leading-7 text-slate-500">
-                {(dependency.riskProfile?.caveats ?? []).map((caveat) => (
-                  <p key={caveat}>{caveat}</p>
+
+              {/* Right: 4 score meters */}
+              <div className="flex flex-wrap gap-5 divide-x divide-[hsl(var(--border))]">
+                {[
+                  {
+                    label: "12M Outlook",
+                    value: formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0),
+                    color: scoreColor,
+                  },
+                  {
+                    label: "Sec. Posture",
+                    value: formatScore(dependency.riskProfile?.securityPostureScore ?? 0),
+                    color: "text-[hsl(var(--foreground))]",
+                  },
+                  {
+                    label: "Confidence",
+                    value: formatConfidence(dependency.riskProfile?.confidenceScore ?? 0),
+                    color: "text-[hsl(var(--accent))]",
+                  },
+                  {
+                    label: "Raw Signals",
+                    value: String(dependency.rawSignals?.length ?? 0),
+                    color: "text-[hsl(var(--foreground))]",
+                  },
+                ].map(({ label, value, color }, i) => (
+                  <div key={label} className={i > 0 ? "pl-5" : ""}>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+                      {label}
+                    </p>
+                    <p className={`mt-1 text-3xl font-extrabold tracking-tight ${color}`}>{value}</p>
+                  </div>
                 ))}
               </div>
             </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Dependency path</p>
-              <p className="mt-3 text-sm text-slate-600">{dependency.dependencyPath.join(" -> ")}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Graph availability</p>
-              <p className="mt-3 text-sm text-slate-600">
-                {graphNodeCount} nodes and {graphEdgeCount} edges are currently available for this analysis context.
-              </p>
-            </div>
-          </Card>
-        </div>
+          </section>
 
-        <DependencyPathExplorer dependency={dependency} dependencies={dependencies} graph={graph} />
-
-        {modelResults.length ? (
-          <Card className="space-y-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Model Outputs</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">Side-by-side scoring for this dependency</h2>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {modelResults.map((result) => (
-                <div key={result.modelName} className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-950">{result.modelName}</p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{result.algorithm || "model"} {result.modelVersion ?? ""}</p>
+          {/* Two-column body */}
+          <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+            {/* Left column */}
+            <div className="space-y-5">
+              {/* Repository facts */}
+              <Card className="space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+                  Repository Facts
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {[
+                    ["Full name", dependency.repository?.fullName ?? "Unavailable"],
+                    ["Stars", dependency.repository?.stars != null ? dependency.repository.stars.toLocaleString() : "—"],
+                    ["Forks", dependency.repository?.forks != null ? dependency.repository.forks.toLocaleString() : "—"],
+                    ["Open issues", dependency.repository?.openIssues != null ? dependency.repository.openIssues.toLocaleString() : "—"],
+                    ["Last push", dependency.repository ? formatDate(dependency.repository.lastPushAt) : "Unknown"],
+                    ...(dependency.repository?.lastReleaseAt
+                      ? [["Last release", formatDate(dependency.repository.lastReleaseAt)]]
+                      : []),
+                    ...(dependency.repository?.recentContributors90d !== undefined
+                      ? [["Contributors 90d", String(dependency.repository.recentContributors90d)]]
+                      : []),
+                    ["Archived", dependency.repository?.archived ? "Yes" : "No"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-2.5">
+                      <p className="text-[10px] text-[hsl(var(--muted))]">{label}</p>
+                      <p className="mt-0.5 text-sm font-semibold text-[hsl(var(--foreground))]">{value}</p>
                     </div>
-                    <Badge tone={result.riskBucket}>{result.riskBucket}</Badge>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Model outputs */}
+              {modelResults.length ? (
+                <Card className="space-y-4">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">Model Outputs</p>
+                    <h2 className="mt-1.5 text-base font-bold tracking-tight text-[hsl(var(--foreground))]">
+                      Side-by-side scoring
+                    </h2>
                   </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-slate-600">
-                    <p>Risk <span className="font-semibold text-slate-950">{formatScore(result.inactivityRiskScore)}</span></p>
-                    <p>Outlook <span className="font-semibold text-slate-950">{formatOutlookScore(result.maintenanceOutlook12mScore)}</span></p>
-                    <p>Security <span className="font-semibold text-slate-950">{formatScore(result.securityPostureScore)}</span></p>
-                    <p>Confidence <span className="font-semibold text-slate-950">{formatConfidence(result.confidenceScore)}</span></p>
-                    <p>AUROC <span className="font-semibold text-slate-950">{formatTrainingMetric(result.rocAuc)}</span></p>
-                    <p>Brier <span className="font-semibold text-slate-950">{formatTrainingMetric(result.brierScore)}</span></p>
-                    <p>ECE <span className="font-semibold text-slate-950">{formatTrainingMetric(result.expectedCalibrationError)}</span></p>
-                    <p>Samples <span className="font-semibold text-slate-950">{result.sampleCount || "Pending"}</span></p>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {modelResults.map((result) => (
+                      <div key={result.modelName} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-4 py-4 text-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-[hsl(var(--foreground))]">{result.modelName}</p>
+                            <p className="mt-0.5 text-[10px] uppercase tracking-widest text-[hsl(var(--muted))]">
+                              {result.algorithm || "model"} {result.modelVersion ?? ""}
+                            </p>
+                          </div>
+                          <Badge tone={result.riskBucket}>{result.riskBucket}</Badge>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[hsl(var(--muted))]">
+                          <p>Outlook <span className="font-semibold text-[hsl(var(--foreground))]">{formatOutlookScore(result.maintenanceOutlook12mScore)}</span></p>
+                          <p>Security <span className="font-semibold text-[hsl(var(--foreground))]">{formatScore(result.securityPostureScore)}</span></p>
+                          <p>Confidence <span className="font-semibold text-[hsl(var(--foreground))]">{formatConfidence(result.confidenceScore)}</span></p>
+                          <p>AUROC <span className="font-semibold text-[hsl(var(--foreground))]">{formatTrainingMetric(result.rocAuc)}</span></p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              ) : null}
+
+              <FactorList dependency={dependency} />
+              <EvidenceList dependency={dependency} />
+            </div>
+
+            {/* Right column */}
+            <div className="space-y-5">
+              {/* Coverage & caveats */}
+              <Card className="space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+                  Coverage &amp; Caveats
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {missingSignals.length ? (
+                    missingSignals.map((signal) => (
+                      <Badge key={signal} tone="neutral">{signal}</Badge>
+                    ))
+                  ) : (
+                    <Badge tone="low">No major missing signals</Badge>
+                  )}
+                </div>
+                {(dependency.riskProfile?.caveats ?? []).length > 0 && (
+                  <div className="space-y-2 text-sm leading-6 text-[hsl(var(--muted))]">
+                    {(dependency.riskProfile?.caveats ?? []).map((caveat) => (
+                      <p key={caveat}>{caveat}</p>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Graph availability */}
+              <Card className="space-y-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+                  Graph Availability
+                </p>
+                <div className="flex gap-4">
+                  <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-2.5 flex-1 text-center">
+                    <p className="text-xl font-extrabold text-[hsl(var(--foreground))]">{graphNodeCount}</p>
+                    <p className="text-[10px] text-[hsl(var(--muted))]">Nodes</p>
+                  </div>
+                  <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-2.5 flex-1 text-center">
+                    <p className="text-xl font-extrabold text-[hsl(var(--foreground))]">{graphEdgeCount}</p>
+                    <p className="text-[10px] text-[hsl(var(--muted))]">Edges</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </Card>
-        ) : null}
+              </Card>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <FactorList dependency={dependency} />
-          <EvidenceList dependency={dependency} />
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-          <Card className="space-y-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Scorecard snapshot</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">
-                {dependency.scorecard ? `${formatScore(dependency.scorecard.score)} overall` : "No scorecard snapshot attached"}
-              </h2>
-            </div>
-            <div className="space-y-3">
-              {dependency.scorecard?.checks.length ? (
-                dependency.scorecard.checks.map((check) => (
-                  <div key={check.name} className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-slate-950">{check.name}</p>
-                      <Badge tone={check.score >= 7 ? "low" : check.score >= 4 ? "medium" : "high"}>{formatScore(check.score)}</Badge>
-                    </div>
-                    <p className="mt-2 leading-6">{check.reason}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-[1.25rem] border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-                  Scorecard checks were not present in the current dependency snapshot.
+              {/* OpenSSF Scorecard */}
+              <Card className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+                    OpenSSF Scorecard
+                  </p>
+                  {dependency.scorecard && (
+                    <span className={`text-lg font-extrabold ${
+                      dependency.scorecard.score >= 7 ? "text-[hsl(var(--success))]"
+                        : dependency.scorecard.score >= 4 ? "text-[hsl(var(--warning))]"
+                        : "text-[hsl(var(--danger))]"
+                    }`}>
+                      {formatScore(dependency.scorecard.score)}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
-          </Card>
-
-          <Card className="space-y-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Raw signal snapshot</p>
-              <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">Observable fields used in this profile</h2>
-            </div>
-            <div className="space-y-3">
-              {dependency.rawSignals?.length ? (
-                dependency.rawSignals.map((signal) => (
-                  <div key={`${signal.key}-${signal.source}`} className="rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-slate-950">{signal.key}</p>
-                      <Badge tone="neutral">{signal.source}</Badge>
+                <div className="space-y-2">
+                  {dependency.scorecard?.checks.length ? (
+                    dependency.scorecard.checks.map((check) => (
+                      <div key={check.name} className="flex items-center justify-between gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-2.5">
+                        <div>
+                          <p className="text-xs font-semibold text-[hsl(var(--foreground))]">{check.name}</p>
+                          <p className="mt-0.5 text-[11px] leading-4 text-[hsl(var(--muted))]">{check.reason}</p>
+                        </div>
+                        <Badge tone={check.score >= 7 ? "low" : check.score >= 4 ? "medium" : "high"}>
+                          {formatScore(check.score)}
+                        </Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-4 py-5 text-sm text-[hsl(var(--muted))]">
+                      No scorecard checks in current snapshot.
                     </div>
-                    <p className="mt-2">Value: {String(signal.value)}</p>
-                    {signal.observedAt ? <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">Observed {formatDate(signal.observedAt)}</p> : null}
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-[1.25rem] border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-                  Raw signal payloads were not attached to this dependency snapshot.
+                  )}
                 </div>
-              )}
+              </Card>
+
+              {/* Raw signals */}
+              <Card className="space-y-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
+                  Raw Signal Snapshot
+                </p>
+                <div className="space-y-2">
+                  {dependency.rawSignals?.length ? (
+                    dependency.rawSignals.slice(0, 12).map((signal) => (
+                      <div key={`${signal.key}-${signal.source}`} className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold text-[hsl(var(--foreground))]">{signal.key}</p>
+                          <Badge tone="neutral">{signal.source}</Badge>
+                        </div>
+                        <p className="mt-1 font-mono text-[11px] text-[hsl(var(--muted))]">
+                          {String(signal.value)}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-4 py-5 text-sm text-[hsl(var(--muted))]">
+                      No raw signals in current snapshot.
+                    </div>
+                  )}
+                  {(dependency.rawSignals?.length ?? 0) > 12 && (
+                    <p className="text-xs text-[hsl(var(--muted))]">
+                      +{(dependency.rawSignals?.length ?? 0) - 12} more signals
+                    </p>
+                  )}
+                </div>
+              </Card>
             </div>
-          </Card>
+          </div>
+
+          {/* Dependency path explorer — full width */}
+          <DependencyPathExplorer dependency={dependency} dependencies={dependencies} graph={graph} />
         </div>
-      </div>
+      </WorkspaceLayout>
     );
   } catch {
     notFound();
   }
 }
-

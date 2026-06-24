@@ -3,11 +3,11 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const variants = {
-  low: "border-emerald-400/30 bg-emerald-400/10 text-emerald-700 dark:text-emerald-200",
-  medium: "border-sky-400/30 bg-sky-400/10 text-sky-700 dark:text-sky-200",
-  high: "border-amber-300/30 bg-amber-300/10 text-amber-700 dark:text-amber-100",
-  critical: "border-rose-400/30 bg-rose-400/10 text-rose-700 dark:text-rose-200",
-  neutral: "border-line bg-panelAlt text-foreground"
+  low:      "border-[hsl(var(--success)/0.3)] bg-[hsl(var(--success)/0.1)] text-[hsl(var(--success))]",
+  medium:   "border-[hsl(var(--warning)/0.3)] bg-[hsl(var(--warning)/0.1)] text-[hsl(var(--warning))]",
+  high:     "border-[hsl(var(--danger)/0.3)] bg-[hsl(var(--danger)/0.1)] text-[hsl(var(--danger))]",
+  critical: "border-[hsl(var(--danger)/0.4)] bg-[hsl(var(--danger)/0.15)] text-[hsl(var(--danger))]",
+  neutral:  "border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] text-[hsl(var(--muted))]",
 } as const;
 
 export function Badge({

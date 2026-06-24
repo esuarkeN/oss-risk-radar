@@ -1,4 +1,8 @@
-﻿{
-  "sourceKind": "demo",
-  "demoScenario": "react-saas-demo"
+{
+  "submission": {
+    "kind": "demo",
+    "artifactName": "Demo: React SaaS application",
+    "demoProfile": "react-saas-demo",
+    "includeTransitiveDependencies": true
+  }
 }

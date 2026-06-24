@@ -1,11 +1,10 @@
 import { RepositoryRadar } from "@/components/repository-radar";
-import { SiteHeader } from "@/components/site-header";
+import { WorkspaceLayout } from "@/components/workspace-layout";
 
 export default function RepositoriesPage() {
   return (
-    <>
-      <SiteHeader />
+    <WorkspaceLayout>
       <RepositoryRadar />
-    </>
+    </WorkspaceLayout>
   );
 }

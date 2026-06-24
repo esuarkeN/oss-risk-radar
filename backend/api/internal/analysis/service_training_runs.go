@@ -2,7 +2,6 @@ package analysis
 
 import (
 	"context"
-	"sort"
 	"strings"
 )
 
@@ -58,27 +57,4 @@ func requestedTrainingModelNames(modelName string, fallback string) []string {
 		return append([]string(nil), defaultTrainingModelNames...)
 	}
 	return []string{requested}
-}
-
-func BestTrainingRun(runs []TrainingRunArtifact) TrainingRunArtifact {
-	if len(runs) == 0 {
-		return TrainingRunArtifact{}
-	}
-	sorted := append([]TrainingRunArtifact(nil), runs...)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		left := trainingRunQuality(sorted[i])
-		right := trainingRunQuality(sorted[j])
-		if left == right {
-			return sorted[i].CachedAt.After(sorted[j].CachedAt)
-		}
-		return left > right
-	})
-	return sorted[0]
-}
-
-func trainingRunQuality(run TrainingRunArtifact) float64 {
-	if run.Metrics == nil {
-		return -1
-	}
-	return run.Metrics.QualityScore
 }

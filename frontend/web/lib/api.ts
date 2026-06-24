@@ -9,6 +9,7 @@ import type {
   GetDependenciesResponse,
   GetDependencyResponse,
   GetLatestTrainingRunResponse,
+  GetTrainingEffectsResponse,
   GetTrainingDatasetSummaryResponse,
   ListTrainingRunsResponse,
   ListAnalysesResponse,
@@ -94,6 +95,10 @@ export async function getDependencyGraph(analysisId: string): Promise<Dependency
 export async function getTrainingDatasetSummary(): Promise<TrainingDatasetSummary> {
   const response = await request<GetTrainingDatasetSummaryResponse>("/training/dataset");
   return response.dataset;
+}
+
+export async function getTrainingEffects(): Promise<GetTrainingEffectsResponse> {
+  return request<GetTrainingEffectsResponse>("/training/effects");
 }
 
 export async function getLatestTrainingRun(): Promise<TrainingRunArtifact | null> {

@@ -19,9 +19,9 @@
     "ml:train:ci": "node scripts/ml/train-artifacts.mjs --runner local",
     "ml:seed:foundation": "node scripts/ml/generate-foundation-seed.mjs",
     "ml:dataset": "node scripts/ml/build-dataset.mjs",
-    "ml:dataset:foundation": "node scripts/ml/build-dataset.mjs build-all --generate-foundation-seed --foundation-target-repositories 5000 --foundation-minimum-stars 100",
+    "ml:dataset:foundation": "node scripts/ml/build-dataset.mjs build-all --seed-file tmp/training-foundation/foundation-seed.csv --gharchive-source tmp/gharchive-foundation --output-dir tmp/training-foundation/candidate/oss-maintenance --training-output-path tmp/training-foundation/candidate/snapshots.json --feature-cache-output-path tmp/training-foundation/candidate/repository-feature-cache.json --observation-start 2023-01-01 --observation-end 2025-04-01 --sample-limit-per-ecosystem 5000 --offline-repository-metadata --replace-training-output --minimum-repositories 5000 --minimum-inactive-repositories 1000",
     "ml:bootstrap": "node scripts/ml/bootstrap-training.mjs",
-    "ml:bootstrap:foundation": "node scripts/ml/bootstrap-training.mjs --generate-foundation-seed --foundation-target-repositories 5000 --foundation-minimum-stars 100",
+    "ml:bootstrap:foundation": "node scripts/ml/bootstrap-training.mjs --dataset-mode rebuild --seed-file tmp/training-foundation/foundation-seed.csv --gharchive-source tmp/gharchive-foundation --output-dir tmp/training-foundation/candidate/oss-maintenance --training-output-path tmp/training-foundation/candidate/snapshots.json --feature-cache-output-path tmp/training-foundation/candidate/repository-feature-cache.json --runs-dir tmp/training-foundation/candidate/runs --latest-run-path tmp/training-foundation/candidate/latest-run.json --observation-start 2023-01-01 --observation-end 2025-04-01 --sample-limit-per-ecosystem 5000 --offline-repository-metadata --replace-training-output --minimum-repositories 5000 --minimum-inactive-repositories 1000 --minimum-snapshots 50000 --minimum-validation-rows 25 --minimum-test-rows 25 --minimum-inactive-rate 0.01 --execution-timeout 21600",
     "ml:bootstrap:force": "node scripts/ml/bootstrap-training.mjs --force",
     "ml:stage-training": "node scripts/ml/stage-training-artifacts.mjs",
     "ml:notebook": "node scripts/ml/notebook.mjs start",
@@ -32,6 +32,7 @@
     "thesis:clean": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/clean.ps1",
     "test:api": "cd backend/api && go test ./...",
     "test:scoring": "cd mltraining/scoring && python -m pytest tests",
-    "check:web": "npm run lint:web && npm run build:web"
+    "check:web": "npm run lint:web && npm run build:web",
+    "test:ml-scripts": "node --test scripts/ml/*.test.mjs"
   }
 }

@@ -43,6 +43,31 @@ type GetTrainingDatasetSummaryResponse struct {
 	Dataset TrainingDatasetSummary `json:"dataset"`
 }
 
+type TrainingEffectMetric struct {
+	Key                 string   `json:"key"`
+	Label               string   `json:"label"`
+	EffectSize          float64  `json:"effectSize"`
+	Strength            string   `json:"strength"`
+	Direction           string   `json:"direction"`
+	ActiveMedian        float64  `json:"activeMedian"`
+	InactiveMedian      float64  `json:"inactiveMedian"`
+	ActiveCount         int      `json:"activeCount"`
+	InactiveCount       int      `json:"inactiveCount"`
+	Features            []string `json:"features"`
+	XGBoostImportance   *float64 `json:"xgboostImportance,omitempty"`
+	LogisticCoefficient *float64 `json:"logisticCoefficient,omitempty"`
+	Ignored             bool     `json:"ignored,omitempty"`
+	Note                *string  `json:"note,omitempty"`
+}
+
+type GetTrainingEffectsResponse struct {
+	Effects          []TrainingEffectMetric `json:"effects"`
+	LabeledSnapshots int                    `json:"labeledSnapshots"`
+	ActiveCount      int                    `json:"activeCount"`
+	InactiveCount    int                    `json:"inactiveCount"`
+	DatasetHash      string                 `json:"datasetHash"`
+}
+
 type TrainingRunDatasetSummary struct {
 	TotalRows          int      `json:"totalRows"`
 	LabeledRows        int      `json:"labeledRows"`

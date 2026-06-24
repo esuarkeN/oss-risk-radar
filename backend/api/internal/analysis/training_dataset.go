@@ -1,12 +1,16 @@
 package analysis
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +46,75 @@ type trainingDatasetEnvelope struct {
 type trainingDatasetManager struct {
 	path string
 	mu   sync.Mutex
+}
+
+// datasetHashFloat preserves the Python artifact exporter's canonical JSON
+// representation for float-valued signals. In particular, integer-valued
+// floats remain `1.0` instead of being shortened to `1` by encoding/json.
+type datasetHashFloat float64
+
+func (value datasetHashFloat) MarshalJSON() ([]byte, error) {
+	numeric := float64(value)
+	if math.IsNaN(numeric) || math.IsInf(numeric, 0) {
+		return nil, &json.UnsupportedValueError{Value: reflect.ValueOf(numeric), Str: strconv.FormatFloat(numeric, 'g', -1, 64)}
+	}
+	absolute := math.Abs(numeric)
+	formatted := ""
+	if numeric != 0 && (absolute < 1e-4 || absolute >= 1e16) {
+		formatted = strconv.FormatFloat(numeric, 'e', -1, 64)
+	} else {
+		formatted = strconv.FormatFloat(numeric, 'f', -1, 64)
+		if !strings.Contains(formatted, ".") {
+			formatted += ".0"
+		}
+	}
+	return []byte(formatted), nil
+}
+
+type datasetHashScorecardCheck struct {
+	Name   string           `json:"name"`
+	Score  datasetHashFloat `json:"score"`
+	Reason string           `json:"reason"`
+}
+
+type datasetHashScorecard struct {
+	Score  *datasetHashFloat           `json:"score,omitempty"`
+	Checks []datasetHashScorecardCheck `json:"checks"`
+}
+
+type datasetHashRepository struct {
+	FullName                 string            `json:"full_name"`
+	URL                      string            `json:"url"`
+	DefaultBranch            string            `json:"default_branch"`
+	Archived                 bool              `json:"archived"`
+	Stars                    int               `json:"stars"`
+	Forks                    int               `json:"forks"`
+	OpenIssues               int               `json:"open_issues"`
+	LastPushAgeDays          *int              `json:"last_push_age_days,omitempty"`
+	LastReleaseAgeDays       *int              `json:"last_release_age_days,omitempty"`
+	ReleaseCadenceDays       *int              `json:"release_cadence_days,omitempty"`
+	RecentContributors90d    *int              `json:"recent_contributors_90d,omitempty"`
+	ContributorConcentration *datasetHashFloat `json:"contributor_concentration,omitempty"`
+	OpenIssueGrowth90d       *datasetHashFloat `json:"open_issue_growth_90d,omitempty"`
+	PRResponseMedianDays     *datasetHashFloat `json:"pr_response_median_days,omitempty"`
+}
+
+type datasetHashDependency struct {
+	DependencyID       string                      `json:"dependency_id"`
+	PackageName        string                      `json:"package_name"`
+	PackageVersion     string                      `json:"package_version"`
+	Ecosystem          string                      `json:"ecosystem"`
+	Direct             bool                        `json:"direct"`
+	Repository         *datasetHashRepository      `json:"repository,omitempty"`
+	Scorecard          *datasetHashScorecard       `json:"scorecard,omitempty"`
+	HistoricalFeatures map[string]datasetHashFloat `json:"historical_features,omitempty"`
+}
+
+type datasetHashSnapshot struct {
+	AnalysisID       string                `json:"analysis_id"`
+	ObservedAt       string                `json:"observed_at"`
+	Dependency       datasetHashDependency `json:"dependency"`
+	LabelInactive12M *bool                 `json:"label_inactive_12m,omitempty"`
 }
 
 func newTrainingDatasetManager(path string) *trainingDatasetManager {
@@ -204,6 +277,79 @@ func cloneFloatPointer(value *float64) *float64 {
 	return &cloned
 }
 
+func datasetHashFloatPointer(value *float64) *datasetHashFloat {
+	if value == nil {
+		return nil
+	}
+	converted := datasetHashFloat(*value)
+	return &converted
+}
+
+func canonicalDatasetHashSnapshot(snapshot TrainingSnapshotRecord) datasetHashSnapshot {
+	dependency := snapshot.Dependency
+	canonicalDependency := datasetHashDependency{
+		DependencyID:   dependency.DependencyID,
+		PackageName:    dependency.PackageName,
+		PackageVersion: dependency.PackageVersion,
+		Ecosystem:      dependency.Ecosystem,
+		Direct:         dependency.Direct,
+	}
+	if dependency.Repository != nil {
+		repository := dependency.Repository
+		canonicalDependency.Repository = &datasetHashRepository{
+			FullName:                 repository.FullName,
+			URL:                      repository.URL,
+			DefaultBranch:            repository.DefaultBranch,
+			Archived:                 repository.Archived,
+			Stars:                    repository.Stars,
+			Forks:                    repository.Forks,
+			OpenIssues:               repository.OpenIssues,
+			LastPushAgeDays:          cloneIntPointer(repository.LastPushAgeDays),
+			LastReleaseAgeDays:       cloneIntPointer(repository.LastReleaseAgeDays),
+			ReleaseCadenceDays:       cloneIntPointer(repository.ReleaseCadenceDays),
+			RecentContributors90d:    cloneIntPointer(repository.RecentContributors90d),
+			ContributorConcentration: datasetHashFloatPointer(repository.ContributorConcentration),
+			OpenIssueGrowth90d:       datasetHashFloatPointer(repository.OpenIssueGrowth90d),
+			PRResponseMedianDays:     datasetHashFloatPointer(repository.PRResponseMedianDays),
+		}
+	}
+	if dependency.Scorecard != nil {
+		scorecard := dependency.Scorecard
+		checks := make([]datasetHashScorecardCheck, len(scorecard.Checks))
+		for index, check := range scorecard.Checks {
+			checks[index] = datasetHashScorecardCheck{
+				Name:   check.Name,
+				Score:  datasetHashFloat(check.Score),
+				Reason: check.Reason,
+			}
+		}
+		canonicalDependency.Scorecard = &datasetHashScorecard{
+			Score:  datasetHashFloatPointer(scorecard.Score),
+			Checks: checks,
+		}
+	}
+	if len(dependency.HistoricalFeatures) > 0 {
+		canonicalDependency.HistoricalFeatures = make(map[string]datasetHashFloat, len(dependency.HistoricalFeatures))
+		for name, value := range dependency.HistoricalFeatures {
+			canonicalDependency.HistoricalFeatures[name] = datasetHashFloat(value)
+		}
+	}
+	return datasetHashSnapshot{
+		AnalysisID:       snapshot.AnalysisID,
+		ObservedAt:       snapshot.ObservedAt,
+		Dependency:       canonicalDependency,
+		LabelInactive12M: snapshot.LabelInactive12M,
+	}
+}
+
+func canonicalDatasetHashSnapshots(snapshots []TrainingSnapshotRecord) []datasetHashSnapshot {
+	canonical := make([]datasetHashSnapshot, len(snapshots))
+	for index, snapshot := range snapshots {
+		canonical[index] = canonicalDatasetHashSnapshot(snapshot)
+	}
+	return canonical
+}
+
 func (m *trainingDatasetManager) LoadSnapshots() ([]TrainingSnapshotRecord, string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -214,11 +360,14 @@ func (m *trainingDatasetManager) LoadSnapshots() ([]TrainingSnapshotRecord, stri
 	}
 
 	snapshots := append([]TrainingSnapshotRecord(nil), dataset.Snapshots...)
-	payload, err := json.Marshal(snapshots)
+	var payload bytes.Buffer
+	encoder := json.NewEncoder(&payload)
+	encoder.SetEscapeHTML(false)
+	err = encoder.Encode(canonicalDatasetHashSnapshots(snapshots))
 	if err != nil {
 		return nil, "", err
 	}
-	checksum := sha256.Sum256(payload)
+	checksum := sha256.Sum256(bytes.TrimSuffix(payload.Bytes(), []byte("\n")))
 	return snapshots, hex.EncodeToString(checksum[:]), nil
 }
 
@@ -305,8 +454,22 @@ func (m *trainingDatasetManager) BootstrapFromSeed(seedPath string, mergeExistin
 		if err != nil {
 			return false, err
 		}
+		verifiedLiveAnalyses := map[string]struct{}{}
 		for _, snapshot := range currentDataset.Snapshots {
-			if snapshot.LabelInactive12M != nil && !hasTrainingSnapshotRepositoryIdentity(snapshot) {
+			analysisID := strings.TrimSpace(snapshot.AnalysisID)
+			if snapshot.LabelInactive12M == nil && analysisID != "" && !strings.HasPrefix(analysisID, "dataset:") && hasTrainingSnapshotRepositoryIdentity(snapshot) {
+				verifiedLiveAnalyses[analysisID] = struct{}{}
+			}
+		}
+		for _, snapshot := range currentDataset.Snapshots {
+			// Historical dataset rows are replaced by the staged offline corpus.
+			// Keep every unlabeled capture from a live analysis once at least one
+			// snapshot in that analysis has a valid GitHub repository identity. This
+			// preserves unmapped manifest dependencies without trusting unmapped-only
+			// or synthetic analyses.
+			analysisID := strings.TrimSpace(snapshot.AnalysisID)
+			_, verified := verifiedLiveAnalyses[analysisID]
+			if snapshot.LabelInactive12M != nil || strings.HasPrefix(analysisID, "dataset:") || !verified {
 				continue
 			}
 			key := trainingSnapshotKey(snapshot)
@@ -328,36 +491,23 @@ func (m *trainingDatasetManager) BootstrapFromSeed(seedPath string, mergeExistin
 	return true, m.write(trainingDatasetEnvelope{UpdatedAt: seedDataset.UpdatedAt, Snapshots: merged})
 }
 
-func labeledTrainingSnapshotCount(snapshots []TrainingSnapshotRecord) int {
-	count := 0
-	for _, snapshot := range snapshots {
-		if snapshot.LabelInactive12M != nil {
-			count++
-		}
-	}
-	return count
-}
-
-func realProjectLabeledTrainingSnapshotCount(snapshots []TrainingSnapshotRecord) int {
-	count := 0
-	for _, snapshot := range snapshots {
-		if snapshot.LabelInactive12M != nil && hasTrainingSnapshotRepositoryIdentity(snapshot) {
-			count++
-		}
-	}
-	return count
-}
-
 func hasTrainingSnapshotRepositoryIdentity(snapshot TrainingSnapshotRecord) bool {
 	repository := snapshot.Dependency.Repository
 	if repository == nil {
 		return false
 	}
-	if strings.TrimSpace(repository.FullName) == "" {
+	fullName := strings.Trim(strings.TrimSpace(repository.FullName), "/")
+	parts := strings.Split(fullName, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.ContainsAny(fullName, " \t\r\n") {
 		return false
 	}
-	repositoryURL := strings.ToLower(strings.TrimSpace(repository.URL))
-	return strings.HasPrefix(repositoryURL, "https://github.com/") || strings.HasPrefix(repositoryURL, "http://github.com/")
+	repositoryURL := strings.ToLower(strings.TrimSuffix(strings.TrimRight(strings.TrimSpace(repository.URL), "/"), ".git"))
+	for _, prefix := range []string{"https://github.com/", "http://github.com/"} {
+		if strings.HasPrefix(repositoryURL, prefix) {
+			return strings.EqualFold(strings.TrimPrefix(repositoryURL, prefix), fullName)
+		}
+	}
+	return false
 }
 
 func trainingSnapshotKey(snapshot TrainingSnapshotRecord) string {

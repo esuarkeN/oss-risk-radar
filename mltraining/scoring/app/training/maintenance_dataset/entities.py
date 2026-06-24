@@ -22,10 +22,6 @@ def slugify_identifier(value: str) -> str:
     return value.strip().lower().replace("/", "__").replace(":", "_").replace(" ", "_")
 
 
-def isoformat_or_none(value: datetime | None) -> str | None:
-    return None if value is None else value.isoformat()
-
-
 @dataclass(slots=True)
 class PackageVersionRecord:
     version: str

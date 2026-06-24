@@ -50,6 +50,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateUploadResponse"
   /api/v1/analyses:
+    get:
+      operationId: listAnalyses
+      responses:
+        "200":
+          description: Analyses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAnalysesResponse"
     post:
       operationId: createAnalysis
       summary: Create an analysis from demo input, repo URL, or uploaded artifact
@@ -62,26 +71,24 @@ paths:
             examples:
               demo:
                 value:
-                  source:
+                  submission:
                     kind: demo
-                    label: Demo: Node Web Application
-                  options:
-                    includeTransitive: true
+                    artifactName: 'Demo: Node Web Application'
                     demoProfile: node-web
+                    includeTransitiveDependencies: true
               repo:
                 value:
-                  source:
+                  submission:
                     kind: repository_url
                     repositoryUrl: https://github.com/vercel/next.js
-                  options:
-                    includeTransitive: true
+                    includeTransitiveDependencies: true
               upload:
                 value:
-                  source:
-                    kind: uploaded_artifact
+                  submission:
+                    kind: upload
                     uploadId: upl_demo_01
-                  options:
-                    includeTransitive: true
+                    artifactName: package-lock.json
+                    includeTransitiveDependencies: true
       responses:
         "201":
           description: Analysis created
@@ -115,6 +122,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DependencyListResponse"
+  /api/v1/analyses/{analysisId}/graph:
+    get:
+      operationId: getAnalysisDependencyGraph
+      parameters:
+        - $ref: "#/components/parameters/AnalysisId"
+      responses:
+        "200":
+          description: Dependency graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetDependencyGraphResponse"
   /api/v1/dependencies/{dependencyId}:
     get:
       operationId: getDependency
@@ -152,6 +171,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TrainingDatasetResponse"
+  /api/v1/training/effects:
+    get:
+      operationId: getTrainingEffects
+      summary: Read training signal effect sizes
+      responses:
+        "200":
+          description: Training signal effect sizes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrainingEffectsResponse"
   /api/v1/training/runs:
     get:
       operationId: listTrainingRuns
@@ -222,7 +252,7 @@ components:
             type: string
     UploadArtifact:
       type: object
-      required: [id, fileName, contentType, sizeBytes, uploadedAt]
+      required: [id, fileName, contentType, sizeBytes, uploadedAt, status]
       properties:
         id:
           type: string
@@ -235,6 +265,13 @@ components:
         uploadedAt:
           type: string
           format: date-time
+        status:
+          type: string
+          enum: [received, parsed, failed]
+        parseError:
+          type: string
+        analysisId:
+          type: string
     CreateUploadResponse:
       type: object
       required: [upload]
@@ -243,62 +280,62 @@ components:
           $ref: "#/components/schemas/UploadArtifact"
     CreateAnalysisRequest:
       type: object
-      required: [source]
+      required: [submission]
       properties:
-        source:
-          $ref: "#/components/schemas/AnalysisSourceInput"
-        options:
-          $ref: "#/components/schemas/AnalysisOptions"
-    AnalysisSourceInput:
+        submission:
+          $ref: "#/components/schemas/AnalysisSubmission"
+        force:
+          type: boolean
+          default: false
+    AnalysisSubmission:
       type: object
       required: [kind]
       properties:
         kind:
           type: string
-          enum: [demo, repository_url, uploaded_artifact]
-        label:
-          type: string
+          enum: [demo, repository_url, upload]
         repositoryUrl:
           type: string
           format: uri
+        artifactName:
+          type: string
         uploadId:
           type: string
-    AnalysisOptions:
-      type: object
-      properties:
-        includeTransitive:
+        modelName:
+          type: string
+        includeTransitiveDependencies:
           type: boolean
-          default: true
         demoProfile:
           type: string
-          enum: [node-web, python-service, mixed-platform]
     CreateAnalysisResponse:
       type: object
-      required: [analysis, job]
+      required: [analysis, job, reusedExistingAnalysis]
       properties:
         analysis:
           $ref: "#/components/schemas/Analysis"
         job:
           $ref: "#/components/schemas/Job"
+        reusedExistingAnalysis:
+          type: boolean
+        reusedFromAnalysisId:
+          type: string
+    ListAnalysesResponse:
+      type: object
+      required: [analyses]
+      properties:
+        analyses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Analysis"
     AnalysisResponse:
       type: object
-      required: [analysis, job]
+      required: [analysis]
       properties:
         analysis:
           $ref: "#/components/schemas/Analysis"
-        job:
-          $ref: "#/components/schemas/Job"
     Analysis:
       type: object
-      required:
-        - id
-        - status
-        - createdAt
-        - updatedAt
-        - source
-        - summary
-        - methodology
-        - jobId
+      required: [id, status, createdAt, updatedAt, submission, summary, dependencies]
       properties:
         id:
           type: string
@@ -311,37 +348,29 @@ components:
         updatedAt:
           type: string
           format: date-time
-        jobId:
-          type: string
-        source:
-          $ref: "#/components/schemas/AnalysisSource"
+        submission:
+          $ref: "#/components/schemas/AnalysisSubmission"
         summary:
           $ref: "#/components/schemas/AnalysisSummary"
-        methodology:
-          $ref: "#/components/schemas/MethodologyMetadata"
-    AnalysisSource:
-      type: object
-      required: [kind]
-      properties:
-        kind:
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dependency"
+        dependencyEdges:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencyEdge"
+        uploads:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadArtifact"
+        methodologyVersion:
           type: string
-          enum: [demo, repository_url, uploaded_artifact]
-        label:
-          type: string
-        repositoryUrl:
-          type: string
-          format: uri
-        uploadId:
+        latestJobId:
           type: string
     AnalysisSummary:
       type: object
-      required:
-        - dependencyCount
-        - highRiskCount
-        - mappedRepositoryCount
-        - scoreAvailabilityCount
-        - riskDistribution
-        - ecosystemBreakdown
+      required: [dependencyCount, highRiskCount, mappedRepositoryCount, scoreAvailabilityCount, riskDistribution, ecosystemBreakdown, scoringMethods]
       properties:
         dependencyCount:
           type: integer
@@ -352,45 +381,23 @@ components:
         scoreAvailabilityCount:
           type: integer
         riskDistribution:
-          type: array
-          items:
-            $ref: "#/components/schemas/NamedCount"
+          type: object
+          additionalProperties:
+            type: integer
         ecosystemBreakdown:
+          type: object
+          additionalProperties:
+            type: integer
+        scoringMethods:
           type: array
           items:
-            $ref: "#/components/schemas/NamedCount"
-        actionBreakdown:
-          type: array
-          items:
-            $ref: "#/components/schemas/NamedCount"
-    MethodologyMetadata:
-      type: object
-      required: [scoreVersion, scoredAt]
-      properties:
-        scoreVersion:
-          type: string
-        scoredAt:
-          type: string
-          format: date-time
-        caveatCount:
-          type: integer
-        missingSignalCount:
-          type: integer
-    NamedCount:
-      type: object
-      required: [name, count]
-      properties:
-        name:
-          type: string
-        count:
-          type: integer
+            type: object
+            additionalProperties: true
     DependencyListResponse:
       type: object
-      required: [analysisId, items]
+      required: [dependencies]
       properties:
-        analysisId:
-          type: string
-        items:
+        dependencies:
           type: array
           items:
             $ref: "#/components/schemas/Dependency"
@@ -400,33 +407,115 @@ components:
       properties:
         dependency:
           $ref: "#/components/schemas/Dependency"
-    Dependency:
+    GetDependencyGraphResponse:
       type: object
-      required:
-        - id
-        - analysisId
-        - package
-        - relation
-        - repository
-        - score
-        - explanations
-        - evidence
-        - caveats
-        - missingSignals
+      required: [graph]
       properties:
-        id:
-          type: string
+        graph:
+          $ref: "#/components/schemas/DependencyGraph"
+    DependencyGraph:
+      type: object
+      required: [analysisId, nodes, edges]
+      properties:
         analysisId:
           type: string
-        package:
-          $ref: "#/components/schemas/PackageCoordinate"
-        relation:
-          $ref: "#/components/schemas/DependencyRelation"
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dependency"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/DependencyEdge"
+    DependencyEdge:
+      type: object
+      required: [from, to, kind]
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        kind:
+          type: string
+    Dependency:
+      type: object
+      required: [id, analysisId, packageName, packageVersion, ecosystem, direct, dependencyPath, rawSignalsAvailable]
+      properties:
+        id: { type: string }
+        analysisId: { type: string }
+        packageName: { type: string }
+        packageVersion: { type: string }
+        ecosystem: { type: string }
+        direct: { type: boolean }
         repository:
-          $ref: "#/components/schemas/RepositorySummary"
-        score:
-          $ref: "#/components/schemas/RiskScore"
-        explanations:
+          $ref: "#/components/schemas/RepositorySnapshot"
+        scorecard:
+          type: object
+          additionalProperties: true
+        historicalFeatures:
+          type: object
+          additionalProperties:
+            type: number
+        featureRegime: { type: string }
+        historicalCacheHit: { type: boolean }
+        riskProfile:
+          $ref: "#/components/schemas/RiskProfile"
+        dependencyPath:
+          type: array
+          items: { type: string }
+        rawSignalsAvailable: { type: boolean }
+        rawSignals:
+          type: array
+          items:
+            $ref: "#/components/schemas/RawSignalItem"
+        parsedFromUploadId: { type: string }
+    RepositorySnapshot:
+      type: object
+      required: [fullName, url, defaultBranch, archived, stars, forks, openIssues, lastPushAt]
+      properties:
+        fullName: { type: string }
+        url: { type: string, format: uri }
+        defaultBranch: { type: string }
+        archived: { type: boolean }
+        stars: { type: integer }
+        forks: { type: integer }
+        openIssues: { type: integer }
+        lastPushAt: { type: string, format: date-time }
+        lastReleaseAt: { type: string, format: date-time }
+        recentContributors90d: { type: integer }
+        contributorConcentration: { type: number }
+        pullRequestMedianResponseDays: { type: number }
+        pullRequestMedianMergeDays: { type: number }
+        issueResolutionMedianDays: { type: number }
+        staleIssueShare: { type: number }
+    RiskProfile:
+      type: object
+      required: [inactivityRiskScore, maintenanceOutlook12mScore, securityPostureScore, confidenceScore, riskBucket, actionLevel, caveats, missingSignals, explanationFactors, evidence]
+      properties:
+        inactivityRiskScore: { type: number }
+        maintenanceOutlook12mScore: { type: number }
+        securityPostureScore: { type: number }
+        confidenceScore: { type: number }
+        riskBucket:
+          type: string
+          enum: [low, medium, high, critical]
+        actionLevel:
+          type: string
+          enum: [monitor, review, replace_candidate]
+        scoringMethod: { type: string }
+        scoringModel: { type: string }
+        modelResults:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        caveats:
+          type: array
+          items: { type: string }
+        missingSignals:
+          type: array
+          items: { type: string }
+        explanationFactors:
           type: array
           items:
             $ref: "#/components/schemas/ExplanationFactor"
@@ -434,175 +523,50 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/EvidenceItem"
-        caveats:
-          type: array
-          items:
-            type: string
-        missingSignals:
-          type: array
-          items:
-            type: string
-        dependencyPath:
-          type: array
-          items:
-            type: string
-        rawSignals:
-          type: object
-          additionalProperties: true
-        historicalFeatures:
-          type: object
-          additionalProperties:
-            type: number
-    PackageCoordinate:
-      type: object
-      required: [ecosystem, name, version]
-      properties:
-        ecosystem:
-          type: string
-          enum: [npm, pypi, go, maven, cargo, generic]
-        name:
-          type: string
-        version:
-          type: string
-        purl:
-          type: string
-    DependencyRelation:
-      type: object
-      required: [scope, isDirect]
-      properties:
-        scope:
-          type: string
-          enum: [runtime, development, test, unknown]
-        isDirect:
-          type: boolean
-    RepositorySummary:
-      type: object
-      properties:
-        provider:
-          type: string
-        owner:
-          type: string
-        name:
-          type: string
-        url:
-          type: string
-          format: uri
-        archived:
-          type: boolean
-        stars:
-          type: integer
-        forks:
-          type: integer
-        openIssues:
-          type: integer
-        lastPushAt:
-          type: string
-          format: date-time
-        lastReleaseAt:
-          type: string
-          format: date-time
-        recentContributors90d:
-          type: integer
-        contributorConcentration:
-          type: number
-        openIssueGrowth90d:
-          type: number
-        pullRequestMedianResponseDays:
-          type: number
-        pullRequestMedianMergeDays:
-          type: number
-        issueResolutionMedianDays:
-          type: number
-        staleIssueShare:
-          type: number
-    RiskScore:
-      type: object
-      required:
-        - inactivityRisk
-        - securityPosture
-        - confidence
-        - signalCompleteness
-        - bucket
-        - actionLevel
-      properties:
-        inactivityRisk:
-          type: integer
-          minimum: 0
-          maximum: 100
-        securityPosture:
-          type: integer
-          minimum: 0
-          maximum: 100
-        confidence:
-          type: integer
-          minimum: 0
-          maximum: 100
-        signalCompleteness:
-          type: integer
-          minimum: 0
-          maximum: 100
-        bucket:
-          type: string
-          enum: [low, elevated, high, critical]
-        actionLevel:
-          type: string
-          enum: [monitor, review, replace_candidate]
     ExplanationFactor:
       type: object
-      required: [title, direction, weight, rationale]
+      required: [label, direction, weight, detail]
       properties:
-        title:
-          type: string
+        label: { type: string }
         direction:
           type: string
-          enum: [risk_up, risk_down, context]
-        weight:
-          type: integer
-        value:
-          oneOf:
-            - type: string
-            - type: number
-            - type: boolean
-        rationale:
-          type: string
+          enum: [increase, decrease, neutral]
+        weight: { type: number }
+        detail: { type: string }
     EvidenceItem:
       type: object
-      required: [label, value, source, observedAt]
+      required: [source, signal, value, observedAt]
       properties:
-        label:
-          type: string
-        value:
-          oneOf:
-            - type: string
-            - type: number
-            - type: boolean
-        source:
-          type: string
-        observedAt:
-          type: string
-          format: date-time
-        url:
-          type: string
-          format: uri
+        source: { type: string }
+        signal: { type: string }
+        value: { type: string }
+        observedAt: { type: string, format: date-time }
+        provenanceUrl: { type: string, format: uri }
+    RawSignalItem:
+      type: object
+      required: [key, value, source]
+      properties:
+        key: { type: string }
+        value: {}
+        source: { type: string }
+        observedAt: { type: string, format: date-time }
     Job:
       type: object
-      required: [id, analysisId, status, createdAt, updatedAt]
+      required: [id, analysisId, type, status, createdAt, updatedAt, message]
       properties:
-        id:
-          type: string
-        analysisId:
-          type: string
+        id: { type: string }
+        analysisId: { type: string }
+        type: { type: string }
         status:
           type: string
           enum: [pending, running, completed, failed]
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        errorMessage:
-          type: string
+        attempts: { type: integer }
+        maxAttempts: { type: integer }
+        lastError: { type: string }
+        nextRunAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        message: { type: string }
     JobResponse:
       type: object
       required: [job]
@@ -616,6 +580,66 @@ components:
         dataset:
           type: object
           additionalProperties: true
+    TrainingEffectsResponse:
+      type: object
+      required: [effects, labeledSnapshots, activeCount, inactiveCount, datasetHash]
+      properties:
+        effects:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrainingEffectMetric"
+        labeledSnapshots:
+          type: integer
+        activeCount:
+          type: integer
+        inactiveCount:
+          type: integer
+        datasetHash:
+          type: string
+    TrainingEffectMetric:
+      type: object
+      required:
+        - key
+        - label
+        - effectSize
+        - strength
+        - direction
+        - activeMedian
+        - inactiveMedian
+        - activeCount
+        - inactiveCount
+        - features
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        effectSize:
+          type: number
+        strength:
+          type: string
+        direction:
+          type: string
+        activeMedian:
+          type: number
+        inactiveMedian:
+          type: number
+        activeCount:
+          type: integer
+        inactiveCount:
+          type: integer
+        features:
+          type: array
+          items:
+            type: string
+        xgboostImportance:
+          type: number
+        logisticCoefficient:
+          type: number
+        ignored:
+          type: boolean
+        note:
+          type: string
     TrainingRunListResponse:
       type: object
       required: [runs]

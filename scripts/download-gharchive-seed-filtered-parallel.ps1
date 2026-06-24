@@ -48,9 +48,9 @@ Write-Host ""
 
 for ($index = 0; $index -lt $Workers; $index++) {
   $coveragePath = Join-Path $OutDir ("_coverage.shard-{0}-of-{1}.csv" -f $index, $Workers)
-  $seedCoveragePath = "{0}.shard-{1}-of-{2}.csv" -f ($SeedCoveragePath -replace "\.csv$", ""), $index, $Workers
+  $workerSeedCoveragePath = "{0}.shard-{1}-of-{2}.csv" -f ($SeedCoveragePath -replace "\.csv$", ""), $index, $Workers
   $coverageShardPaths += $coveragePath
-  $seedCoverageShardPaths += $seedCoveragePath
+  $seedCoverageShardPaths += $workerSeedCoveragePath
 
   $job = Start-Job -Name ("gharchive-shard-{0}-of-{1}" -f $index, $Workers) -ScriptBlock {
     param(
@@ -107,7 +107,7 @@ for ($index = 0; $index -lt $Workers; $index++) {
     $Start,
     $EndExclusive,
     $RepoColumn,
-    $seedCoveragePath,
+    $workerSeedCoveragePath,
     $RawDir,
     $coveragePath,
     $Workers,
@@ -126,7 +126,10 @@ try {
     Receive-Job -Job $jobs -ErrorAction Continue
     $states = $jobs | Group-Object State | ForEach-Object { "$($_.Name)=$($_.Count)" }
     Write-Host "Worker states: $($states -join ', ')"
-    Wait-Job -Job $jobs -Any -Timeout 30 | Out-Null
+    $runningJobs = @($jobs | Where-Object { $_.State -in @("NotStarted", "Running") })
+    if ($runningJobs.Count -gt 0) {
+      Wait-Job -Job $runningJobs -Any -Timeout 30 | Out-Null
+    }
   }
 
   foreach ($job in $jobs) {
@@ -159,13 +162,27 @@ $coverageRows = @(
 )
 
 if ($coverageRows.Count -gt 0) {
+  function Get-CoverageStatusPriority {
+    param([string]$Status)
+    switch ($Status) {
+      "download_failed" { return 0 }
+      "filter_failed" { return 0 }
+      "skipped_existing" { return 1 }
+      default { return 2 }
+    }
+  }
+
   $coverageByHour = @{}
   foreach ($row in $coverageRows) {
     $key = "$($row.file)|$($row.date)|$($row.hour)"
-    if ($row.status -eq "skipped_existing" -and $coverageByHour.ContainsKey($key)) {
+    if (-not $coverageByHour.ContainsKey($key)) {
+      $coverageByHour[$key] = $row
       continue
     }
-    $coverageByHour[$key] = $row
+    $existing = $coverageByHour[$key]
+    if ((Get-CoverageStatusPriority $row.status) -gt (Get-CoverageStatusPriority $existing.status)) {
+      $coverageByHour[$key] = $row
+    }
   }
 
   $coverageByHour.Values |

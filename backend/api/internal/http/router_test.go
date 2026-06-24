@@ -318,3 +318,92 @@ func TestTrainingRunMutationEndpointIsNotRegistered(t *testing.T) {
 		t.Fatalf("expected 405, got %d: %s", response.Code, string(body))
 	}
 }
+
+func TestTrainingEffectsEndpoint(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	tempDir := t.TempDir()
+	datasetPath := filepath.Join(tempDir, "snapshots.json")
+	writeRouterTrainingEffectsDataset(t, datasetPath)
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion:  "model-v1",
+		Store:               storage.NewMemoryStore(),
+		Scorer:              fakeRouterScorer{},
+		UploadDir:           tempDir,
+		TrainingDatasetPath: datasetPath,
+		WorkerPollInterval:  10 * time.Millisecond,
+		RetryDelay:          10 * time.Millisecond,
+	})
+	service.Start(ctx)
+	router := NewRouter(config.Config{ServiceName: "oss-risk-radar-api", AllowedOrigin: "http://localhost:3000"}, slog.Default(), service)
+
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/training/effects", nil)
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("expected 200, got %d: %s", response.Code, string(body))
+	}
+
+	var payload analysis.GetTrainingEffectsResponse
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if payload.LabeledSnapshots != 2 || payload.ActiveCount != 1 || payload.InactiveCount != 1 {
+		t.Fatalf("unexpected effect counts: %#v", payload)
+	}
+	if len(payload.Effects) == 0 {
+		t.Fatal("expected effect rows")
+	}
+}
+
+func writeRouterTrainingEffectsDataset(t *testing.T, path string) {
+	t.Helper()
+	active := false
+	inactive := true
+	now := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+	dataset := map[string]any{
+		"updatedAt": now,
+		"snapshots": []analysis.TrainingSnapshotRecord{
+			{
+				AnalysisID:       "active",
+				ObservedAt:       now,
+				LabelInactive12M: &active,
+				Dependency: analysis.TrainingDependencySignalSnapshot{
+					DependencyID: "active",
+					PackageName:  "fixture",
+					Ecosystem:    "npm",
+					HistoricalFeatures: map[string]float64{
+						"commits_365d": 10,
+					},
+				},
+			},
+			{
+				AnalysisID:       "inactive",
+				ObservedAt:       now,
+				LabelInactive12M: &inactive,
+				Dependency: analysis.TrainingDependencySignalSnapshot{
+					DependencyID: "inactive",
+					PackageName:  "fixture",
+					Ecosystem:    "npm",
+					HistoricalFeatures: map[string]float64{
+						"commits_365d": 0,
+					},
+				},
+			},
+		},
+	}
+	payload, err := json.MarshalIndent(dataset, "", "  ")
+	if err != nil {
+		t.Fatalf("failed to marshal dataset fixture: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("failed to create dataset fixture dir: %v", err)
+	}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatalf("failed to write dataset fixture: %v", err)
+	}
+}

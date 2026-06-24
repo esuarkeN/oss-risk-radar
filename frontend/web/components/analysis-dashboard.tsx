@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowRight, DatabaseZap, RefreshCw, ShieldCheck, Network, Table2, LayoutGrid } from "lucide-react";
 
 import { EcosystemBreakdownChart } from "@/components/charts/ecosystem-breakdown-chart";
 import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart";
 import { DependencyPathExplorer } from "@/components/dependency-path-explorer";
 import { DependencyTable } from "@/components/dependency-table";
+import { DependencyTreeSnapshot } from "@/components/dependency-tree-snapshot";
 import { RepositoryMlAnalysisPanel } from "@/components/repository-ml-analysis-panel";
 import { SummaryCard } from "@/components/summary-card";
 import { useToast } from "@/components/toast-provider";
@@ -35,6 +36,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   const [dependencies, setDependencies] = useState<DependencyRecord[]>([]);
   const [graph, setGraph] = useState<DependencyGraphResponse | null>(null);
   const [selectedDependencyId, setSelectedDependencyId] = useState<string | null>(null);
+  const [depViewTab, setDepViewTab] = useState<"tree" | "table" | "charts">("tree");
   const [error, setError] = useState<string | null>(null);
   const [rerunning, setRerunning] = useState(false);
   const previousStatusRef = useRef<string | null>(null);
@@ -139,11 +141,11 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   }, [dependencies, selectedDependencyId]);
 
   if (error) {
-    return <Card className="text-sm text-rose-700">{error}</Card>;
+    return <Card className="text-sm text-[hsl(var(--danger))]">{error}</Card>;
   }
 
   if (!analysis) {
-    return <Card className="text-sm text-slate-500">Loading analysis...</Card>;
+    return <Card className="text-sm text-muted">Loading analysis...</Card>;
   }
 
   const analysisStatusActive = ACTIVE_STATUSES.has(analysis.status);
@@ -192,86 +194,103 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="grid gap-5 rounded-lg border border-line bg-panel p-5 lg:grid-cols-[1.45fr_0.55fr] lg:p-6">
-        <div className="flex min-h-64 flex-col justify-between gap-6">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Analysis Overview</p>
+    <div className="space-y-5">
+      {/* Analysis header */}
+      <section className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--accent))]">
+                Analysis
+              </p>
               <Badge tone={analysis.status === "completed" ? "low" : analysis.status === "failed" ? "critical" : "medium"}>
                 {titleCase(analysis.status)}
               </Badge>
             </div>
-            <h1 className="max-w-5xl break-words text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
+            <h1 className="max-w-3xl break-all text-xl font-bold leading-snug tracking-tight text-[hsl(var(--foreground))]">
               {analysis.submission.repositoryUrl ?? analysis.submission.artifactName ?? "Demo analysis"}
             </h1>
             {analysisStatusActive ? (
-              <p className="max-w-2xl text-sm text-warning">
-                This analysis is still processing. The dashboard refreshes automatically while parsing, enrichment, and scoring complete.
+              <p className="max-w-2xl text-xs text-[hsl(var(--warning))]">
+                Refreshing automatically — parsing, enrichment, and scoring in progress.
               </p>
             ) : null}
             {reusedFromCache ? (
-              <p className="max-w-2xl text-sm text-muted">
-                This page opened an existing completed analysis. Queue a fresh run when you want updated provider enrichment and scoring.
+              <p className="max-w-2xl text-xs text-[hsl(var(--muted))]">
+                Opened an existing completed analysis. Queue a fresh run for updated enrichment.
               </p>
             ) : null}
-            {canRerunAnalysis ? (
-              <Button type="button" onClick={() => void handleRerunAnalysis()} disabled={rerunning} className="w-fit">
-                <RefreshCw className={`h-4 w-4 ${rerunning ? "animate-spin" : ""}`} />
-                {rerunning ? "Queuing fresh run..." : "Run fresh analysis"}
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {canRerunAnalysis ? (
+                <Button type="button" onClick={() => void handleRerunAnalysis()} disabled={rerunning} className="w-fit">
+                  <RefreshCw className={`h-3.5 w-3.5 ${rerunning ? "animate-spin" : ""}`} />
+                  {rerunning ? "Queuing…" : "Run fresh analysis"}
+                </Button>
+              ) : null}
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-2.5 py-1.5 text-xs text-[hsl(var(--muted))]">
+                <ShieldCheck className="h-3.5 w-3.5 text-[hsl(var(--accent))]" /> Conservative triage
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-2.5 py-1.5 text-xs text-[hsl(var(--muted))]">
+                <DatabaseZap className="h-3.5 w-3.5 text-[hsl(var(--accent))]" /> Provenance visible
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 text-sm text-muted">
-            <span className="inline-flex items-center gap-2 rounded-md border border-line bg-panelAlt px-3 py-2">
-              <ShieldCheck className="h-4 w-4 text-accent" /> Conservative triage
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-md border border-line bg-panelAlt px-3 py-2">
-              <DatabaseZap className="h-4 w-4 text-accent" /> Provenance visible
-            </span>
-          </div>
+          {/* Freshness card */}
+          <aside className="shrink-0 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] p-3.5 text-xs min-w-[200px]">
+            <p className="font-semibold uppercase tracking-widest text-[10px] text-[hsl(var(--muted))]">
+              Freshness &amp; scope
+            </p>
+            <div className="mt-3 space-y-1.5">
+              {[
+                ["Created", formatDate(analysis.createdAt)],
+                ["Updated", formatDate(analysis.updatedAt)],
+                ["Mode", titleCase(analysis.submission.kind.replaceAll("_", " "))],
+                ["Runtime scoring", runtimeScoring],
+                ...(analysis.methodologyVersion ? [["Methodology", analysis.methodologyVersion]] : []),
+              ].map(([label, val]) => (
+                <div key={label} className="flex justify-between gap-3">
+                  <span className="text-[hsl(var(--muted))]">{label}</span>
+                  <span className="font-medium text-[hsl(var(--foreground))] text-right">{val}</span>
+                </div>
+              ))}
+            </div>
+            <Link href="/methodology" className="mt-3 inline-flex items-center gap-1 text-[hsl(var(--accent))] transition hover:text-[hsl(var(--foreground))]">
+              Methodology <ArrowRight className="h-3 w-3" />
+            </Link>
+          </aside>
         </div>
-
-        <aside className="rounded-lg border border-line bg-foreground p-4 text-background">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-background/60">Freshness and scope</p>
-          <div className="mt-5 divide-y divide-background/15 border-y border-background/15">
-            <div className="flex justify-between gap-4 py-3 text-sm">
-              <span className="text-background/60">Created</span>
-              <span className="text-right font-medium">{formatDate(analysis.createdAt)}</span>
-            </div>
-            <div className="flex justify-between gap-4 py-3 text-sm">
-              <span className="text-background/60">Updated</span>
-              <span className="text-right font-medium">{formatDate(analysis.updatedAt)}</span>
-            </div>
-            <div className="flex justify-between gap-4 py-3 text-sm">
-              <span className="text-background/60">Mode</span>
-              <span className="text-right font-medium">{titleCase(analysis.submission.kind.replaceAll("_", " "))}</span>
-            </div>
-            <div className="flex justify-between gap-4 py-3 text-sm">
-              <span className="text-background/60">Runtime scoring</span>
-              <span className="text-right font-medium">{runtimeScoring}</span>
-            </div>
-            {analysis.methodologyVersion ? (
-              <div className="flex justify-between gap-4 py-3 text-xs">
-                <span className="text-background/50">Methodology</span>
-                <span className="text-right font-medium text-background/75">{analysis.methodologyVersion}</span>
-              </div>
-            ) : null}
-          </div>
-          <Link href="/methodology" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-background transition hover:text-accent">
-            Review methodology <ArrowRight className="h-4 w-4" />
-          </Link>
-        </aside>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label={dependencySummaryLabel} value={analysis.summary.dependencyCount} caption={dependencySummaryCaption} />
-        <SummaryCard label="High Risk" value={analysis.summary.highRiskCount} caption={highRiskCaption} />
-        <SummaryCard label="Mapped Repos" value={analysis.summary.mappedRepositoryCount} caption={mappedCaption} />
-        <SummaryCard label="Scored" value={analysis.summary.scoreAvailabilityCount} caption={scoredCaption} />
+      {/* Summary cards with tone */}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          label={dependencySummaryLabel}
+          value={analysis.summary.dependencyCount}
+          caption={dependencySummaryCaption}
+          tone="neutral"
+        />
+        <SummaryCard
+          label="High Risk"
+          value={analysis.summary.highRiskCount}
+          caption={highRiskCaption}
+          tone={analysis.summary.highRiskCount > 0 ? "danger" : "neutral"}
+        />
+        <SummaryCard
+          label="Mapped Repos"
+          value={analysis.summary.mappedRepositoryCount}
+          caption={mappedCaption}
+          tone="neutral"
+        />
+        <SummaryCard
+          label="Scored"
+          value={analysis.summary.scoreAvailabilityCount}
+          caption={scoredCaption}
+          tone={analysis.summary.scoreAvailabilityCount > 0 ? "success" : "neutral"}
+        />
       </div>
 
+      {/* Scoring methods table */}
       {scoringMethods.length ? (
         <Card className="space-y-4">
           <div>
@@ -310,75 +329,141 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
         </Card>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <RiskDistributionChart distribution={analysis.summary.riskDistribution} />
-        <EcosystemBreakdownChart breakdown={analysis.summary.ecosystemBreakdown} />
-      </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-        <DependencyTable
-          dependencies={dependencies}
-          selectedDependencyId={selectedDependency?.id}
-          onSelectDependency={setSelectedDependencyId}
-        />
-        <Card className="space-y-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Focused review</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
-              {selectedDependency
-                ? selectedIsRepositoryProfile
-                  ? (selectedDependency.repository?.fullName ?? selectedDependency.packageName)
-                  : `${selectedDependency.packageName}@${selectedDependency.packageVersion}`
-                : "Select a profile"}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              {selectedIsRepositoryProfile
-                ? "Focus the repository-level rating for the submitted project."
-                : "Focus the path panel on one package and jump into the evidence view when needed."}
-            </p>
-          </div>
-          {selectedDependency ? (
-            <>
-              <div className="flex flex-wrap gap-2">
-                <Badge tone={selectedDependency.riskProfile?.riskBucket ?? "neutral"}>
-                  {selectedDependency.riskProfile?.riskBucket ?? "unscored"}
-                </Badge>
-                <Badge tone={selectedIsRepositoryProfile ? "neutral" : selectedDependency.direct ? "medium" : "neutral"}>
-                  {selectedIsRepositoryProfile ? "Repository target" : selectedDependency.direct ? "Direct dependency" : "Transitive dependency"}
-                </Badge>
-                {selectedDependency.parsedFromUploadId ? <Badge tone="neutral">Upload provenance attached</Badge> : null}
-              </div>
-              <div className="rounded-lg border border-line bg-panelAlt px-4 py-4 text-sm text-muted">
-                <p>
-                  Repository: <span className="font-semibold text-foreground">{selectedDependency.repository?.fullName ?? "Not mapped yet"}</span>
-                </p>
-                <p className="mt-2">
-                  Latest action cue: <span className="font-semibold text-foreground">{titleCase(selectedDependency.riskProfile?.actionLevel ?? "monitor")}</span>
-                </p>
-                <p className="mt-2">{selectedIsRepositoryProfile ? "Scope: repository-level profile" : `Path length: ${selectedDependency.dependencyPath.length} nodes`}</p>
-                <p className="mt-2">Graph nodes available: {graphNodeCount}</p>
-              </div>
-              <Link
-                href={`/analyses/${selectedDependency.analysisId}/dependencies/${selectedDependency.id}`}
-                className="inline-flex items-center gap-2 text-sm font-medium text-accent transition hover:text-foreground"
+
+      {/* Dependency view: tab bar + content */}
+      <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel))] overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex items-center justify-between border-b border-[hsl(var(--border))] px-4 py-0">
+          <div className="flex">
+            {(
+              [
+                { id: "tree" as const, label: "Dependency Tree", icon: Network },
+                { id: "table" as const, label: "Table", icon: Table2 },
+                { id: "charts" as const, label: "Charts", icon: LayoutGrid },
+              ] as const
+            ).map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDepViewTab(id)}
+                className={[
+                  "flex items-center gap-2 border-b-2 px-4 py-3 text-xs font-semibold transition-colors",
+                  depViewTab === id
+                    ? "border-[hsl(var(--accent))] text-[hsl(var(--accent))]"
+                    : "border-transparent text-[hsl(var(--muted))] hover:text-[hsl(var(--foreground))]",
+                ].join(" ")}
               >
-                Open detailed evidence view <ArrowRight className="h-4 w-4" />
-              </Link>
-            </>
-          ) : (
-            <div className="rounded-lg border border-dashed border-line px-4 py-8 text-sm text-muted">
-              No dependency records were attached to this analysis yet.
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+          {depViewTab === "tree" && (
+            <Link
+              href={`/analyses/${analysisId}/tree`}
+              className="text-[11px] font-semibold text-[hsl(var(--accent))] transition hover:text-[hsl(var(--foreground))]"
+            >
+              Open full tree →
+            </Link>
+          )}
+        </div>
+
+        {/* Tab content */}
+        <div className="p-4">
+          {depViewTab === "tree" && (
+            <DependencyTreeSnapshot
+              dependencies={dependencies}
+              graph={graph}
+              analysisId={analysisId}
+              onSelectDependency={setSelectedDependencyId}
+            />
+          )}
+
+          {depViewTab === "table" && (
+            <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+              <DependencyTable
+                dependencies={dependencies}
+                selectedDependencyId={selectedDependency?.id}
+                onSelectDependency={setSelectedDependencyId}
+              />
+              <Card className="space-y-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">Focused review</p>
+                  <h2 className="mt-1.5 text-base font-bold tracking-tight text-[hsl(var(--foreground))]">
+                    {selectedDependency
+                      ? selectedIsRepositoryProfile
+                        ? (selectedDependency.repository?.fullName ?? selectedDependency.packageName)
+                        : `${selectedDependency.packageName}@${selectedDependency.packageVersion}`
+                      : "Select a package"}
+                  </h2>
+                </div>
+                {selectedDependency ? (
+                  <>
+                    {selectedDependency.riskProfile ? (
+                      <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">12M Outlook</p>
+                            <p className="mt-0.5 text-3xl font-bold text-[hsl(var(--foreground))]">
+                              {selectedDependency.riskProfile.maintenanceOutlook12mScore != null
+                                ? selectedDependency.riskProfile.maintenanceOutlook12mScore.toFixed(2)
+                                : "—"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge tone={selectedDependency.riskProfile.riskBucket ?? "neutral"} className="text-sm px-3 py-1">
+                              {selectedDependency.riskProfile.riskBucket ?? "unscored"}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge tone={selectedIsRepositoryProfile ? "neutral" : selectedDependency.direct ? "medium" : "neutral"}>
+                        {selectedIsRepositoryProfile ? "Repository target" : selectedDependency.direct ? "Direct" : "Transitive"}
+                      </Badge>
+                      {selectedDependency.parsedFromUploadId ? <Badge tone="neutral">Upload-backed</Badge> : null}
+                    </div>
+                    <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-4 py-3 text-xs text-[hsl(var(--muted))]">
+                      <p>Repository: <span className="font-semibold text-[hsl(var(--foreground))]">{selectedDependency.repository?.fullName ?? "Not mapped"}</span></p>
+                      <p className="mt-1.5">{selectedIsRepositoryProfile ? "Scope: repository-level profile" : `Path: ${selectedDependency.dependencyPath.length} nodes`}</p>
+                      <p className="mt-1.5">Graph nodes: {graphNodeCount}</p>
+                    </div>
+                    <Link
+                      href={`/analyses/${selectedDependency.analysisId}/dependencies/${selectedDependency.id}`}
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-[hsl(var(--accent))] transition hover:text-[hsl(var(--foreground))]"
+                    >
+                      Full evidence view <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-[hsl(var(--border))] px-4 py-8 text-sm text-[hsl(var(--muted))]">
+                    Select a package from the table.
+                  </div>
+                )}
+              </Card>
             </div>
           )}
-        </Card>
+
+          {depViewTab === "charts" && (
+            <div className="grid gap-5 xl:grid-cols-2">
+              <RiskDistributionChart distribution={analysis.summary.riskDistribution} />
+              <EcosystemBreakdownChart breakdown={analysis.summary.ecosystemBreakdown} />
+            </div>
+          )}
+        </div>
       </div>
 
-      <RepositoryMlAnalysisPanel dependency={selectedDependency} />
-
+      {/* Dependency path explorer — directly below table when a dep is selected */}
       {selectedDependency && !selectedIsRepositoryProfile ? (
         <DependencyPathExplorer dependency={selectedDependency} dependencies={dependencies} graph={graph} />
       ) : null}
 
+      {/* ML analysis panel */}
+      <RepositoryMlAnalysisPanel dependency={selectedDependency} />
+
+      {/* Uploaded artifacts */}
       {analysis.uploads?.length ? (
         <Card className="space-y-4">
           <div>
@@ -391,7 +476,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
                 <p className="font-semibold text-foreground">{upload.fileName}</p>
                 <p className="mt-2">Status {titleCase(upload.status)}</p>
                 <p className="mt-2">Uploaded {formatDate(upload.uploadedAt)}</p>
-                {upload.parseError ? <p className="mt-2 text-rose-700">Parse error: {upload.parseError}</p> : null}
+                {upload.parseError ? <p className="mt-2 text-[hsl(var(--danger))]">Parse error: {upload.parseError}</p> : null}
               </div>
             ))}
           </div>

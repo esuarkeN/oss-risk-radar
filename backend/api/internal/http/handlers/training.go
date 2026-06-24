@@ -15,6 +15,15 @@ func (h *Handler) GetTrainingDatasetSummary(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, analysis.GetTrainingDatasetSummaryResponse{Dataset: summary})
 }
 
+func (h *Handler) GetTrainingEffects(w http.ResponseWriter, r *http.Request) {
+	effects, err := h.service.GetTrainingEffects(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, effects)
+}
+
 func (h *Handler) GetLatestTrainingRun(w http.ResponseWriter, r *http.Request) {
 	run, err := h.service.GetLatestTrainingRun(r.Context())
 	if err != nil {

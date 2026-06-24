@@ -45,6 +45,7 @@ For a faster run, use the parallel wrapper. Four workers is a reasonable startin
   -SeedPath ".\tmp\training-foundation\foundation-seed.csv" `
   -OutDir ".\tmp\gharchive-foundation" `
   -SeedCoveragePath ".\tmp\training-foundation\gharchive-seed-coverage.csv" `
+  -KeepRaw `
   -Start "2021-01-01"
 ```
 
@@ -71,17 +72,18 @@ For the real run:
   -SeedPath ".\tmp\training-foundation\foundation-seed.csv" `
   -OutDir ".\tmp\gharchive-foundation" `
   -SeedCoveragePath ".\tmp\training-foundation\gharchive-seed-coverage.csv" `
+  -KeepRaw `
   -Start "2021-01-01"
 
 node scripts/ml/bootstrap-training.mjs `
   --seed-file ".\tmp\training-foundation\foundation-seed.csv" `
   --gharchive-source ".\tmp\gharchive-foundation" `
-  --output-dir ".\tmp\training-foundation\oss-maintenance" `
-  --training-output-path ".\tmp\training-foundation\snapshots.json" `
-  --feature-cache-output-path ".\tmp\training-foundation\repository-feature-cache.json" `
+  --output-dir ".\tmp\training-foundation\candidate\oss-maintenance" `
+  --training-output-path ".\tmp\training-foundation\candidate\snapshots.json" `
+  --feature-cache-output-path ".\tmp\training-foundation\candidate\repository-feature-cache.json" `
   --sample-limit-per-ecosystem 5000 `
-  --minimum-repositories 4500 `
-  --minimum-inactive-repositories 250 `
+  --minimum-repositories 5000 `
+  --minimum-inactive-repositories 1000 `
   --replace-training-output `
   --force `
   --runner local
@@ -113,8 +115,8 @@ Recommended workflow:
 2. Download filtered GH Archive events for that seed set.
 3. Build labeled historical snapshots.
 4. Use `notebooks/oss-maintenance-training.ipynb` as the six-step ML workflow and artifact export surface.
-5. Run the foundation bootstrap against `tmp/gharchive-foundation` to build snapshots and execute the notebook-backed artifact export.
-6. Run `node scripts/ml/stage-training-artifacts.mjs --source-dir ".\tmp\training-foundation" --summary-output ".\tmp\training-foundation\pipeline-summary.json" --required-feature-version feature-set-v3 --minimum-repositories 4500 --minimum-inactive-repositories 250` to promote the bundle into `deployment/training`.
+5. Run the foundation bootstrap against preserved local inputs to build a separate candidate and execute dataset engineering plus artifact export through the notebook.
+6. Run `npm run ml:stage-training -- --source-dir tmp/training-foundation/candidate --minimum-repositories 5000 --minimum-inactive-repositories 1000` to compare all four candidate models with `deployment/training` and promote only when every AUROC drop and Brier increase is at most 0.02.
 
 The dataset build also writes `tmp/training/repository-feature-cache.json`. Production uses that staged cache to choose the full-history artifact family and feed GHArchive-derived historical features into live repository scoring. Repositories without a cache row use the separate cold-start artifact family trained only on current GitHub/API-style snapshot features. Daily GH Archive downloads should update the offline cache directly; request-time scoring must not download or scan archive files.
 

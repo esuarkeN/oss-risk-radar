@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 type trainingRunArtifactManager struct {
@@ -76,72 +75,6 @@ func (m *trainingRunArtifactManager) List() ([]TrainingRunArtifact, error) {
 	return runs, nil
 }
 
-func (m *trainingRunArtifactManager) Save(run TrainingRunArtifact) (TrainingRunArtifact, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m == nil || m.runsDir == "" {
-		return run, nil
-	}
-	if run.CachedAt.IsZero() {
-		run.CachedAt = time.Now().UTC()
-	}
-	if err := os.MkdirAll(m.runsDir, 0o755); err != nil {
-		return TrainingRunArtifact{}, err
-	}
-	if m.latestPath != "" {
-		if err := os.MkdirAll(filepath.Dir(m.latestPath), 0o755); err != nil {
-			return TrainingRunArtifact{}, err
-		}
-	}
-	if strings.TrimSpace(run.ArtifactPath) == "" {
-		stamp := run.CachedAt.UTC().Format("20060102T150405.000000000Z")
-		shortHash := "adhoc"
-		switch {
-		case len(run.DatasetHash) >= 12:
-			shortHash = run.DatasetHash[:12]
-		case run.DatasetHash != "":
-			shortHash = run.DatasetHash
-		}
-		modelSlug := slugForTrainingArtifact(run.ModelName)
-		if modelSlug != "" {
-			modelSlug = "-" + modelSlug
-		}
-		run.ArtifactPath = filepath.Join(m.runsDir, stamp+modelSlug+"-"+shortHash+".json")
-	}
-
-	payload, err := json.MarshalIndent(run, "", "  ")
-	if err != nil {
-		return TrainingRunArtifact{}, err
-	}
-	if err := os.WriteFile(run.ArtifactPath, payload, 0o644); err != nil {
-		return TrainingRunArtifact{}, err
-	}
-	if m.latestPath != "" {
-		if err := os.WriteFile(m.latestPath, payload, 0o644); err != nil {
-			return TrainingRunArtifact{}, err
-		}
-	}
-	return run, nil
-}
-
-func (m *trainingRunArtifactManager) MarkLatest(run TrainingRunArtifact) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m == nil || m.latestPath == "" {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(m.latestPath), 0o755); err != nil {
-		return err
-	}
-	payload, err := json.MarshalIndent(run, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(m.latestPath, payload, 0o644)
-}
-
 func (m *trainingRunArtifactManager) readLatest() (*TrainingRunArtifact, error) {
 	if m == nil || m.latestPath == "" {
 		return nil, nil
@@ -162,11 +95,6 @@ func (m *trainingRunArtifactManager) readLatest() (*TrainingRunArtifact, error) 
 		return nil, err
 	}
 	return &run, nil
-}
-
-func slugForTrainingArtifact(value string) string {
-	replacer := strings.NewReplacer("_", "-", "/", "-", "\\", "-", " ", "-")
-	return strings.Trim(replacer.Replace(strings.ToLower(strings.TrimSpace(value))), "-")
 }
 
 func (m *trainingRunArtifactManager) BootstrapFromSeed(seedRunsDir string, seedLatestPath string, mergeExisting bool) (bool, error) {
@@ -232,7 +160,15 @@ func (m *trainingRunArtifactManager) BootstrapFromSeed(seedRunsDir string, seedL
 			} else if err != nil {
 				return false, err
 			}
-		} else if !os.IsNotExist(err) {
+		} else if os.IsNotExist(err) {
+			if !mergeExisting {
+				if removeErr := os.Remove(m.latestPath); removeErr == nil {
+					seeded = true
+				} else if !os.IsNotExist(removeErr) {
+					return false, removeErr
+				}
+			}
+		} else {
 			return false, err
 		}
 	}

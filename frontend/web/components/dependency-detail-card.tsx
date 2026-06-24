@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -43,11 +43,11 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
   }, [dependencyId]);
 
   if (error) {
-    return <Card className="text-sm text-rose-700">{error}</Card>;
+    return <Card className="text-sm text-[hsl(var(--danger))]">{error}</Card>;
   }
 
   if (!dependency) {
-    return <Card className="text-sm text-slate-500">Loading dependency detail...</Card>;
+    return <Card className="text-sm text-muted">Loading dependency detail...</Card>;
   }
 
   const repositoryProfile = isRepositoryProfile(dependency);
@@ -58,9 +58,9 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
       <Card className="space-y-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{repositoryProfile ? "Repository Rating" : "Dependency Detail"}</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{dependencyDisplayName(dependency)}</h1>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">{repositoryProfile ? "Repository Rating" : "Dependency Detail"}</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">{dependencyDisplayName(dependency)}</h1>
+            <p className="mt-2 text-sm text-muted">
               {repositoryProfile
                 ? "Repository profile derived directly from the submitted GitHub URL and live public maintenance signals."
                 : `Version ${dependencyDisplayVersion(dependency)} · ${dependency.ecosystem.toUpperCase()} ecosystem`}
@@ -68,25 +68,25 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
           </div>
           <div className="space-y-2 text-right">
             <RiskBadge bucket={dependency.riskProfile?.riskBucket ?? "medium"} />
-            <p className="text-sm text-slate-600">Action: {dependency.riskProfile?.actionLevel ?? "pending"}</p>
+            <p className="text-sm text-muted">Action: {dependency.riskProfile?.actionLevel ?? "pending"}</p>
           </div>
         </div>
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="bg-slate-50 p-5 shadow-none">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Inactivity Risk</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{formatRiskScore(dependency.riskProfile?.inactivityRiskScore ?? 0)}</p>
+        <div className="grid gap-3 md:grid-cols-4">
+          <Card className="bg-panelAlt p-4 shadow-none">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Inactivity Risk</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{formatRiskScore(dependency.riskProfile?.inactivityRiskScore ?? 0)}</p>
           </Card>
-          <Card className="bg-slate-50 p-5 shadow-none">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">12m Outlook</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}</p>
+          <Card className="bg-panelAlt p-4 shadow-none">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">12m Outlook</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{formatOutlookScore(dependency.riskProfile?.maintenanceOutlook12mScore ?? 0)}</p>
           </Card>
-          <Card className="bg-slate-50 p-5 shadow-none">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Security Posture</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{formatRiskScore(dependency.riskProfile?.securityPostureScore ?? 0)}</p>
+          <Card className="bg-panelAlt p-4 shadow-none">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Security Posture</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{formatRiskScore(dependency.riskProfile?.securityPostureScore ?? 0)}</p>
           </Card>
-          <Card className="bg-slate-50 p-5 shadow-none">
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Confidence</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{formatConfidence(dependency.riskProfile?.confidenceScore ?? 0)}</p>
+          <Card className="bg-panelAlt p-4 shadow-none">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Confidence</p>
+            <p className="mt-2 text-3xl font-semibold text-foreground">{formatConfidence(dependency.riskProfile?.confidenceScore ?? 0)}</p>
           </Card>
         </div>
       </Card>
@@ -94,51 +94,51 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
       {modelResults.length ? (
         <Card className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Model Outputs</p>
-            <h2 className="mt-2 text-lg font-semibold text-slate-950">Side-by-side ML scoring</h2>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Model Outputs</p>
+            <h2 className="mt-2 text-lg font-semibold text-foreground">Side-by-side ML scoring</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {modelResults.map((result) => (
-              <div key={result.modelName} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div key={result.modelName} className="rounded-xl border border-line bg-panelAlt p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-slate-950">{result.modelName}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{result.algorithm || "model"} {result.modelVersion ?? ""}</p>
+                    <p className="font-semibold text-foreground">{result.modelName}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted">{result.algorithm || "model"} {result.modelVersion ?? ""}</p>
                   </div>
                   <Badge tone={result.riskBucket}>{result.riskBucket}</Badge>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <p className="text-slate-500">Risk</p>
-                    <p className="font-semibold text-slate-950">{formatRiskScore(result.inactivityRiskScore)}</p>
+                    <p className="text-muted">Risk</p>
+                    <p className="font-semibold text-foreground">{formatRiskScore(result.inactivityRiskScore)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">12m outlook</p>
-                    <p className="font-semibold text-slate-950">{formatOutlookScore(result.maintenanceOutlook12mScore)}</p>
+                    <p className="text-muted">12m outlook</p>
+                    <p className="font-semibold text-foreground">{formatOutlookScore(result.maintenanceOutlook12mScore)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Security</p>
-                    <p className="font-semibold text-slate-950">{formatRiskScore(result.securityPostureScore)}</p>
+                    <p className="text-muted">Security</p>
+                    <p className="font-semibold text-foreground">{formatRiskScore(result.securityPostureScore)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Confidence</p>
-                    <p className="font-semibold text-slate-950">{formatConfidence(result.confidenceScore)}</p>
+                    <p className="text-muted">Confidence</p>
+                    <p className="font-semibold text-foreground">{formatConfidence(result.confidenceScore)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">AUROC</p>
-                    <p className="font-semibold text-slate-950">{formatTrainingMetric(result.rocAuc)}</p>
+                    <p className="text-muted">AUROC</p>
+                    <p className="font-semibold text-foreground">{formatTrainingMetric(result.rocAuc)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Brier</p>
-                    <p className="font-semibold text-slate-950">{formatTrainingMetric(result.brierScore)}</p>
+                    <p className="text-muted">Brier</p>
+                    <p className="font-semibold text-foreground">{formatTrainingMetric(result.brierScore)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">ECE</p>
-                    <p className="font-semibold text-slate-950">{formatTrainingMetric(result.expectedCalibrationError)}</p>
+                    <p className="text-muted">ECE</p>
+                    <p className="font-semibold text-foreground">{formatTrainingMetric(result.expectedCalibrationError)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Samples</p>
-                    <p className="font-semibold text-slate-950">{result.sampleCount || "Pending"}</p>
+                    <p className="text-muted">Samples</p>
+                    <p className="font-semibold text-foreground">{result.sampleCount || "Pending"}</p>
                   </div>
                 </div>
               </div>
@@ -149,15 +149,15 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-950">Explanation Factors</h2>
-          <div className="space-y-3">
+          <h2 className="text-lg font-semibold text-foreground">Explanation Factors</h2>
+          <div className="space-y-2">
             {dependency.riskProfile?.explanationFactors.map((factor) => (
-              <div key={`${factor.label}-${factor.detail}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div key={`${factor.label}-${factor.detail}`} className="rounded-xl border border-line bg-panelAlt p-4">
                 <div className="flex items-center justify-between gap-4">
-                  <p className="font-semibold text-slate-950">{factor.label}</p>
-                  <span className="text-xs uppercase tracking-[0.24em] text-slate-500">{factor.direction}</span>
+                  <p className="font-semibold text-foreground">{factor.label}</p>
+                  <span className="text-xs uppercase tracking-[0.24em] text-muted">{factor.direction}</span>
                 </div>
-                <p className="mt-2 text-sm text-slate-600">{factor.detail}</p>
+                <p className="mt-2 text-sm text-muted">{factor.detail}</p>
               </div>
             ))}
           </div>
@@ -165,23 +165,23 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
 
         <div className="space-y-6">
           <Card className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-950">Repository Facts</h2>
-            <dl className="grid gap-3 text-sm text-slate-600">
-              <div className="flex justify-between gap-4"><dt>Repository</dt><dd className="font-medium text-slate-900">{dependency.repository?.fullName ?? "Unavailable"}</dd></div>
-              <div className="flex justify-between gap-4"><dt>Archived</dt><dd className="font-medium text-slate-900">{dependency.repository?.archived ? "Yes" : "No"}</dd></div>
-              <div className="flex justify-between gap-4"><dt>Stars</dt><dd className="font-medium text-slate-900">{dependency.repository?.stars ?? "-"}</dd></div>
-              <div className="flex justify-between gap-4"><dt>Open issues</dt><dd className="font-medium text-slate-900">{dependency.repository?.openIssues ?? "-"}</dd></div>
+            <h2 className="text-lg font-semibold text-foreground">Repository Facts</h2>
+            <dl className="grid gap-2.5 text-sm text-muted">
+              <div className="flex justify-between gap-4"><dt>Repository</dt><dd className="font-medium text-foreground">{dependency.repository?.fullName ?? "Unavailable"}</dd></div>
+              <div className="flex justify-between gap-4"><dt>Archived</dt><dd className="font-medium text-foreground">{dependency.repository?.archived ? "Yes" : "No"}</dd></div>
+              <div className="flex justify-between gap-4"><dt>Stars</dt><dd className="font-medium text-foreground">{dependency.repository?.stars ?? "-"}</dd></div>
+              <div className="flex justify-between gap-4"><dt>Open issues</dt><dd className="font-medium text-foreground">{dependency.repository?.openIssues ?? "-"}</dd></div>
             </dl>
           </Card>
 
           <Card className="space-y-4">
-            <h2 className="text-lg font-semibold text-slate-950">Evidence</h2>
-            <div className="space-y-3 text-sm text-slate-600">
+            <h2 className="text-lg font-semibold text-foreground">Evidence</h2>
+            <div className="space-y-2 text-sm text-muted">
               {dependency.riskProfile?.evidence.map((item) => (
-                <div key={`${item.signal}-${item.observedAt}`} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                  <p className="font-medium text-slate-900">{item.signal}</p>
+                <div key={`${item.signal}-${item.observedAt}`} className="rounded-xl border border-line bg-panelAlt p-4">
+                  <p className="font-medium text-foreground">{item.signal}</p>
                   <p className="mt-1">{item.value}</p>
-                  <p className="mt-1 text-xs uppercase tracking-[0.24em] text-slate-500">{item.source}</p>
+                  <p className="mt-1 text-xs uppercase tracking-[0.24em] text-muted">{item.source}</p>
                 </div>
               ))}
             </div>
@@ -191,29 +191,27 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-950">Caveats</h2>
-          <div className="space-y-2 text-sm text-slate-600">
+          <h2 className="text-lg font-semibold text-foreground">Caveats</h2>
+          <div className="space-y-2 text-sm text-muted">
             {dependency.riskProfile?.caveats.map((caveat) => (
               <p key={caveat}>{caveat}</p>
             ))}
           </div>
         </Card>
         <Card className="space-y-4">
-          <h2 className="text-lg font-semibold text-slate-950">Coverage Gaps</h2>
-          <div className="space-y-2 text-sm text-slate-600">
+          <h2 className="text-lg font-semibold text-foreground">Coverage Gaps</h2>
+          <div className="space-y-2 text-sm text-muted">
             {dependency.riskProfile?.missingSignals.map((signal) => (
               <p key={signal}>{signal}</p>
             ))}
-            <p className="pt-2 text-slate-500">Dependency path and raw signal snapshot expansion are planned next. The current card preserves enough evidence for the mocked triage walkthrough.</p>
+            <p className="pt-2">Dependency path and raw signal snapshot expansion are planned next.</p>
           </div>
         </Card>
       </div>
 
-      <Link href={`/analyses/${dependency.analysisId}`} className="inline-flex text-sm font-medium text-sky-700 transition hover:text-sky-900">
-        Back to analysis overview
+      <Link href={`/analyses/${dependency.analysisId}`} className="inline-flex text-sm font-medium text-accent transition hover:text-foreground">
+        ← Back to analysis overview
       </Link>
     </div>
   );
 }
-
-

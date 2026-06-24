@@ -105,14 +105,15 @@ OSS Risk Radar is not framed as a vulnerability scanner or a definitive trust sc
 - `npm run test:scoring` to run Python tests
 - `npm run ml:dataset -- build-all --seed-file <path> --gharchive-source <path> --output-dir tmp/training/oss-maintenance` to build a historical maintenance dataset; local GHArchive directories infer the latest safe observation end automatically
 - `npm run ml:seed:foundation -- --target-repositories 5000 --github-token <token>` to generate a repository foundation seed directly from the GitHub Search API
-- `npm run ml:dataset:foundation -- --github-token <token> --gharchive-source <path>` to build the larger repository-first dataset from the generated foundation seed
+- `npm run ml:dataset:foundation` to rebuild a separate foundation candidate from the preserved seed and filtered GH Archive cache
 - `npm run ml:notebook` to open the JupyterLab workflow
-- `npm run ml:notebook:execute` to smoke-execute the notebook with a fixture dataset under `tmp/notebooks`
+- `npm run ml:notebook:execute` to smoke-execute the notebook from synthetic raw seed and GH Archive inputs under `tmp/notebooks`
 - `npm run ml:train` to execute the notebook and export the full-history plus cold-start model artifact bundle from `tmp/training/snapshots.json`
-- `npm run ml:bootstrap -- --gharchive-source <path>` to build from the small starter seed, train the artifact bundle offline, and verify cached run artifacts plus `tmp/training/repository-feature-cache.json`
-- `npm run ml:bootstrap:foundation -- --github-token <token> --gharchive-source <path>` to build and train from the larger GitHub repository foundation seed
+- `npm run ml:bootstrap -- --seed-file <path> --gharchive-source <path>` to run dataset engineering and four-model training through the notebook
+- `npm run ml:bootstrap:foundation` to rebuild and train a separate candidate from the preserved 5,000-repository foundation inputs
+- `npm run ml:stage-training` to promote only candidates that pass the per-model AUROC/Brier regression gate
+- `npm run test:ml-scripts` to test downloader and promotion guardrails
 - `npm run check:web` to lint and build the frontend
-- `powershell -ExecutionPolicy Bypass -File scripts/dev/validate-scaffold.ps1` to validate the repo scaffold
 
 ## Next 10 implementation tasks
 

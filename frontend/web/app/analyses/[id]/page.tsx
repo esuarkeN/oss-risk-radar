@@ -1,13 +1,12 @@
 import { AnalysisDashboard } from "@/components/analysis-dashboard";
-import { SiteHeader } from "@/components/site-header";
+import { WorkspaceLayout } from "@/components/workspace-layout";
 
 export default async function AnalysisPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   return (
-    <>
-      <SiteHeader />
+    <WorkspaceLayout>
       <AnalysisDashboard analysisId={id} />
-    </>
+    </WorkspaceLayout>
   );
 }
