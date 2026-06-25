@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { DependencyTreeFull } from "@/components/dependency-tree-full";
 import { AppSidebar } from "@/components/app-sidebar";
-import { getDependencies, getDependencyGraph } from "@/lib/api";
+import { getAnalysis, getDependencies, getDependencyGraph } from "@/lib/api";
 
 export default async function DependencyTreePage({
   params,
@@ -12,10 +12,12 @@ export default async function DependencyTreePage({
   const { id } = await params;
 
   try {
-    const [dependencies, graph] = await Promise.all([
+    const [analysis, dependencies, graph] = await Promise.all([
+      getAnalysis(id),
       getDependencies(id),
       getDependencyGraph(id),
     ]);
+    const analysisTargetLabel = analysis.submission.repositoryUrl ?? analysis.submission.artifactName ?? "Demo analysis";
 
     return (
       <div className="flex h-screen overflow-hidden bg-[hsl(var(--background))]">
@@ -27,6 +29,7 @@ export default async function DependencyTreePage({
               dependencies={dependencies}
               graph={graph}
               analysisId={id}
+              analysisTargetLabel={analysisTargetLabel}
             />
           </div>
         </div>

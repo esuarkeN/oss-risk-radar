@@ -21,6 +21,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { buildDependencyTreeGraph, type DependencyTreeNodeKind } from "@/lib/dependency-graph";
+import { formatRiskScore } from "@/lib/format";
 import type { DependencyGraphResponse, DependencyRecord } from "@/lib/types";
 
 const BUCKET_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
@@ -34,52 +36,73 @@ const BUCKET_COLORS: Record<string, { bg: string; border: string; text: string; 
 type RiskNodeData = {
   label: string;
   version: string;
+  caption: string;
   bucket: string;
   score: number | null;
   direct: boolean;
+  depId?: string;
+  kind: DependencyTreeNodeKind;
 };
 
 type RiskNode = Node<RiskNodeData, "riskNode">;
 
 function RiskNodeComponent({ data, selected }: NodeProps<RiskNode>) {
   const c = BUCKET_COLORS[data.bucket] ?? BUCKET_COLORS.unscored;
+  const isRoot = data.kind === "root";
+  const isPath = data.kind === "path";
+  const borderColor = selected ? "#38bdf8" : isRoot ? "#38bdf8" : isPath ? "#334155" : c.border;
+  const background = isRoot ? "#071923" : isPath ? "#101722" : c.bg;
+  const textColor = isRoot ? "#bae6fd" : isPath ? "#cbd5e1" : c.text;
 
   return (
     <div
       style={{
-        background: c.bg,
-        border: `1px solid ${selected ? "#6366f1" : c.border}`,
+        background,
+        border: `1px solid ${borderColor}`,
         borderRadius: 8,
         padding: "6px 12px",
-        minWidth: 160,
-        boxShadow: selected ? "0 0 0 2px rgba(99,102,241,0.4)" : undefined,
-        cursor: "pointer",
+        minWidth: isRoot ? 204 : 160,
+        boxShadow: selected ? "0 0 0 2px rgba(56,189,248,0.35)" : isRoot ? "0 10px 30px rgba(14,165,233,0.08)" : undefined,
+        cursor: data.depId ? "pointer" : "default",
         transition: "box-shadow 0.15s",
       }}
     >
       <Handle
         type="target"
         position={Position.Left}
-        style={{ background: c.border, width: 6, height: 6, border: "none" }}
+        style={{ background: borderColor, width: 6, height: 6, border: "none", opacity: isRoot ? 0 : 1 }}
       />
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
-        <span style={{ fontSize: 12, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 130 }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: isRoot ? "#38bdf8" : isPath ? "#64748b" : c.dot, flexShrink: 0 }} />
+        <span style={{ fontSize: 12, fontWeight: 600, color: textColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: isRoot ? 168 : 130 }}>
           {data.label}
         </span>
+        {isRoot ? (
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: "#38bdf8",
+            background: "rgba(14,165,233,0.12)", border: "1px solid rgba(14,165,233,0.25)",
+            borderRadius: 3, padding: "0 4px", marginLeft: "auto", flexShrink: 0,
+          }}>ROOT</span>
+        ) : data.direct ? (
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: "#818cf8",
+            background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.25)",
+            borderRadius: 3, padding: "0 4px", marginLeft: "auto", flexShrink: 0,
+          }}>D</span>
+        ) : null}
       </div>
       <div style={{ fontSize: 10, color: "#4a5568", fontFamily: "monospace", marginTop: 2, paddingLeft: 11 }}>
-        {data.version}
+        {data.caption || data.version}
         {data.score != null && (
           <span style={{ marginLeft: 6, color: c.text, fontWeight: 600 }}>
-            {data.score.toFixed(2)}
+            risk {formatRiskScore(data.score)}
           </span>
         )}
       </div>
       <Handle
         type="source"
         position={Position.Right}
-        style={{ background: c.border, width: 6, height: 6, border: "none" }}
+        style={{ background: borderColor, width: 6, height: 6, border: "none" }}
       />
     </div>
   );
@@ -91,7 +114,7 @@ function getLayoutedElements(nodes: RiskNode[], edges: Edge[]): { nodes: RiskNod
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: "LR", nodesep: 32, ranksep: 90, marginx: 20, marginy: 20 });
 
-  nodes.forEach((node) => g.setNode(node.id, { width: 178, height: 48 }));
+  nodes.forEach((node) => g.setNode(node.id, { width: node.data.kind === "root" ? 218 : 178, height: 48 }));
   edges.forEach((edge) => g.setEdge(edge.source, edge.target));
 
   Dagre.layout(g);
@@ -99,7 +122,8 @@ function getLayoutedElements(nodes: RiskNode[], edges: Edge[]): { nodes: RiskNod
   return {
     nodes: nodes.map((node) => {
       const pos = g.node(node.id);
-      return { ...node, position: { x: pos.x - 89, y: pos.y - 24 } };
+      const width = node.data.kind === "root" ? 218 : 178;
+      return { ...node, position: { x: pos.x - width / 2, y: pos.y - 24 } };
     }),
     edges,
   };
@@ -108,41 +132,37 @@ function getLayoutedElements(nodes: RiskNode[], edges: Edge[]): { nodes: RiskNod
 function buildFlowData(
   dependencies: DependencyRecord[],
   graph: DependencyGraphResponse | null,
-  maxNodes: number
+  maxNodes: number,
+  analysisId: string,
+  analysisTargetLabel?: string
 ): { nodes: RiskNode[]; edges: Edge[] } {
   const depMap = new Map(dependencies.map((d) => [d.id, d]));
-
-  const graphNodes = graph?.nodes ?? dependencies.map((d) => ({
-    id: d.id,
-    packageName: d.packageName,
-    packageVersion: d.packageVersion,
-    ecosystem: d.ecosystem,
-    direct: d.direct,
-  }));
-
-  const slicedNodes = graphNodes.slice(0, maxNodes);
+  const tree = buildDependencyTreeGraph(dependencies, graph, { analysisId, rootLabel: analysisTargetLabel });
+  const slicedNodes = tree.nodes.slice(0, maxNodes);
   const nodeIdSet = new Set(slicedNodes.map((n) => n.id));
 
   const nodes: RiskNode[] = slicedNodes.map((n) => {
-    const dep = depMap.get(n.id);
+    const dep = n.dependencyId ? depMap.get(n.dependencyId) : undefined;
     const bucket = dep?.riskProfile?.riskBucket ?? "unscored";
-    const score = dep?.riskProfile?.maintenanceOutlook12mScore ?? null;
+    const score = dep?.riskProfile?.inactivityRiskScore ?? null;
     return {
       id: n.id,
       type: "riskNode" as const,
       position: { x: 0, y: 0 },
       data: {
-        label: n.packageName,
-        version: n.packageVersion,
+        label: n.label,
+        version: n.version,
+        caption: n.kind === "dependency" ? `${n.version} / ${n.ecosystem}` : n.version,
         bucket,
         score,
         direct: n.direct,
+        depId: n.dependencyId,
+        kind: n.kind,
       },
     };
   });
 
-  const graphEdges = graph?.edges ?? [];
-  const edges: Edge[] = graphEdges
+  const edges: Edge[] = tree.edges
     .filter((e) => nodeIdSet.has(e.from) && nodeIdSet.has(e.to))
     .slice(0, maxNodes * 2)
     .map((e) => ({
@@ -150,8 +170,12 @@ function buildFlowData(
       source: e.from,
       target: e.to,
       animated: e.kind === "direct",
-      markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "#2d3748" },
-      style: { stroke: "#2d3748", strokeWidth: 1.5 },
+      markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: e.kind === "direct" ? "#475569" : "#334155" },
+      style: {
+        stroke: e.kind === "direct" ? "#475569" : "#334155",
+        strokeWidth: e.kind === "direct" ? 1.8 : 1.3,
+        strokeDasharray: e.kind === "transitive" ? "4 4" : undefined,
+      },
     }));
 
   const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
@@ -170,6 +194,7 @@ interface DependencyTreeSnapshotProps {
   dependencies: DependencyRecord[];
   graph: DependencyGraphResponse | null;
   analysisId: string;
+  analysisTargetLabel?: string;
   maxNodes?: number;
   onSelectDependency?: (id: string) => void;
 }
@@ -178,23 +203,32 @@ export function DependencyTreeSnapshot({
   dependencies,
   graph,
   analysisId,
+  analysisTargetLabel,
   maxNodes = 60,
   onSelectDependency,
 }: DependencyTreeSnapshotProps) {
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => buildFlowData(dependencies, graph, maxNodes),
-    [dependencies, graph, maxNodes]
+    () => buildFlowData(dependencies, graph, maxNodes, analysisId, analysisTargetLabel),
+    [dependencies, graph, maxNodes, analysisId, analysisTargetLabel]
   );
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  const totalNodes = (graph?.nodes ?? dependencies).length;
+  useEffect(() => {
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+  }, [initialEdges, initialNodes, setEdges, setNodes]);
+
+  const totalNodes = buildDependencyTreeGraph(dependencies, graph, { analysisId, rootLabel: analysisTargetLabel }).nodes.length;
   const truncated = totalNodes > maxNodes;
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      onSelectDependency?.(node.id);
+      const depId = (node as RiskNode).data.depId;
+      if (depId) {
+        onSelectDependency?.(depId);
+      }
     },
     [onSelectDependency]
   );

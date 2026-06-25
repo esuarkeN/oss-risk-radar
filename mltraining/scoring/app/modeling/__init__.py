@@ -1,7 +1,9 @@
 from app.modeling.artifacts import (
     deserialize_logistic_regression_model,
+    deserialize_neural_net_model,
     deserialize_xgboost_model,
     serialize_logistic_regression_model,
+    serialize_neural_net_model,
     serialize_xgboost_model,
 )
 from app.modeling.baseline import LogisticRegressionModel, fit_logistic_regression, predict_probabilities
@@ -23,6 +25,7 @@ from app.modeling.features import (
     feature_version_for_regime,
     normalize_feature_regime,
 )
+from app.modeling.neural_net import NeuralNetModel, fit_neural_net_classifier, predict_neural_net_probabilities
 from app.modeling.xgboost_model import XGBoostFeatureImportance, XGBoostModel, fit_xgboost_classifier, predict_xgboost_probabilities
 
 __all__ = [
@@ -36,21 +39,26 @@ __all__ = [
     "FULL_HISTORY_FEATURE_VERSION",
     "PREDICTIVE_HISTORICAL_FEATURE_NAMES",
     "LogisticRegressionModel",
+    "NeuralNetModel",
     "XGBoostFeatureImportance",
     "XGBoostModel",
     "build_feature_row",
     "build_feature_rows",
     "deserialize_logistic_regression_model",
+    "deserialize_neural_net_model",
     "deserialize_xgboost_model",
     "extract_feature_values",
     "feature_names_for_regime",
     "feature_regime_for_version",
     "feature_version_for_regime",
     "fit_logistic_regression",
+    "fit_neural_net_classifier",
     "fit_xgboost_classifier",
     "normalize_feature_regime",
+    "predict_neural_net_probabilities",
     "predict_probabilities",
     "predict_xgboost_probabilities",
     "serialize_logistic_regression_model",
+    "serialize_neural_net_model",
     "serialize_xgboost_model",
 ]

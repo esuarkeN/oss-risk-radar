@@ -16,6 +16,8 @@ DEFAULT_MODELS = [
     "xgboost-full-history",
     "logistic-regression-cold-start",
     "xgboost-cold-start",
+    "neural-net-full-history",
+    "neural-net-cold-start",
 ]
 
 
@@ -225,6 +227,16 @@ def _camel_model_artifact(artifact: Any | None) -> dict[str, Any] | None:
                     "means": list(artifact.standardization.means),
                     "scales": list(artifact.standardization.scales),
                 },
+            }
+        )
+    elif artifact.algorithm == "neural_net":
+        payload.update(
+            {
+                "hiddenSizes": list(artifact.hidden_sizes),
+                "weights": [list(layer) for layer in artifact.weights],
+                "biases": [list(layer) for layer in artifact.biases],
+                "means": list(artifact.means),
+                "scales": list(artifact.scales),
             }
         )
     else:

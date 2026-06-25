@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from app.modeling.baseline import LogisticRegressionModel, StandardizationProfile
 from app.modeling.features import FEATURE_VERSION
+from app.modeling.neural_net import NeuralNetModel
 from app.modeling.xgboost_model import XGBoostFeatureImportance, XGBoostModel
-from app.schemas.score import CalibrationBin, FeatureImportance, LogisticRegressionModelArtifact, StandardizationProfileArtifact, XGBoostModelArtifact
+from app.schemas.score import CalibrationBin, FeatureImportance, LogisticRegressionModelArtifact, NeuralNetModelArtifact, StandardizationProfileArtifact, XGBoostModelArtifact
 
 
 def serialize_logistic_regression_model(
@@ -85,6 +86,42 @@ def deserialize_xgboost_model(artifact: XGBoostModelArtifact) -> XGBoostModel:
             XGBoostFeatureImportance(feature=importance.feature, gain=importance.gain, importance=importance.importance)
             for importance in artifact.feature_importances
         ],
+        model_name=artifact.model_name,
+        model_version=artifact.model_version,
+    )
+
+
+def serialize_neural_net_model(
+    model: NeuralNetModel,
+    trained_at: str,
+    threshold: float,
+    calibration_bins: list[CalibrationBin],
+    feature_version: str = FEATURE_VERSION,
+) -> NeuralNetModelArtifact:
+    return NeuralNetModelArtifact(
+        model_name=model.model_name,
+        model_version=model.model_version,
+        feature_version=feature_version,
+        trained_at=trained_at,
+        threshold=threshold,
+        feature_names=list(model.feature_names),
+        hidden_sizes=list(model.hidden_sizes),
+        weights=[list(layer) for layer in model.weights],
+        biases=[list(layer) for layer in model.biases],
+        means=list(model.means),
+        scales=list(model.scales),
+        calibration_bins=list(calibration_bins),
+    )
+
+
+def deserialize_neural_net_model(artifact: NeuralNetModelArtifact) -> NeuralNetModel:
+    return NeuralNetModel(
+        feature_names=list(artifact.feature_names),
+        hidden_sizes=list(artifact.hidden_sizes),
+        weights=[list(layer) for layer in artifact.weights],
+        biases=[list(layer) for layer in artifact.biases],
+        means=list(artifact.means),
+        scales=list(artifact.scales),
         model_name=artifact.model_name,
         model_version=artifact.model_version,
     )

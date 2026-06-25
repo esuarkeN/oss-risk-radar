@@ -152,6 +152,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   const canRerunAnalysis = analysis.submission.kind === "repository_url" && !analysisStatusActive;
   const selectedIsRepositoryProfile = isRepositoryProfile(selectedDependency);
   const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
+  const analysisTargetLabel = analysis.submission.repositoryUrl ?? analysis.submission.artifactName ?? "Demo analysis";
   const dependencySummaryLabel = analysis.submission.kind === "repository_url" ? "Profiles" : "Dependencies";
   const dependencySummaryCaption = analysis.submission.kind === "repository_url"
     ? "Repository target plus any resolved packages in the current analysis."
@@ -376,6 +377,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
               dependencies={dependencies}
               graph={graph}
               analysisId={analysisId}
+              analysisTargetLabel={analysisTargetLabel}
               onSelectDependency={setSelectedDependencyId}
             />
           )}

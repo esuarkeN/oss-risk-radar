@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from app.modeling import (
     deserialize_logistic_regression_model,
+    deserialize_neural_net_model,
     deserialize_xgboost_model,
     extract_feature_values,
+    predict_neural_net_probabilities,
     predict_probabilities,
     predict_xgboost_probabilities,
 )
@@ -13,6 +15,7 @@ from app.schemas.score import (
     DependencySignalPayload,
     LogisticRegressionModelArtifact,
     ModelArtifact,
+    NeuralNetModelArtifact,
     RiskProfileResponse,
     ScoreResult,
     XGBoostModelArtifact,
@@ -87,6 +90,9 @@ def score_dependency_with_model(
     if isinstance(artifact, XGBoostModelArtifact):
         model = deserialize_xgboost_model(artifact)
         raw_probability = predict_xgboost_probabilities(model, matrix)[0]
+    elif isinstance(artifact, NeuralNetModelArtifact):
+        model = deserialize_neural_net_model(artifact)
+        raw_probability = predict_neural_net_probabilities(model, matrix)[0]
     elif isinstance(artifact, LogisticRegressionModelArtifact):
         model = deserialize_logistic_regression_model(artifact)
         raw_probability = predict_probabilities(model, matrix)[0]

@@ -222,7 +222,35 @@ class XGBoostModelArtifact(BaseModel):
         return self
 
 
-ModelArtifact = LogisticRegressionModelArtifact | XGBoostModelArtifact
+class NeuralNetModelArtifact(BaseModel):
+    model_name: str
+    model_version: str
+    feature_version: str
+    trained_at: str
+    threshold: float = Field(ge=0, le=1)
+    algorithm: Literal["neural_net"] = "neural_net"
+    feature_names: list[str] = Field(default_factory=list)
+    hidden_sizes: list[int] = Field(default_factory=list)
+    weights: list[list[list[float]]] = Field(default_factory=list)
+    biases: list[list[float]] = Field(default_factory=list)
+    means: list[float] = Field(default_factory=list)
+    scales: list[float] = Field(default_factory=list)
+    calibration_bins: list[CalibrationBin] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_dimensions(self) -> "NeuralNetModelArtifact":
+        if not self.feature_names:
+            raise ValueError("model artifact must include feature names")
+        if not self.weights:
+            raise ValueError("neural net artifact must include weight layers")
+        if self.means and len(self.means) != len(self.feature_names):
+            raise ValueError("standardization means must match feature count")
+        if self.scales and len(self.scales) != len(self.feature_names):
+            raise ValueError("standardization scales must match feature count")
+        return self
+
+
+ModelArtifact = LogisticRegressionModelArtifact | XGBoostModelArtifact | NeuralNetModelArtifact
 
 
 class ScoreModelRequest(DependencyBatchRequest):

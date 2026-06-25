@@ -7,12 +7,15 @@ from typing import Any
 from app.modeling import (
     FEATURE_REGIME_FULL_HISTORY,
     fit_logistic_regression,
+    fit_neural_net_classifier,
     fit_xgboost_classifier,
     feature_version_for_regime,
     normalize_feature_regime,
+    predict_neural_net_probabilities,
     predict_probabilities,
     predict_xgboost_probabilities,
     serialize_logistic_regression_model,
+    serialize_neural_net_model,
     serialize_xgboost_model,
 )
 from app.schemas.score import CalibrationBin, DatasetSplitSummary, EvaluationMetrics, ModelArtifact, TrainingSnapshotInput
@@ -63,6 +66,8 @@ MODEL_ALIASES = {
     "logistic-regression-cold-start": ("logistic_regression", "cold-start", "logistic-regression-cold-start", "0.4.0"),
     "xgboost-full-history": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
     "xgboost-cold-start": ("xgboost", "cold-start", "xgboost-cold-start", "0.2.0"),
+    "neural-net-full-history": ("neural_net", "full-history", "neural-net-full-history", "0.1.0"),
+    "neural-net-cold-start": ("neural_net", "cold-start", "neural-net-cold-start", "0.1.0"),
     "logistic-regression-baseline": ("logistic_regression", "full-history", "logistic-regression-full-history", "0.4.0"),
     "logistic_regression": ("logistic_regression", "full-history", "logistic-regression-full-history", "0.4.0"),
     "logistic-regression": ("logistic_regression", "full-history", "logistic-regression-full-history", "0.4.0"),
@@ -72,6 +77,9 @@ MODEL_ALIASES = {
     "xgboost-classifier": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
     "gradient_boosted_trees": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
     "gradient-boosted-trees": ("xgboost", "full-history", "xgboost-full-history", "0.2.0"),
+    "neural-net": ("neural_net", "full-history", "neural-net-full-history", "0.1.0"),
+    "neural_net": ("neural_net", "full-history", "neural-net-full-history", "0.1.0"),
+    "mlp": ("neural_net", "full-history", "neural-net-full-history", "0.1.0"),
 }
 SUPPORTED_ALGORITHMS = set(MODEL_ALIASES)
 
@@ -82,13 +90,20 @@ def _model_spec(algorithm: str, configured_regime: str) -> tuple[str, str, str, 
         raise ValueError(
             "unsupported model_name: "
             f"{algorithm}. Offline training supports logistic-regression-full-history, "
-            "xgboost-full-history, logistic-regression-cold-start, and xgboost-cold-start."
+            "xgboost-full-history, logistic-regression-cold-start, xgboost-cold-start, "
+            "neural-net-full-history, and neural-net-cold-start."
         )
     algorithm_name, model_regime, model_name, model_version = MODEL_ALIASES[normalized]
-    if normalized in {"logistic_regression", "logistic-regression", "xgboost", "xgboost_classifier", "xgboost-classifier", "gradient_boosted_trees", "gradient-boosted-trees"}:
+    if normalized in {
+        "logistic_regression", "logistic-regression",
+        "xgboost", "xgboost_classifier", "xgboost-classifier", "gradient_boosted_trees", "gradient-boosted-trees",
+        "neural-net", "neural_net", "mlp",
+    }:
         model_regime = normalize_feature_regime(configured_regime)
         if algorithm_name == "xgboost":
             model_name = "xgboost-cold-start" if model_regime == "cold-start" else "xgboost-full-history"
+        elif algorithm_name == "neural_net":
+            model_name = "neural-net-cold-start" if model_regime == "cold-start" else "neural-net-full-history"
         else:
             model_name = "logistic-regression-cold-start" if model_regime == "cold-start" else "logistic-regression-full-history"
     return algorithm_name, normalize_feature_regime(model_regime), model_name, model_version
@@ -159,6 +174,9 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
     if algorithm == "xgboost":
         model = fit_xgboost_classifier(dataset.feature_names, train_matrix, train_labels)
         validation_predictions = predict_xgboost_probabilities(model, validation_matrix)
+    elif algorithm == "neural_net":
+        model = fit_neural_net_classifier(dataset.feature_names, train_matrix, train_labels)
+        validation_predictions = predict_neural_net_probabilities(model, validation_matrix)
     else:
         model = fit_logistic_regression(dataset.feature_names, train_matrix, train_labels)
         validation_predictions = predict_probabilities(model, validation_matrix)
@@ -177,6 +195,8 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
 
     if algorithm == "xgboost":
         test_predictions = predict_xgboost_probabilities(model, test_matrix)
+    elif algorithm == "neural_net":
+        test_predictions = predict_neural_net_probabilities(model, test_matrix)
     else:
         test_predictions = predict_probabilities(model, test_matrix)
 
@@ -199,23 +219,30 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
     ]
     split_note = f"{config.train_ratio:.0%}/{config.validation_ratio:.0%}/{(1.0 - config.train_ratio - config.validation_ratio):.0%}"
 
-    artifact = (
-        serialize_xgboost_model(
+    if algorithm == "xgboost":
+        artifact = serialize_xgboost_model(
             model,
             trained_at=trained_at,
             threshold=metrics.threshold,
             calibration_bins=calibration_bins,
             feature_version=feature_version,
         )
-        if algorithm == "xgboost"
-        else serialize_logistic_regression_model(
+    elif algorithm == "neural_net":
+        artifact = serialize_neural_net_model(
             model,
             trained_at=trained_at,
             threshold=metrics.threshold,
             calibration_bins=calibration_bins,
             feature_version=feature_version,
         )
-    )
+    else:
+        artifact = serialize_logistic_regression_model(
+            model,
+            trained_at=trained_at,
+            threshold=metrics.threshold,
+            calibration_bins=calibration_bins,
+            feature_version=feature_version,
+        )
 
     return TrainingRunResult(
         status="completed",
