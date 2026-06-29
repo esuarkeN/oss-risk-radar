@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from typing import Any, Callable, Sequence
 
 
 @dataclass(slots=True)
@@ -150,3 +151,59 @@ def compute_binary_classification_metrics(
         expected_calibration_error=ece,
         model_quality_score=model_quality_score,
     )
+
+
+def compute_sliced_metrics(
+    items: Sequence[Any],
+    predictions: Sequence[float],
+    labels: Sequence[int],
+    key_fn: Callable[[Any], Any],
+    *,
+    threshold: float = 0.5,
+    calibration_bin_count: int = 10,
+) -> list[dict[str, Any]]:
+    """Evaluate the same held-out predictions within subgroups.
+
+    Partitions the held-out rows by ``key_fn`` and reports per-slice metrics so that a
+    single aggregate number cannot hide a subgroup where the model is weak. Ranking
+    metrics that need both classes (ROC-AUC) are reported as ``None`` for single-class
+    slices, where they are undefined, while threshold-free scores such as the Brier
+    score are still reported. Each slice carries its own ``n`` so that thin slices are
+    not over-interpreted.
+    """
+    if not (len(items) == len(predictions) == len(labels)):
+        raise ValueError("items, predictions, and labels must have the same length")
+
+    grouped: dict[str, dict[str, list[float]]] = {}
+    for item, prediction, label in zip(items, predictions, labels, strict=True):
+        bucket = grouped.setdefault(str(key_fn(item)), {"predictions": [], "labels": []})
+        bucket["predictions"].append(float(prediction))
+        bucket["labels"].append(int(label))
+
+    summary: list[dict[str, Any]] = []
+    for slice_name in sorted(grouped):
+        slice_predictions = grouped[slice_name]["predictions"]
+        slice_labels = [int(value) for value in grouped[slice_name]["labels"]]
+        count = len(slice_labels)
+        positive_rate = sum(slice_labels) / count if count else 0.0
+        metrics = compute_binary_classification_metrics(
+            slice_predictions,
+            slice_labels,
+            threshold=threshold,
+            calibration_bin_count=calibration_bin_count,
+        )
+        both_classes = len(set(slice_labels)) == 2
+        summary.append(
+            {
+                "slice": slice_name,
+                "n": count,
+                "positive_rate": round(positive_rate, 6),
+                "roc_auc": round(metrics.roc_auc, 6) if both_classes else None,
+                "brier_score": round(metrics.brier_score, 6),
+                "accuracy": round(metrics.accuracy, 6),
+                "precision": round(metrics.precision, 6),
+                "recall": round(metrics.recall, 6),
+                "f1_score": round(metrics.f1_score, 6),
+            }
+        )
+    return summary

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from app.training.maintenance_dataset.entities import ObservationSnapshot, PackageRecord, RepositoryHistory, RepositoryRecord, SnapshotLabelRow
 from app.training.maintenance_dataset.events import is_human_actor
 
@@ -9,16 +11,34 @@ def build_snapshot_label(
     repository: RepositoryRecord,
     package: PackageRecord,
     history: RepositoryHistory | None,
+    *,
+    dataset_coverage_end: datetime | None = None,
 ) -> SnapshotLabelRow:
     history = history or RepositoryHistory(repository_full_name=repository.full_name)
     window_end = snapshot.label_window_end
     missing_label_signals: list[str] = []
 
-    coverage_end = history.coverage_end
+    # Label completeness is gated on how far the GH Archive sources cover, not on the
+    # repository's own last observed event. A repository that simply goes quiet must stay
+    # labelable as inactive: its silence is the signal we want to learn, not missing data.
+    # `dataset_coverage_end` is the dataset-wide archive horizon (latest event observed
+    # across all repositories, or an explicit configured cutoff). We fall back to the
+    # per-repository coverage end only when no dataset horizon is supplied, which preserves
+    # backward-compatible behaviour for direct callers and unit tests.
+    coverage_end = dataset_coverage_end if dataset_coverage_end is not None else history.coverage_end
     effective_end = min(window_end, coverage_end) if coverage_end is not None else window_end
     incomplete_future_window = coverage_end is None or coverage_end < window_end
     if incomplete_future_window:
         missing_label_signals.append("future_window_incomplete")
+    if (
+        dataset_coverage_end is not None
+        and history.coverage_end is not None
+        and history.coverage_end < window_end
+        and not incomplete_future_window
+    ):
+        # Diagnostic only: the repository fell silent before the horizon, but the archive
+        # still covers the window, so the row remains labelable (previously it was dropped).
+        missing_label_signals.append("repo_silent_before_horizon")
 
     future_commits = [
         item
