@@ -1,0 +1,16 @@
+\chapter{Conclusion and Outlook}
+\label{chap:conclusion}
+
+Summarize the findings and answer the research question here, then connect them to the practical triage use case.
+
+\section{Outlook and Future Work}
+\label{sec:conclusion-outlook}
+
+Several extensions are deliberately scoped out of the completed method and are recorded here as future work rather than as claimed results.
+
+\begin{itemize}
+    \item \textbf{External validation.} The reported evaluation uses a time-aware held-out split within the constructed foundation dataset (Section~\ref{sec:method-evaluation-strategy}). A stronger robustness check would re-sample a fresh set of repositories that were not part of the foundation seed and evaluate the trained artifacts on that independent set. This would test generalization beyond the sampled prevalence and seed strata.
+    \item \textbf{Additional model families.} The completed artifacts already cover a recency baseline, Logistic Regression, XGBoost, and a feedforward neural network. Further extensions, such as more expressive deep-learning architectures or sequence models over the repository event history, are left as future work.
+    \item \textbf{Prevalence-aware calibration.} Because the seed oversamples dormant and archived repositories, predicted probabilities are calibrated to the sampled prevalence (Section~\ref{sec:method-limitations}). Recalibrating to an estimated deployment prevalence would make the scores directly usable as live triage probabilities.
+    \item \textbf{Label sensitivity analysis.} The maintenance label uses heuristic thresholds (Section~\ref{sec:method-definitions}). A systematic sensitivity analysis over these thresholds would quantify how strongly the results depend on the specific label definition.
+\end{itemize}

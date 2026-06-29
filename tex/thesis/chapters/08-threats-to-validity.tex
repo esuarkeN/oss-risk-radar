@@ -1,0 +1,31 @@
+\chapter{Threats to Validity}
+\label{chap:validity}
+
+This chapter consolidates the threats to validity for the thesis and the mitigations applied. It is the single home for validity discussion; the methodology chapter (Section~\ref{sec:method-limitations}) is restricted to intrinsic data and design limitations, which are referenced here rather than repeated. Threats are organized along the standard categories of construct, internal, external, and conclusion validity.
+
+\section{Construct Validity}
+\label{sec:validity-construct}
+
+Construct validity concerns whether the measured quantities represent the intended concepts. The central construct is repository inactivity, which is operationalized as the inverse of a multi-signal maintenance rule over the future window \((t, t + 12\text{ months}]\) (Section~\ref{sec:method-definitions}). This is a proxy: a repository can be stable and low-activity without being abandoned, and visible activity does not capture development that moves to other platforms or release channels. The two-of-four maintenance thresholds are heuristic design choices, and the merged-pull-request clause is a proxy for broader maintainer interaction. These choices are mitigated by requiring sustained rather than incidental activity and by interpreting the score as a triage signal rather than a verdict, but they remain a construct-validity threat that a label sensitivity analysis (Chapter~\ref{chap:conclusion}) would further address.
+
+\section{Internal Validity}
+\label{sec:validity-internal}
+
+Internal validity concerns whether the reported predictive relationship is genuine rather than an artifact of the experimental setup. The main threat is temporal leakage, mitigated by the leakage-prevention rules in Section~\ref{sec:method-leakage-prevention}: observation-time features use only timestamps \(\leq t\), labels use only the future window, rows with incomplete future coverage remain unlabeled, and live enrichment is restricted to stable repository metadata. A distinct, non-leakage threat is activity persistence: features such as days since last commit are predictive of near-term inactivity by construction, so part of the discrimination reflects already-quiet repositories staying quiet. This is mitigated by comparing the learned models against a trivial recency baseline and by reporting the active-at-\(t\) subset evaluation (Section~\ref{sec:method-evaluation-strategy}), so that headline metrics are not credited to persistence alone.
+
+A second internal-validity concern is repository recurrence across the chronological split. Because observations are quarterly, a repository contributes several snapshots with overlapping label windows, and the chronological split can place earlier snapshots of a repository in training and later ones in the held-out set; given the autocorrelation between a repository's snapshots, this makes the reported metric optimistic relative to performance on previously unseen repositories. This threat is addressed by additionally evaluating the model under a repository-disjoint split, in which every snapshot of a repository is confined to a single partition (Section~\ref{sec:impl-grouped-split}). The held-out ROC-AUC decreases only marginally under the repository-disjoint split, which bounds the optimism attributable to repository recurrence and indicates that the discrimination generalizes to unseen repositories rather than resting on repository memorization.
+
+\section{External Validity}
+\label{sec:validity-external}
+
+External validity concerns generalization beyond the studied sample. Two threats apply. First, the foundation seed targets repositories with a license object and a minimum star threshold, so results should not be generalized to very small, private, newly created, or low-visibility repositories. Second, the seed deliberately oversamples dormant and archived repositories, so the inactive base rate in the dataset (approximately 0.56 in the test slice) does not reflect the natural OSS inactivity rate; predicted probabilities and precision are conditional on this sampled prevalence and would require recalibration for a deployment population (Section~\ref{sec:method-limitations}). The held-out split evaluates temporal generalization within the constructed dataset but not generalization to a freshly sampled repository set; external validation on out-of-foundation repositories is identified as future work (Chapter~\ref{chap:conclusion}).
+
+\section{Conclusion Validity}
+\label{sec:validity-conclusion}
+
+Conclusion validity concerns whether the conclusions drawn from the metrics are warranted. The evaluation uses a single time-aware held-out split rather than repeated resampling, so reported metrics are point estimates without confidence intervals. Because prevalence is sampled rather than natural, precision-dependent conclusions are reported as conditional on the sampled prevalence, and ROC-AUC is used as the primary ranking metric with precision-recall analysis as a complement (Section~\ref{sec:method-evaluation-strategy}). Qualitative case review is used as supporting, not confirmatory, evidence and is interpreted as formative.
+
+\section{Summary}
+\label{sec:validity-summary}
+
+The main threats are the proxy nature of the inactivity construct, activity persistence within an otherwise leakage-controlled design, the sampling-induced prevalence and visibility scope of the foundation seed, and the single-split point-estimate evaluation. Each is mitigated as described above, and the residual threats are reflected in the conservative interpretation of the scores as a triage signal and in the future work outlined in Chapter~\ref{chap:conclusion}.

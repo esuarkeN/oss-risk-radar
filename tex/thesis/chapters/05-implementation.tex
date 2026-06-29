@@ -1,0 +1,198 @@
+\chapter{Implementation}
+\label{chap:implementation}
+
+This chapter describes the technical implementation of OSS Risk Radar. While Chapter~\ref{chap:methodology} defined the research design, the inactivity label, and the evaluation strategy, this chapter explains how these decisions were realized in software. It describes the overall system architecture, the technology choices and their justification, the historical dataset builder, the model implementations, the offline training and artifact-staging pipeline, the runtime scoring service, the backend orchestration service, and the analyst frontend. The goal is to make the artifact reproducible and auditable, consistent with the Design Science Research framing of the thesis \cite{hevner2004design,peffers2007design}.
+
+\section{System Architecture Overview}
+\label{sec:impl-architecture}
+
+OSS Risk Radar is organized as a single repository (a monorepo) that contains several cooperating components. This structure keeps the data contracts, the training code, and the runtime services in one versioned location, which is important because the same feature definitions must be applied both during offline training and during online scoring. The components and their responsibilities are summarized in Table~\ref{tab:impl-components}.
+
+\begin{table}[htbp]
+\centering
+\caption{Implemented system components}
+\label{tab:impl-components}
+\begin{tabular}{p{0.26\textwidth} p{0.16\textwidth} p{0.46\textwidth}}
+\hline
+\textbf{Component} & \textbf{Technology} & \textbf{Responsibility} \\
+\hline
+Scoring and training workspace & Python & Historical dataset builder, feature engineering, model training, model artifacts, and the runtime scoring service. \\
+Backend API & Go & Analysis orchestration, manifest parsing, provider enrichment, durable job processing, and model-artifact scoring calls. \\
+Analyst frontend & TypeScript / Next.js & Submission, dependency overview, risk views, dependency graph, and machine-learning evaluation dashboards. \\
+Shared schemas & TypeScript & Reusable data contracts shared by the frontend. \\
+Orchestration scripts & Node.js & Seed generation, dataset building, notebook execution, and artifact staging commands. \\
+Deployment assets & Docker / Kubernetes & Container images, Compose, and the Argo CD-managed Kubernetes deployment. \\
+\hline
+\end{tabular}
+\end{table}
+
+The runtime data flow follows the methodology. An analyst submits a repository URL or uploads a dependency manifest through the frontend. The Go backend registers an analysis and enqueues a durable background job in PostgreSQL. A worker parses manifests into direct and transitive dependencies, enriches each dependency with public signals from deps.dev, GitHub, and OpenSSF Scorecard, and then calls the Python scoring service with staged model artifacts. The scoring service returns an inactivity-risk profile for each dependency, and the frontend renders the overview dashboard, the dependency graph, and the detail views \cite{ossRiskRadarReadme}.
+
+A central design principle is the strict separation between offline training and online scoring. Models are never trained during normal application use. Instead, the training pipeline exports versioned model artifacts that are promoted into a staged bundle, and the scoring service loads only these artifacts at runtime. Missing artifacts are treated as a deployment configuration error rather than as a reason to fall back to substitute scoring behavior. This separation guarantees that the deployed model is exactly the model that was evaluated for the thesis.
+
+\section{Technology Selection}
+\label{sec:impl-technology}
+
+The components use different programming languages, each selected for the part of the system where it is most appropriate.
+
+Python is used for all data engineering and machine learning, including the historical dataset builder, the feature and label computation, the model implementations, and the scoring service. Python was chosen because it has the strongest ecosystem support for machine learning and data science work \cite{gfg_python_ml,stackoverflow_python_2025}, which makes it the natural environment for the analytical core of the artifact. The scoring service is implemented with FastAPI, and numerical work uses numpy and xgboost.
+
+Go is used for the backend orchestration service. The backend is primarily a concurrent input/output workload: it parses manifests, calls several external providers, and processes durable jobs. Go's static typing, its straightforward concurrency model, and its suitability for long-running network services make it a good fit for this role.
+
+TypeScript with the Next.js framework is used for the analyst frontend, and TypeScript is also used for the shared data contracts. TypeScript provides type safety for the user interface and shares type definitions with the backend contracts. The frontend additionally relies on the broader JavaScript and Node.js tooling ecosystem, which is consistent with JavaScript being one of the most widely used languages on GitHub and the primary language of the npm ecosystem that the artifact analyzes \cite{github_language_stats,npm_language_stats}.
+
+Node.js additionally hosts the orchestration command-line scripts under \texttt{scripts/ml}. These scripts coordinate the higher-level workflow steps, such as generating the repository seed, building the dataset, executing the training notebook, and staging artifacts. They wrap the underlying Python pipeline so that the full reproducible workflow can be triggered through consistent \texttt{npm} commands.
+
+\section{Historical Dataset Builder}
+\label{sec:impl-dataset-builder}
+
+The historical dataset builder is implemented as a Python package under \texttt{app/training/maintenance\_dataset}. It transforms a repository seed and raw GH Archive event files into an inspectable, leakage-controlled training dataset. The package is divided into focused modules, summarized in Table~\ref{tab:impl-dataset-modules}, so that ingestion, event parsing, feature computation, and label computation can be tested independently.
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset builder modules}
+\label{tab:impl-dataset-modules}
+\begin{tabular}{p{0.22\textwidth} p{0.70\textwidth}}
+\hline
+\textbf{Module} & \textbf{Responsibility} \\
+\hline
+\texttt{adapters} & deps.dev, GitHub, and npm/PyPI registry adapters used for package-to-repository resolution and stable metadata. \\
+\texttt{events} & GH Archive parsing into normalized repository histories of commits, issues, pull requests, releases, stars, and forks. \\
+\texttt{features} & Observation-time feature computation from history before \(t\). \\
+\texttt{labels} & 12-month maintenance and inactivity label computation from the future window. \\
+\texttt{sampling} & Candidate sampling and popularity-tier derivation. \\
+\texttt{pipeline} & The \texttt{DatasetBuilder} orchestrating ingestion, snapshots, labels, and export. \\
+\texttt{storage} & JSON and JSON Lines reading and writing of the intermediate artifacts. \\
+\texttt{cli} & The command-line entry point used by the orchestration scripts. \\
+\hline
+\end{tabular}
+\end{table}
+
+The \texttt{DatasetBuilder} class executes the construction workflow described in the methodology. The \texttt{ingest\_candidates} step loads and de-duplicates seed candidates, resolves each package to a GitHub repository, and writes the \texttt{repositories.jsonl}, \texttt{packages.jsonl}, and \texttt{package\_repository\_links.jsonl} files. Candidates that cannot be mapped to a GitHub repository, and forks when forks are excluded, are dropped at this stage. The \texttt{build\_snapshots} step iterates over quarterly observation dates and, for each repository, constructs an \texttt{ObservationSnapshot} with explicit feature and label windows before computing the observation-time feature row. The \texttt{build\_labels} step computes the future-window label for every snapshot, and \texttt{export\_training\_dataset} assembles the final training rows and the runtime repository feature cache.
+
+The separation between observation-time and future-window computation is enforced in code. Each snapshot fixes its feature window to the year before \(t\), a previous window to the year before that, and a label window of twelve months after \(t\). Feature computation only consults events at or before the observation date, and label computation only consults events strictly after it. The label implementation reflects the two-of-four maintenance rule directly: it counts the number of distinct months with human commits, the number of distinct future contributors, the number of future releases or published package versions, and the number of merged pull requests, and marks a repository as maintained only if it is not archived or deleted within the horizon and at least two of these conditions are met. When the dataset-wide archive coverage horizon does not span the full label window, the row is marked with a \texttt{future\_window\_incomplete} signal and left unlabeled, so that missing data is never silently interpreted as inactivity. The granularity at which this coverage horizon is measured was itself the subject of a correction, discussed in Section~\ref{sec:impl-label-completeness}.
+
+Human-versus-bot attribution is applied during both feature and label computation. Commit and contributor counts use an actor filter that excludes automated accounts, so that bot-driven activity does not inflate maintenance evidence. This is consistent with the cautious treatment of responsiveness signals motivated in the methodology, where automated responses are known to distort interaction metrics \cite{hasan2023firstresponse}.
+
+The export step produces two outputs with different purposes. The training snapshot file follows the existing training contract and feeds the model-training pipeline. The repository feature cache stores, for each repository, the most recent observation-time feature row, with diagnostic-only fields such as \texttt{repo\_archived\_at\_obs} removed. This cache is what later allows the runtime backend to score a previously seen repository in the richer full-history regime rather than the cold-start regime.
+
+\subsection{Feature-Set Refinement}
+\label{sec:impl-feature-refinement}
+
+The feature set used for training was refined iteratively, as described in the methodology's formative development step. The first feature set contained variables that turned out to be poor point-in-time predictors. A representative example is a raw open-issue count: large, actively maintained projects can carry very large issue backlogs, so a model can wrongly associate a high absolute issue count with risk, even though the project is healthy. The revised feature set therefore replaces raw counts with relational and trend-based variables, such as issue closure ratio, issue backlog growth, stale-issue share, and pull-request response and merge latency, which are more comparable across projects of different sizes.
+
+A second class of problems came from repository identity. Some packages point to mirror repositories rather than to the upstream development repository, which can make a project look inactive even though active development happens elsewhere. The mapping logic therefore prefers explicit seed and deps.dev mappings and resolves the primary package-to-repository link per repository, rather than treating every registry entry as an independent signal. Finally, the revised feature set keeps \texttt{repo\_archived\_at\_obs} only as diagnostic metadata and excludes already-archived observation rows during model fitting, so that the visible archival flag cannot become a shortcut label.
+
+\subsection{Label-Completeness Correction}
+\label{sec:impl-label-completeness}
+
+A further design-cycle iteration corrected how label completeness is determined. The prediction objective, the label window \((t, t + 12\text{ months}]\), and the two-of-four maintenance rule are unchanged; the iteration concerns only which observation rows are admitted as labeled examples, and is therefore a dataset-construction correction rather than a change of the model or its target.
+
+The methodology requires that a row be labeled only when the historical data actually covers its full future window, precisely because the absence of future activity is meaningful only when the future period is observed (Section~\ref{sec:method-leakage-prevention}). The initial implementation enforced this using each repository's own last observed event as its coverage end. This proxy is biased in a way that is correlated with the outcome: a repository that simply falls quiet has, by definition, no late events, so its coverage end is early and its later observation rows were discarded as ``incomplete'', even when the archive fully covered the corresponding window. The very repositories that exhibit the inactivity the model is meant to detect were thus systematically under-represented among the labeled positives. The symptom was visible in the smoke fixtures, where a synthetic late ``coverage marker'' event had to be injected into an otherwise inactive repository purely to keep its rows labelable.
+
+The corrected implementation gates completeness on a dataset-wide archive coverage horizon rather than on any single repository's last event. This horizon is the latest event observed across all repositories in the run, or an explicit cutoff supplied through the new \texttt{-{}-coverage-end} option, which the orchestration script defaults to the latest day of complete hourly GH Archive coverage. A repository that is silent but still inside this horizon is now labeled inactive, as intended, while rows whose window genuinely extends past the available data remain unlabeled. For transparency, a row whose own last event precedes the horizon but which remains labelable is annotated with a \texttt{repo\_silent\_before\_horizon} diagnostic signal, so that the share of rescued silent repositories can be reported as part of the dataset-quality summary. This change aligns the implementation with the leakage-prevention rule already stated in the methodology and removes a selection effect that previously depressed the labeled inactive population.
+
+\subsection{Dataset-Quality Reporting}
+\label{sec:impl-dataset-quality}
+
+To make the per-run documentation items required by the methodology (Section~\ref{sec:method-observation-window}) reproducible rather than transcribed by hand, a small \texttt{dataset\_quality} module computes a structured quality report from the exported snapshot rows. It produces three views. The first is row accounting: the total, labeled, and unlabeled counts, the inactive and active label balance, the number of already-archived-at-observation rows that are excluded from fitting, and the completeness signals introduced above, including the \texttt{repo\_silent\_before\_horizon} count that quantifies how many labeled examples the corrected coverage gate retains. The second is label balance per slice, broken down by ecosystem and by popularity tier, which exposes where labeled examples are concentrated. The third is per-feature missingness, derived from the missing-signal annotations already attached during feature extraction, so that a feature is reported as missing only when its underlying observation-time signal was unavailable rather than genuinely zero. The report is rendered in the training notebook alongside the existing coverage summary, and the row accounting deliberately records whether label-completeness signals are present in the export so that a value of zero is not misread as an absence of incomplete windows when an older export simply did not carry them.
+
+\section{Model Implementations}
+\label{sec:impl-models}
+
+OSS Risk Radar implements three learned model families: Logistic Regression, a feedforward neural network, and XGBoost. The first two are implemented from first principles so that the artifact stays dependency-light and fully inspectable, while XGBoost is used through its established library. All three are trained for both the full-history and the cold-start feature regimes, and all three share the same dataset, the same time-aware split, and the same calibration and evaluation code.
+
+\subsection{Logistic Regression and the Neural Network}
+\label{sec:impl-from-scratch}
+
+The Logistic Regression model is implemented directly in Python. It standardizes each input feature using training-set means and standard deviations, stores these standardization parameters with the model, and fits the coefficients by gradient descent on the class-weighted log-likelihood. Class-balanced sample weights counter the label imbalance, and an L2 penalty regularizes the coefficients. Because the model stores explicit per-feature coefficients, it doubles as an interpretable baseline whose weights can be inspected to check whether the engineered features behave as expected. This interpretability is what made it useful during the feature-set refinement described in Section~\ref{sec:impl-feature-refinement}.
+
+The neural network is a multilayer perceptron implemented on top of numpy, without a deep-learning framework. It uses two hidden layers of 64 and 32 units with ReLU activations and a sigmoid output, standardizes its inputs in the same way as the Logistic Regression model, and initializes its weights with Xavier-uniform values under a fixed random seed for reproducibility. Training uses mini-batch stochastic gradient descent on the binary cross-entropy objective, with balanced class weights and L2 regularization. The default configuration matches the methodology: a learning rate of \(0.01\), 150 epochs, a batch size of 256, and an L2 penalty of \(0.001\). The forward and backward passes are written explicitly, which keeps the model transparent and removes any heavy training dependency from the artifact.
+
+\subsection{XGBoost}
+\label{sec:impl-xgboost}
+
+The XGBoost model wraps the \texttt{xgboost} library. It trains a gradient-boosted tree ensemble with a binary-logistic objective and the same class-balanced sample weights as the other models. The default configuration uses 80 boosting rounds, a maximum tree depth of three, a learning rate of \(0.08\), row and column subsampling of \(0.9\), L2 leaf regularization, the histogram tree method, and a fixed seed. After training, the trained booster is serialized to its JSON representation and stored inside the model artifact, and the gain-based feature importances are computed and normalized so they can be displayed in the evaluation dashboard. Storing the booster as JSON keeps the artifact self-contained and portable across the offline pipeline and the runtime service.
+
+\subsection{Calibration, Thresholding, and Evaluation}
+\label{sec:impl-calibration-eval}
+
+All three model families produce raw probabilities that are post-processed identically. A histogram (binned) calibrator is fitted on the validation predictions: it groups predictions into probability bins, computes the empirical inactivity rate in each bin with Laplace-style smoothing toward the base rate, and enforces a non-decreasing rate across bins so the mapping stays monotonic. The fitted bins are stored with the artifact and re-applied at inference time, which means the runtime service reproduces exactly the calibration that was evaluated. A decision threshold is then selected on the calibrated validation predictions by maximizing the F1 score, with recall, precision, and proximity to \(0.5\) used as ordered tie-breakers.
+
+The evaluation module computes the reported metrics on the held-out test slice: accuracy, precision, recall, F1 score, Brier score, log loss, ROC-AUC, expected calibration error, and a combined model-quality score. ROC-AUC is computed from the rank-based pairwise comparison of positive and negative predictions, and expected calibration error uses ten equal-width bins. The combined quality score normalizes ROC-AUC into ranking skill above random and combines it, with weights of \(0.6\) and \(0.4\), with a Brier skill score measured against a climatology baseline that always predicts the dataset label rate. This single value summarizes both ranking ability and probability quality, which matters because the score is intended for risk-oriented interpretation rather than only for ranking \cite{niculescu2005probabilities,saito2015precision}.
+
+\subsection{Slice Evaluation}
+\label{sec:impl-slice-evaluation}
+
+A single aggregate metric can hide a subgroup on which the model performs poorly, because a strong majority subgroup can mask a weak minority one. A further evaluation-validity iteration therefore adds a slice-evaluation helper that re-scores the same held-out predictions within subgroups, reusing the existing metric implementation so that no separate evaluation logic is introduced. To make this possible the training pipeline now also returns the per-row held-out predictions alongside the aggregate result; these are used only for analysis and are not written into the model artifact, so the serialized artifacts and the reported headline metrics are unchanged. The harness includes a consistency check that requires the aggregate over all slices to reproduce the model's reported held-out ROC-AUC, so the per-slice figures are guaranteed to originate from the same execution as the headline metrics.
+
+The subgroups are those that vary meaningfully in the foundation dataset: popularity tier, repository-age band, a cold-start-like versus has-history regime, and whether the repository was still active at the observation date. The last of these is the active-at-\(t\) subset referenced in the evaluation strategy (Section~\ref{sec:method-evaluation-strategy}) and in the discussion of activity persistence in Chapter~\ref{chap:validity}: restricting the evaluation to repositories that are still active at \(t\) separates genuine early-warning skill from the trivial tendency of already-quiet repositories to remain quiet. Ecosystem is deliberately excluded as a slice, because the repository-first foundation seed assigns the same provenance ecosystem to every row and therefore holds it effectively constant; cross-ecosystem evaluation would require a package-first sampling frame and is left to future work. Because slicing reduces the sample size, each slice is reported with its own row count, ranking metrics that are undefined for single-class slices are reported as absent rather than as a misleading value, and thin slices are interpreted with corresponding caution.
+
+\subsection{Repository-Disjoint Robustness Split}
+\label{sec:impl-grouped-split}
+
+The reported evaluation uses a chronological split: rows are ordered by observation date and cut into training, validation, and test partitions. Because observations are taken quarterly, a repository contributes several snapshots over time, so the same repository can appear in both the training and the test partition, and the twelve-month label windows of its successive snapshots overlap. The held-out metric then partly reflects generalization to later observations of repositories already seen during training, which is optimistic relative to performance on genuinely new repositories. This is the deployment-realistic question --- the system does re-score repositories over time --- but it should not be the only question asked.
+
+A further evaluation iteration therefore adds a repository-disjoint split that assigns every snapshot of a repository to a single partition, so that the held-out set contains only repositories absent from training. The split is selectable through a configuration option whose default preserves the chronological behavior, so the reported artifacts and headline metrics are unchanged, and the pipeline asserts that the partitions are repository-disjoint whenever the grouped split is used. Running the deployed full-history model under both splits lets the difference between them bound the optimism introduced by repository recurrence. In practice the held-out ROC-AUC decreases only marginally under the repository-disjoint split, which indicates that the model's discrimination is not an artifact of memorizing individual repositories but generalizes to unseen ones; the exact figures for both splits are produced in the training notebook and reported in Chapter~\ref{chap:evaluation}.
+
+\subsection{Artifact Serialization}
+\label{sec:impl-artifacts}
+
+Each trained model is serialized to a self-describing JSON artifact. The artifact stores the model family and version, the ordered feature names, the model parameters (coefficients and standardization for Logistic Regression, weights and biases for the neural network, or the serialized booster for XGBoost), the calibration bins, the decision threshold, the feature-set version, and the training timestamp. Because the feature names and standardization are part of the artifact, the runtime service can construct the feature vector in the correct order and apply the same transformations without sharing code paths with the training process. Each training run is written to a run file under the training runs directory together with the dataset hash and the held-out metrics, and a \texttt{latest-run.json} pointer records the most recently produced run.
+
+\section{Training Orchestration}
+\label{sec:impl-training-orchestration}
+
+The training workflow is notebook-primary. The notebook \texttt{notebooks/oss-maintenance-training.ipynb} is the visible thesis workflow and the artifact export boundary. The headless command \texttt{npm run ml:train} executes this notebook non-interactively and writes the run artifacts and the latest-run pointer, so that the same notebook is used for both interactive exploration and reproducible artifact generation. The end-to-end command \texttt{npm run ml:bootstrap} chains dataset construction and notebook-based training, and the foundation variants of these commands use the preserved 5{,}000-repository seed and the filtered GH Archive cache for the thesis-grade run.
+
+The orchestration scripts wrap the Python pipeline rather than reimplementing it. They pass through the seed file, the GH Archive source, the output directories, the observation window, and the dataset-size guardrails, which keeps the reproducibility parameters explicit at the command line. Listing~\ref{lst:impl-train} shows the headless training command.
+
+\begin{lstlisting}[language=bash,caption={Headless notebook-based training},label={lst:impl-train}]
+npm run ml:train
+\end{lstlisting}
+
+\section{Artifact Staging and Promotion Gate}
+\label{sec:impl-staging}
+
+Trained artifacts are not deployed automatically. The staging command \texttt{npm run ml:stage-training} validates a candidate training bundle and promotes it into the deployed bundle under \texttt{deployment/training} only if it passes a set of quality gates. This gate is the safety boundary between experimentation and deployment.
+
+The staging script first validates the dataset itself: the snapshots must be non-empty, every labeled snapshot must come from a real GitHub repository, and the bundle must contain at least a configured minimum number of distinct repositories and distinct inactive repositories. It then validates the model run artifacts: all required model artifacts must be present and complete for the latest dataset hash, and their feature versions must match the expected full-history and cold-start feature sets. This prevents a partial or inconsistent bundle, for example one missing the cold-start models, from reaching deployment.
+
+The most important gate is the regression comparison. Before promotion, the candidate artifacts are compared against the currently deployed baseline. For each required model, the script checks that ROC-AUC has not dropped, and that the Brier score has not increased, by more than a configured tolerance. If any required model fails this comparison, promotion is rejected and the existing staged bundle is retained. When promotion succeeds, the script normalizes the snapshot file, the run artifacts, and the repository feature cache to their runtime paths and writes them into the deployed bundle. As a result, the deployed model can only ever improve or stay within tolerance relative to the previously evaluated baseline, which protects the runtime behavior from accidental regressions during iteration.
+
+\section{Scoring Service}
+\label{sec:impl-scoring-service}
+
+The scoring service is a FastAPI application under \texttt{mltraining/scoring/app}. It exposes a small internal interface: health and readiness probes, a \texttt{/features/extract} endpoint for feature extraction, and the \texttt{/score/model} endpoint that scores a batch of dependencies with a supplied model artifact. The service does not own a model registry; instead, the backend passes the staged artifact in the scoring request, which keeps the scoring service stateless and makes the deployed model an explicit input rather than hidden state.
+
+For each dependency, the service builds the feature vector in the artifact's feature order, imputing missing signals as neutral zero values and recording which signals were missing. It deserializes the artifact according to its model family, computes the raw probability, and applies the stored calibrator to obtain the calibrated inactivity probability. This probability is scaled to a 0--100 inactivity-risk score, and a complementary 12-month maintenance-outlook score is derived as its inverse. The service assigns a discrete risk bucket and an action level from the score, where the action level is one of \texttt{monitor}, \texttt{review}, or \texttt{replace\_candidate}, so that the continuous score maps onto the triage actions used in the demonstrator.
+
+The service keeps the inactivity prediction and the security posture strictly separate, exactly as required by the methodology. The OpenSSF Scorecard signal is summarized into a parallel security-posture score and is never fed into the predictive feature vector \cite{zahan2022scorecard}. A confidence value is computed from the completeness of the available input signals and the decisiveness of the prediction, and explicit caveats are attached when calibration bins are missing, when the artifact's feature version is unexpected, or when input signals had to be imputed. Finally, the service returns human-readable explanation factors and evidence items so that an analyst can see which signals shaped the score rather than only the number itself.
+
+\section{Backend Orchestration Service}
+\label{sec:impl-backend}
+
+The backend is a Go service under \texttt{backend/api}. It exposes the public REST API for uploads, analyses, dependencies, dependency graphs, jobs, and the training dataset and run endpoints. Its central responsibility is to turn a submission into an enriched, scored analysis reliably, even in the presence of slow or failing external providers.
+
+Analyses are processed through a durable job queue backed by PostgreSQL. When a submission arrives, the service creates an analysis record and a job record in a single transaction and returns immediately. A background worker leases the next pending job, processes it, and persists the result. If processing fails, the job is retried with a bounded number of attempts and a retry delay, and it is only marked as failed once the attempts are exhausted. This design makes the analysis lifecycle resilient and observable, and it decouples the user-facing request from the slower enrichment and scoring work. For repository submissions, the service also reuses a recent completed analysis when one exists for the same repository and the same staged model set, which avoids redundant re-enrichment.
+
+During processing, the worker parses the dependency manifests, enriches each dependency, and scores it. Manifest parsing supports \texttt{package-lock.json}, \texttt{requirements.txt}, \texttt{poetry.lock}, and \texttt{go.mod}, producing direct and transitive dependencies. Enrichment resolves a package to its repository through deps.dev when needed, fetches stable repository metadata from GitHub, and retrieves the Scorecard signal, attaching the raw signals to the dependency for display. Each enrichment provider is implemented as a separate adapter, so a single failing provider degrades the available signals rather than the whole analysis.
+
+The backend implements the two prediction regimes from the methodology at runtime. When it enriches a dependency, it attempts to look the repository up in the staged repository feature cache. On a cache hit, the dependency is scored in the full-history regime using the cached observation-time features; on a miss, it falls back to the cold-start regime using only approximate features derived from live metadata, and a caveat records this. When several model artifacts are staged for the same dataset hash and regime, the backend scores the dependency with each and combines the results into an ensemble profile by averaging the scores, while also retaining the per-model outputs and adding a model-agreement explanation factor that reports the spread between models. This lets the interface show both a consensus score and the degree of agreement behind it.
+
+\section{Analyst Frontend}
+\label{sec:impl-frontend}
+
+The frontend is a Next.js application under \texttt{frontend/web} that uses the React component model and the application router. It provides the analyst-facing workflow and the evaluation dashboards used during the thesis. Submission is handled through a form that accepts a repository URL, a dependency-artifact upload, or a demo analysis. Once an analysis completes, the dashboard presents the dependency overview with risk distribution, ecosystem breakdown, and filtering, and dedicated views render the dependency table, the dependency graph, the path explorer, and the per-dependency detail card with its risk profile, caveats, and evidence.
+
+A second area of the frontend is the machine-learning evaluation surface under \texttt{ml-evaluation}. These pages read the training dataset and run endpoints exposed by the backend and visualize them with purpose-built charts, including a calibration curve, a model-metric comparison across the trained models, a Logistic Regression coefficient view, and a training-metric history. These views were used directly to inspect and report model behavior during the thesis, which ties the implementation back to the evaluation strategy in Chapter~\ref{chap:methodology} and supports the results presented in Chapter~\ref{chap:evaluation}.
+
+\section{Deployment}
+\label{sec:impl-deployment}
+
+The artifact is containerized for both local and production-style operation. Canonical image definitions live under \texttt{deployment/docker}, and a Docker Compose file orchestrates PostgreSQL, the Go backend, the scoring service, and the frontend for local development; a single \texttt{npm run dev} command builds and starts the full stack and waits for the services to become healthy. For production-style operation, the project is deployed to a k3s cluster managed by Argo CD, with container images published to a registry and the application served behind a public domain \cite{ossRiskRadarReadme}. Because the deployed model bundle is a versioned set of files under \texttt{deployment/training}, deployment and model promotion remain auditable: the running service uses exactly the artifacts that passed the staging gate described in Section~\ref{sec:impl-staging}.
+
+\section{Summary}
+\label{sec:impl-summary}
+
+This chapter described how the methodological design of OSS Risk Radar was implemented as working software. The system is a monorepo of cooperating components: a Python data-engineering and scoring core, a Go orchestration backend, and a TypeScript frontend, tied together by Node.js orchestration scripts. The historical dataset builder turns a repository seed and GH Archive events into a leakage-controlled, inspectable dataset; the model layer implements Logistic Regression and a neural network from first principles alongside an XGBoost model, with shared calibration and evaluation code and self-describing JSON artifacts. A notebook-primary training workflow and a quality-gated staging pipeline separate experimentation from deployment, the FastAPI scoring service applies the evaluated models and calibration at runtime, and the Go backend orchestrates durable, resilient analyses that select between the full-history and cold-start regimes and combine multiple models into an ensemble profile. The next chapter reports and discusses the empirical results obtained with this implementation.
