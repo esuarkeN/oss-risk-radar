@@ -1,0 +1,37 @@
+\chapter{Related Work}
+\label{chap:related-work}
+
+This chapter positions the thesis relative to existing work. Chapter~\ref{chap:background} introduced the general concepts of supply-chain security, project health metrics, and tabular machine learning. This chapter goes one step further and discusses concrete prior approaches, their operationalizations, and the gap that this thesis addresses. The aim is comparative rather than introductory: for each strand of work, the relevant difference to the present inactivity-risk artifact is made explicit.
+
+\section{OSS Inactivity and Abandonment Operationalizations}
+\label{sec:related-inactivity}
+
+A first strand of work studies how open-source inactivity or abandonment can be defined and measured. Robinson et al. apply survival-style analysis to open-source Python projects and use revision activity as an observable signal for project survival \cite{robinson2022survival}. This supports the idea that activity-based signals can be used to reason about future project state, but survival analysis typically estimates time-to-event over a population rather than producing a per-repository forward-looking risk score at a fixed horizon.
+
+Miller et al. study dependency abandonment in the npm ecosystem and show that abandonment is common among widely used packages and that downstream projects often remain exposed, including through transitive dependencies \cite{miller2025abandonment}. Their earlier interview study shows that developers frequently lack clear strategies for responding to abandonment \cite{miller2023wingingit}. These works motivate the practical need for an early-warning triage signal, but they characterize abandonment retrospectively and at the ecosystem level rather than predicting a 12-month inactivity outcome for an individual repository from point-in-time features.
+
+The present thesis differs in three ways. First, it fixes a 12-month prediction horizon and a snapshot-based observation date, so that prediction is strictly forward-looking. Second, it derives the label from a multi-signal maintenance rule rather than from a single revision-activity threshold. Third, it treats issue and pull-request activity as predictors rather than as label components, to avoid conflating maintenance interaction with the released-artifact signal.
+
+\section{Repository Health Metrics and Dashboards}
+\label{sec:related-health-metrics}
+
+A second strand concerns standardized project health measurement. The CHAOSS project provides metrics models, including the Starter Project Health Metrics Model, as structured entry points for measuring project health \cite{chaossStarterProjectHealth}. Goggins et al. argue that making project health transparent requires structured measurement and interpretation rather than isolated indicators \cite{goggins2021transparent}. These efforts provide a vocabulary of observable signals that informs the feature engineering of this thesis.
+
+However, dashboards and metrics models are primarily descriptive: they surface indicators for human interpretation rather than predicting a future outcome. Yehudi et al. show that individual context-free health indicators are insufficient for identifying sustainability across heterogeneous projects \cite{yehudi2023contextfree}. This thesis takes that critique as a design constraint: instead of presenting single indicators, it combines many observation-time signals into a calibrated predictive model and evaluates the combination empirically, while explicitly acknowledging that the resulting score is a limited operational proxy.
+
+\section{Security-Practice Indicators}
+\label{sec:related-security-practice}
+
+A third strand concerns security-practice signals. OpenSSF Scorecard provides automated security-related checks for open-source repositories \cite{zahan2022scorecard}, and supply-chain frameworks such as the NIST SSDF and SLSA motivate why dependency security posture matters \cite{souppaya2022ssdf,slsa2025spec}. These checks describe present-day security practices rather than future maintenance activity.
+
+This distinction is important for the present work. As stated in Section~\ref{sec:method-research-design}, OpenSSF Scorecard is used as a parallel security-posture signal in OSS Risk Radar and is deliberately not part of the inactivity model feature vector. The thesis therefore does not claim that security-practice checks improve inactivity prediction; it keeps the predictive target focused on activity and maintenance signals, while presenting security posture as complementary context for triage.
+
+\section{Responsiveness Measurement Caveats}
+\label{sec:related-responsiveness}
+
+Several features in this thesis describe responsiveness, such as issue first-response time and pull-request response and merge latency. Hasan et al. show that bot-generated first responses can distort time-to-first-response measurements in GitHub pull requests \cite{hasan2023firstresponse}. This thesis treats responsiveness features as reconstructed proxies derived from GH Archive event state, interprets them cautiously, and does not treat them as canonical CHAOSS metrics, in line with the caveats discussed in Section~\ref{sec:background-metric-pitfalls}.
+
+\section{Summary}
+\label{sec:related-summary}
+
+Prior work provides operationalizations of inactivity and abandonment, standardized health metrics, and security-practice indicators, but it largely characterizes project state descriptively or retrospectively. The gap addressed by this thesis is a reproducible, forward-looking, calibrated per-repository inactivity-risk model with a fixed 12-month horizon, a multi-signal maintenance label, leakage-controlled point-in-time features, and an explicit separation between the inactivity prediction target and parallel security-posture signals.

@@ -24,8 +24,10 @@ from app.training.datasets import (
     DatasetSplit,
     TrainingRow,
     build_dataset,
+    grouped_time_aware_split,
     labeled_rows,
     load_snapshots_from_uri,
+    repository_key,
     rows_to_matrix,
     summarize_dataset,
     time_aware_split,
@@ -45,6 +47,18 @@ class TrainingRunConfig:
     threshold: float | None = None
     feature_regime: str = FEATURE_REGIME_FULL_HISTORY
     exclude_already_archived_at_observation: bool = True
+    # "temporal" (default) keeps the reported chronological split and artifact behavior.
+    # "grouped" assigns every repository to one partition for unseen-repository evaluation.
+    split_strategy: str = "temporal"
+
+
+@dataclass(slots=True)
+class HoldoutEvaluation:
+    feature_names: list[str]
+    rows: list[TrainingRow]
+    predictions: list[float]
+    labels: list[int]
+    threshold: float
 
 
 @dataclass(slots=True)
@@ -59,6 +73,9 @@ class TrainingRunResult:
     calibration_bins: list[CalibrationBin]
     artifact: ModelArtifact | None
     note: str
+    # Per-row held-out predictions, exposed for slice evaluation. Not serialized into the
+    # model artifact (see app.training.artifact_export), so the artifact bytes are unchanged.
+    holdout: HoldoutEvaluation | None = None
 
 
 MODEL_ALIASES = {
@@ -133,6 +150,15 @@ def _assert_disjoint_splits(split: DatasetSplit) -> None:
         raise ValueError("train, validation, and test splits must be disjoint; duplicate snapshot identities crossed a split boundary")
 
 
+def _assert_repository_disjoint_splits(split: DatasetSplit) -> None:
+    train_repos = {repository_key(row) for row in split.train}
+    validation_repos = {repository_key(row) for row in split.validation}
+    test_repos = {repository_key(row) for row in split.test}
+
+    if train_repos & validation_repos or train_repos & test_repos or validation_repos & test_repos:
+        raise ValueError("grouped split must be repository-disjoint; a repository crossed a split boundary")
+
+
 def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
     algorithm, feature_regime, model_name, model_version = _model_spec(config.algorithm, config.feature_regime)
     feature_version = feature_version_for_regime(feature_regime)
@@ -160,11 +186,21 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
             note="At least three labeled snapshots are required for time-aware experimentation scaffolding.",
         )
 
-    split = time_aware_split(
-        labeled_dataset_rows,
-        train_ratio=config.train_ratio,
-        validation_ratio=config.validation_ratio,
-    )
+    if config.split_strategy == "grouped":
+        split = grouped_time_aware_split(
+            labeled_dataset_rows,
+            train_ratio=config.train_ratio,
+            validation_ratio=config.validation_ratio,
+        )
+        _assert_repository_disjoint_splits(split)
+    elif config.split_strategy == "temporal":
+        split = time_aware_split(
+            labeled_dataset_rows,
+            train_ratio=config.train_ratio,
+            validation_ratio=config.validation_ratio,
+        )
+    else:
+        raise ValueError(f"unsupported split_strategy: {config.split_strategy}")
     _assert_disjoint_splits(split)
 
     train_matrix, train_labels = rows_to_matrix(split.train, dataset.feature_names)
@@ -274,6 +310,13 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
         note=(
             f"Trained {model.model_name} using {feature_version} on a {split_note} time-aware split with class-balanced inactive labels. "
             "Already-archived-at-observation rows are excluded so the model learns pre-inactivity warning indicators."
+        ),
+        holdout=HoldoutEvaluation(
+            feature_names=list(dataset.feature_names),
+            rows=list(split.test),
+            predictions=list(calibrated_predictions),
+            labels=list(test_labels),
+            threshold=metrics.threshold,
         ),
     )
 

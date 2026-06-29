@@ -1,7 +1,27 @@
 from datetime import UTC, datetime, timedelta
 
 from app.schemas.score import TrainingSnapshotInput
-from app.training.datasets import build_dataset, time_aware_split
+from app.training.datasets import (
+    TrainingRow,
+    build_dataset,
+    grouped_time_aware_split,
+    repository_key,
+    time_aware_split,
+)
+
+
+def _training_row(repository: str, observed_at: datetime) -> TrainingRow:
+    return TrainingRow(
+        analysis_id=f"dataset:{repository}:{observed_at.date().isoformat()}",
+        dependency_id=f"{repository}:{observed_at.date().isoformat()}",
+        package_name=repository,
+        package_version="snapshot",
+        ecosystem="github",
+        observed_at=observed_at,
+        label_inactive_12m=1,
+        missing_signals=[],
+        feature_values={},
+    )
 
 
 def test_build_dataset_orders_rows_by_observed_at(training_snapshots: list[dict[str, object]]) -> None:
@@ -46,3 +66,30 @@ def test_time_aware_split_defaults_to_75_15_10_for_large_datasets(training_snaps
     assert len(split.train) == 75
     assert len(split.validation) == 15
     assert len(split.test) == 10
+
+
+def test_grouped_split_is_repository_disjoint() -> None:
+    rows: list[TrainingRow] = []
+    base = datetime(2023, 1, 1, tzinfo=UTC)
+    for repo_index in range(8):
+        repository = f"acme__repo{repo_index}"
+        for quarter in range(4):
+            rows.append(_training_row(repository, base + timedelta(days=90 * quarter)))
+
+    split = grouped_time_aware_split(rows, train_ratio=0.6, validation_ratio=0.2)
+
+    train_repos = {repository_key(row) for row in split.train}
+    validation_repos = {repository_key(row) for row in split.validation}
+    test_repos = {repository_key(row) for row in split.test}
+
+    # No repository may appear in more than one partition.
+    assert not (train_repos & validation_repos)
+    assert not (train_repos & test_repos)
+    assert not (validation_repos & test_repos)
+    # Every partition is non-empty and every row of a repository stays together.
+    assert train_repos and validation_repos and test_repos
+    assert len(split.train) + len(split.validation) + len(split.test) == len(rows)
+    for repo in train_repos:
+        assert sum(1 for row in rows if repository_key(row) == repo) == sum(
+            1 for row in split.train if repository_key(row) == repo
+        )

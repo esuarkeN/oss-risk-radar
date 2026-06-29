@@ -76,7 +76,7 @@ The merged-PR clause is a practical proxy for the broader "merged PRs or maintai
 
 - Observation-time features are derived only from timestamps `<= t`.
 - Labels are derived only from timestamps in `(t, t + 12 months]`.
-- If GH Archive coverage does not extend through the full future window, the row remains unlabeled.
+- If the dataset-wide GH Archive coverage horizon does not extend through the full future window, the row remains unlabeled. Completeness is gated on this dataset-wide horizon (the latest event observed across all repositories, or an explicit `--coverage-end YYYY-MM-DD`), **not** on a single repository's last event. This keeps a repository that simply goes quiet labelable as inactive instead of dropping it as "incomplete coverage". A still-labelable row whose own last event precedes the horizon is annotated with a `repo_silent_before_horizon` diagnostic signal. The repo-level helper defaults `--coverage-end` to the latest day of complete local hourly coverage.
 - GitHub live enrichment is limited to stable repository metadata. Historical stars, forks, issues, PRs, and releases are not taken from current API totals.
 
 ## Feature notes

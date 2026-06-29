@@ -31,6 +31,8 @@ export function parseArgs(argv) {
     observationEndProvided: false,
     observationIntervalMonths: "3",
     labelHorizonMonths: "12",
+    coverageEnd: null,
+    coverageEndProvided: false,
     sampleLimitPerEcosystem: "24",
     sampleLimitPerEcosystemProvided: false,
     sampleSeed: "42",
@@ -96,6 +98,11 @@ export function parseArgs(argv) {
         break;
       case "--label-horizon-months":
         args.labelHorizonMonths = next;
+        index += 1;
+        break;
+      case "--coverage-end":
+        args.coverageEnd = next;
+        args.coverageEndProvided = true;
         index += 1;
         break;
       case "--sample-limit-per-ecosystem":
@@ -218,6 +225,7 @@ function applyNpmForwardedConfig(args, positionals) {
   applyStringConfig(args, "observationEnd", "observation-end", leakedValues);
   applyStringConfig(args, "observationIntervalMonths", "observation-interval-months", leakedValues);
   applyStringConfig(args, "labelHorizonMonths", "label-horizon-months", leakedValues);
+  applyStringConfig(args, "coverageEnd", "coverage-end", leakedValues);
   applyStringConfig(args, "sampleLimitPerEcosystem", "sample-limit-per-ecosystem", leakedValues);
   applyStringConfig(args, "sampleSeed", "sample-seed", leakedValues);
   applyStringConfig(args, "githubToken", "github-token", leakedValues);
@@ -227,6 +235,9 @@ function applyNpmForwardedConfig(args, positionals) {
   applyStringConfig(args, "minimumInactiveRepositories", "minimum-inactive-repositories", leakedValues);
   if (npmConfig("observation-end") !== undefined) {
     args.observationEndProvided = true;
+  }
+  if (npmConfig("coverage-end") !== undefined) {
+    args.coverageEndProvided = true;
   }
   if (npmConfig("sample-limit-per-ecosystem") !== undefined) {
     args.sampleLimitPerEcosystemProvided = true;
@@ -389,6 +400,13 @@ function applyDynamicCoverageDefaults(args, commandNeedsHistory) {
   if (!latestCompleteCoverageDate) {
     console.log("GHArchive coverage: no complete local daily coverage inferred; using supplied observation range");
     return;
+  }
+
+  // The latest complete daily coverage doubles as the dataset-wide label horizon: rows whose
+  // 12-month window runs past it stay unlabeled, while quiet-but-covered repositories stay
+  // labelable. An explicit --coverage-end still wins.
+  if (!args.coverageEndProvided) {
+    args.coverageEnd = latestCompleteCoverageDate;
   }
 
   const labelHorizonMonths = parsePositiveInteger(args.labelHorizonMonths, "--label-horizon-months");
@@ -558,6 +576,10 @@ export async function buildDataset(args) {
     "--feature-cache-output-path",
     toRunnerPath(featureCacheOutputPath, args.runner),
   ];
+
+  if (args.coverageEnd) {
+    cliArgs.push("--coverage-end", args.coverageEnd);
+  }
 
   if (commandNeedsSeed.has(args.command)) {
     cliArgs.push("--seed-file", toRunnerPath(seedFile, args.runner));

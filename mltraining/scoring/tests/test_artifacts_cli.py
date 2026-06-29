@@ -58,9 +58,11 @@ def test_artifact_export_writes_both_model_artifacts(tmp_path, training_snapshot
         "xgboost-full-history",
         "logistic-regression-cold-start",
         "xgboost-cold-start",
+        "neural-net-full-history",
+        "neural-net-cold-start",
     }
     assert latest_path.exists()
-    assert len(list(runs_dir.glob("*.json"))) == 4
+    assert len(list(runs_dir.glob("*.json"))) == 6
 
     latest = json.loads(latest_path.read_text(encoding="utf-8"))
     assert latest["status"] == "completed"

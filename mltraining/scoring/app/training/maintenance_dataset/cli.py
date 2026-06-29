@@ -27,6 +27,15 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--observation-end", default="2024-01-01", help="Observation range end date in YYYY-MM-DD format.")
     parser.add_argument("--observation-interval-months", type=int, default=3, help="Observation cadence in months.")
     parser.add_argument("--label-horizon-months", type=int, default=12, help="Future label horizon in months.")
+    parser.add_argument(
+        "--coverage-end",
+        default=None,
+        help=(
+            "Explicit dataset archive coverage end (YYYY-MM-DD). Rows whose label window extends past this "
+            "stay unlabeled; quiet repositories within coverage stay labelable. Defaults to the latest event "
+            "observed across all repositories."
+        ),
+    )
     parser.add_argument("--sample-limit-per-ecosystem", type=int, default=24, help="Deterministic sample limit for each ecosystem.")
     parser.add_argument("--sample-seed", type=int, default=42, help="Deterministic seed for package sampling.")
     parser.add_argument("--training-output-path", default=None, help="Optional final snapshot JSON path. Defaults under output-dir.")
@@ -59,6 +68,7 @@ def main() -> int:
         observation_end=_parse_date(args.observation_end),
         observation_interval_months=args.observation_interval_months,
         label_horizon_months=args.label_horizon_months,
+        coverage_end=_parse_date(args.coverage_end) if args.coverage_end else None,
         sample_limit_per_ecosystem=args.sample_limit_per_ecosystem,
         sample_seed=args.sample_seed,
         include_forks=args.include_forks,

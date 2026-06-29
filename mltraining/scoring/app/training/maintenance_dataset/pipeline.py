@@ -88,6 +88,7 @@ class DatasetBuildConfig:
     feature_cache_output_path: str | Path | None = None
     merge_existing_training_output: bool = True
     offline_repository_metadata: bool = False
+    coverage_end: datetime | None = None
 
 
 @dataclass(slots=True)
@@ -247,12 +248,15 @@ class DatasetBuilder:
         repositories = self._load_repositories()
         packages = self._load_packages()
         histories = histories if histories is not None else self._load_histories(repositories)
+        dataset_coverage_end = self._resolve_dataset_coverage_end(histories)
         labels: list[SnapshotLabelRow] = []
         for snapshot in self._load_observation_snapshots():
             repository = repositories[snapshot.repository_id]
             package = packages[snapshot.package_id]
             history = histories.get(repository.full_name.lower())
-            labels.append(build_snapshot_label(snapshot, repository, package, history))
+            labels.append(
+                build_snapshot_label(snapshot, repository, package, history, dataset_coverage_end=dataset_coverage_end)
+            )
         write_jsonl(self.paths.snapshot_labels, labels)
         labeled_rows = sum(1 for item in labels if item.label_inactive_12m is not None)
         return {"snapshot_labels": len(labels), "labeled_rows": labeled_rows}
@@ -545,6 +549,16 @@ class DatasetBuilder:
         start = self.config.observation_start - timedelta(days=730)
         end = self._add_months(self.config.observation_end, self.config.label_horizon_months)
         return self.adapters.gharchive.load_repository_histories(self.config.gharchive_sources, names, start=start, end=end)
+
+    def _resolve_dataset_coverage_end(self, histories: dict[str, RepositoryHistory]) -> datetime | None:
+        # The dataset-wide archive horizon. An explicit configured cutoff wins; otherwise we
+        # use the latest event seen across all repositories, which approximates how far the
+        # supplied GH Archive sources actually extend. This is deliberately independent of any
+        # single repository's last event so that quiet repositories stay labelable as inactive.
+        if self.config.coverage_end is not None:
+            return self.config.coverage_end
+        coverage_ends = [history.coverage_end for history in histories.values() if history.coverage_end is not None]
+        return max(coverage_ends) if coverage_ends else None
 
     def _observation_before_entity_start(self, observed_at: datetime, repository: RepositoryRecord, package: PackageRecord) -> bool:
         package_start = package.first_version().published_at if package.first_version() is not None else None

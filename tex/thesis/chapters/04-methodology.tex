@@ -1,0 +1,317 @@
+\chapter{Methodology}
+\label{chap:methodology}
+
+This chapter describes the methodological design used to answer the research question. The thesis follows a Design Science Research-oriented approach, because the work develops and evaluates an artifact for a practical software engineering problem: an inactivity-risk scoring workflow for open-source dependencies \cite{hevner2004design,peffers2007design}. The artifact is implemented as OSS Risk Radar, a decision-support tool for open-source dependency maintenance and software supply-chain risk triage \cite{ossRiskRadarReadme}.
+
+The methodology combines artifact construction with historical supervised learning. Instead of using manually assigned or synthetic labels, the training dataset is built from real open-source repositories and historical GitHub event data. For each repository, the dataset builder creates observation snapshots at defined points in time. Each snapshot contains only features that would have been available at or before the observation date \(t\). The label is derived from the following 12-month period \((t, t + 12\text{ months}]\). This design reflects the intended use case: estimating future inactivity risk from observable signals, rather than explaining inactivity after it has already occurred.
+
+\section{Research Design}
+\label{sec:method-research-design}
+
+The research design consists of three connected parts. First, OSS Risk Radar is developed as a software artifact that can ingest dependency or repository information, enrich it with public signals, and produce inactivity-oriented risk scores. Second, a historical supervised training dataset is constructed from real open-source repositories. Third, trained model artifacts are evaluated quantitatively and qualitatively to determine whether the scores are useful for risk-based dependency triage.
+
+The artifact is not designed as a vulnerability scanner or as a definitive trust score. It does not claim that a repository is secure or insecure. Instead, it estimates whether observable maintenance and activity signals indicate elevated inactivity risk. This distinction is important because inactivity is only one aspect of dependency risk. A repository can be inactive without being vulnerable, and a repository can be active while still having security weaknesses. Therefore, the output of the inactivity model is interpreted as a decision-support signal for prioritization and manual review.
+
+The scope of the predictive model must be stated precisely, because the research question also refers to security-practice signals. In OSS Risk Radar, OpenSSF Scorecard is used as a \emph{separate} security-posture signal in the surrounding enrichment workflow \cite{zahan2022scorecard}. It is \emph{not} part of the predictive feature vector of the inactivity model. The inactivity classifier is trained exclusively on activity, maintenance, responsiveness, and concentration signals. Security-practice indicators are therefore presented to the analyst as a parallel posture output alongside the inactivity score, not as predictors of inactivity. This separation avoids overclaiming that security-practice checks improve inactivity prediction, and it keeps the predictive target conceptually clean.
+
+\section{Iterative Artifact Development}
+\label{sec:method-iterative-development}
+
+OSS Risk Radar was developed iteratively. The first iteration validated the end-to-end workflow with a small pilot training run. This run was used to check whether the pipeline could create historical snapshots, train a model, export an artifact, and return risk scores for manually inspected repositories. It was not treated as the empirical basis of the thesis and is not used in any reported result.
+
+Manual inspection of the first model outputs revealed that the initial scoring behavior was not sufficiently plausible in all cases. Three repositories were used as informal, formative review examples during this diagnostic step; they are reported as qualitative development evidence and not as a measure of model accuracy:
+
+\begin{itemize}
+    \item \texttt{prometheus-community/helm-charts}: the model assigned high risk, although the repository appeared operationally active and the result was considered implausible.
+    \item \texttt{DuNeSliM/AIO}: the model assigned low risk, although manual inspection suggested that a higher risk assessment would be more plausible.
+    \item \texttt{telekom/Open-Telekom-Integration-Platform}: the model assigned low risk. This was broadly acceptable, but the interpretation was nuanced because the repository had not received a recent commit at the time of inspection.
+\end{itemize}
+
+These cases were used as an error-analysis step. The feature set and training setup were then revised to better separate activity, release behavior, contributor dynamics, responsiveness, backlog pressure, and concentration-related risk. This process is consistent with the Design Science Research framing of the thesis: the artifact was built, evaluated, diagnosed, and refined based on observed shortcomings.
+
+The second iteration produced the dataset and model artifacts used for the reported evaluation. It expanded the empirical basis to a repository-first foundation dataset with a target of 5,000 repositories. The foundation seed is generated from public, non-fork GitHub repositories with a license object and a minimum star threshold. The documented default threshold is 100 stars \cite{ossRiskRadarDatasetBuilder}. The seed is stratified across active, dormant, and archived buckets. These buckets are used only as sampling provenance and not as training labels. The actual supervised label is derived from future repository behavior.
+
+\section{Definitions and Prediction Target}
+\label{sec:method-definitions}
+
+The central unit of analysis is a GitHub repository. In the training dataset, a row represents a repository observation snapshot at a specific observation date \(t\). The prediction task is binary classification:
+
+\begin{quote}
+Given the observable repository and package state at time \(t\), predict whether the repository becomes inactive within the following 12 months.
+\end{quote}
+
+The exported training label is named \texttt{label\_inactive\_12m}. Internally, the dataset builder first computes a maintenance variable named \texttt{maintained\_12m}. The inactivity label is then derived as the inverse of this maintenance variable. If the future window is incomplete, the row remains unlabeled and is not used for supervised model fitting.
+
+The future label window is defined as:
+
+\[
+(t, t + 12\text{ months}]
+\]
+
+The current implementation treats a repository as maintained within the 12-month horizon if it is not archived or deleted by \(t + 12\text{ months}\) and if at least two of the following future-window activity checks are fulfilled:
+
+\begin{enumerate}
+    \item human commits occur in at least three distinct months,
+    \item at least two contributors are active,
+    \item at least one release or package version publication occurs,
+    \item at least two pull requests are merged.
+\end{enumerate}
+
+This definition deliberately avoids treating a single event as sufficient evidence of maintenance. At the same time, it remains operationally measurable from historical public data. The merged-pull-request condition is used as a practical proxy for broader maintainer interaction, because GH Archive data does not reliably identify all maintainer responses without additional issue-comment attribution logic \cite{ossRiskRadarDatasetBuilder}.
+
+The specific thresholds in this rule (the two-of-four requirement and the numeric cut-offs for months, contributors, releases, and merged pull requests) are heuristic design choices rather than externally validated constants. They were chosen to require sustained rather than incidental activity. Because the label definition directly influences class prevalence, the sensitivity of the results to these thresholds is treated as a robustness concern and discussed in Section~\ref{sec:method-limitations}.
+
+\section{Data Sources}
+\label{sec:method-data-sources}
+
+The dataset construction uses public and reproducible data sources wherever possible. GH Archive is used as the primary source for historical GitHub event data. GH Archive provides public GitHub event streams as hourly archives \cite{gharchive}. The dataset builder parses these archives into normalized repository histories, including commits, issues, pull requests, releases, stars, and forks.
+
+Repository and package metadata are enriched through multiple adapters. deps.dev is used for package and dependency metadata where package-to-repository mapping is required \cite{depsdevApi}. GitHub metadata is used for stable repository fields such as creation time, default branch, and fork state. OpenSSF Scorecard is used by the broader OSS Risk Radar enrichment workflow as a separate security-practice signal source \cite{zahan2022scorecard}, but, as stated in Section~\ref{sec:method-research-design}, it is not part of the historical inactivity feature vector. Present-day GitHub activity totals are not used as historical observation-time features, because they would leak information from after the observation date into older snapshots.
+
+The repository-first foundation dataset is based on a generated seed file. The current foundation workflow targets 5,000 repositories and uses public, non-fork GitHub repositories with a license object and a minimum star threshold. The active, dormant, and archived seed buckets are sampling strata only; they are not labels. The final supervised labels are derived exclusively from future activity in the 12-month label window.
+
+The seed deliberately oversamples inactive repositories: before sampling, the documented default frame is approximately 45\% active and 55\% dormant or archived repositories \cite{ossRiskRadarDatasetBuilder}. This is a methodological choice that increases the number of positive (inactive) examples available for supervised learning. It also has an important consequence: the inactive base rate in the constructed dataset is higher than the natural inactivity rate of the broader OSS population. In the held-out test slice the inactive rate is approximately 0.56, that is, close to balanced. Predicted probabilities are therefore calibrated to this sampled prevalence rather than to a specific deployment population. The implications of this sampling-induced prevalence for calibration and for the interpretation of precision are revisited in Section~\ref{sec:method-evaluation-strategy} and Section~\ref{sec:method-limitations}.
+
+\section{Dataset Construction Workflow}
+\label{sec:method-dataset-construction}
+
+The historical dataset builder creates an inspectable dataset through a sequence of intermediate steps. The implemented workflow is summarized in Table~\ref{tab:method-dataset-flow}.
+
+\begin{table}[htbp]
+\centering
+\caption{Historical dataset construction workflow}
+\label{tab:method-dataset-flow}
+\begin{tabular}{p{0.08\textwidth} p{0.82\textwidth}}
+\hline
+\textbf{Step} & \textbf{Description} \\
+\hline
+1 & Load repository candidates from the foundation seed. \\
+2 & Use the seed strata to obtain a mixture of active, dormant, and archived repository histories. \\
+3 & Resolve repository identities from explicit seed fields or package metadata where required. \\
+4 & Enrich stable repository metadata through GitHub. \\
+5 & Parse GH Archive event files into normalized repository histories. \\
+6 & Build quarterly observation snapshots for each repository. \\
+7 & Compute observation-time features using only data available at or before \(t\). \\
+8 & Compute 12-month labels using only the future window \((t, t + 12\text{ months}]\). \\
+9 & Export the final snapshot dataset for the existing model-training workflow. \\
+10 & Write a repository feature cache for runtime full-history scoring. \\
+\hline
+\end{tabular}
+\end{table}
+
+The builder writes intermediate files under the configured output directory. These files make the dataset construction process auditable and allow the generated dataset to be inspected before training. The documented intermediate outputs include:
+
+\begin{itemize}
+    \item \texttt{repositories.jsonl}
+    \item \texttt{packages.jsonl}
+    \item \texttt{package\_repository\_links.jsonl}
+    \item \texttt{observation\_snapshots.jsonl}
+    \item \texttt{snapshot\_features.jsonl}
+    \item \texttt{snapshot\_labels.jsonl}
+    \item \texttt{training\_snapshots.json}
+    \item \texttt{repository-feature-cache.json}
+\end{itemize}
+
+The final export follows the existing training snapshot contract used by OSS Risk Radar. This allows the historical dataset builder to feed the notebook-based training pipeline without requiring a separate model-training interface.
+
+\section{Observation Window and Historical Coverage}
+\label{sec:method-observation-window}
+
+The full-history training run used in the reported evaluation contains 50,000 total rows. Of these, 41,832 rows are labeled and 8,168 rows remain unlabeled. The observation dates range from \texttt{2023-01-01} to \texttt{2025-04-01}. The labeled rows are split into 31,374 training rows, 6,275 validation rows, and 4,183 held-out test rows.
+
+\begin{table}[htbp]
+\centering
+\caption{Full-history dataset summary for the reported run}
+\label{tab:method-current-dataset-summary}
+\begin{tabular}{p{0.38\textwidth} p{0.42\textwidth}}
+\hline
+\textbf{Item} & \textbf{Value} \\
+\hline
+Target repository count & 5,000 \\
+Total snapshot rows & 50,000 \\
+Labeled rows & 41,832 \\
+Unlabeled rows & 8,168 \\
+Earliest observation date & \texttt{2023-01-01} \\
+Latest observation date & \texttt{2025-04-01} \\
+Training rows & 31,374 \\
+Validation rows & 6,275 \\
+Test rows & 4,183 \\
+\hline
+\end{tabular}
+\end{table}
+
+The label horizon is 12 months. Therefore, a repository snapshot can only be used as a labeled training example if the available historical data covers the full future label window. If this condition is not met, the row remains unlabeled. This is important because the absence of future activity is only meaningful when the future observation period is actually covered.
+
+For local development, a smaller GH Archive subset can be used to test the pipeline. Such runs are useful for smoke testing but are not sufficient for thesis-grade label claims. Sparse random event hours would make inactivity labels unreliable, because missing events could be caused by incomplete data coverage rather than actual inactivity. For the thesis evaluation, the relevant event coverage must be complete for the selected observation and label windows.
+
+\section{Feature Engineering}
+\label{sec:method-feature-engineering}
+
+The feature engineering step converts repository and package history before \(t\) into numeric variables. The reported full-history model uses feature set \texttt{feature-set-v3-full-history}. The implemented feature groups are shown in Table~\ref{tab:method-feature-groups}.
+
+\begin{table}[htbp]
+\centering
+\caption{Implemented full-history feature groups}
+\label{tab:method-feature-groups}
+\begin{tabular}{p{0.25\textwidth} p{0.65\textwidth}}
+\hline
+\textbf{Feature group} & \textbf{Example features} \\
+\hline
+Repository mapping and dependency context &
+Repository mapping availability, direct dependency flag, dependency count at observation time. \\
+Commit activity &
+Commits in the last 30, 90, and 365 days; active commit months; days since last commit. \\
+Contributor activity &
+Contributors in the last 90 and 365 days; new contributors; contributor concentration. \\
+Issue activity &
+Opened and closed issues; issue closure ratio; issue backlog growth; stale open issues. \\
+Pull request activity &
+Opened, merged, and closed-unmerged pull requests; pull request merge ratio; stale open pull requests; pull-request response and merge latency. \\
+Release activity &
+Releases in the last 365 days; days since last release; versions published in the last 365 days; recent release flag. \\
+Age and popularity proxies &
+Package age; repository age; stars and forks observed in the available historical data; popularity tier. \\
+Ecosystem indicators &
+npm, PyPI, Go, Maven, and other ecosystem flags. \\
+Derived risk proxies &
+Activity drop; contributor drop; release gap risk; concentration risk score. \\
+Responsiveness and backlog pressure &
+Issue first-response time; issue resolution time; stale issue share; pull-request response and merge latency. \\
+\hline
+\end{tabular}
+\end{table}
+
+Some variables are practical proxies rather than complete measurements. For example, stars and forks reconstructed from GH Archive represent lower-bound historical proxies if the archive window starts after the repository was created. Similarly, issue backlog growth and pull-request response features are reconstructed from available event data and should not be interpreted as canonical CHAOSS metrics. This limitation is relevant because prior work has shown that context-free project health indicators can be misleading across heterogeneous open-source projects \cite{yehudi2023contextfree}.
+
+The feature set was revised after the first manual review. The revised v3 feature set makes responsiveness, stale backlog pressure, release gaps, activity drops, and contributor concentration more explicit. At the same time, features that would not be reliable point-in-time predictors are excluded from the predictive vector. For example, \texttt{repo\_archived\_at\_obs} is retained as diagnostic metadata, while already archived observation rows are filtered out during model fitting so that archival does not become a shortcut label.
+
+\section{Full-History and Cold-Start Prediction Regimes}
+\label{sec:method-prediction-regimes}
+
+OSS Risk Radar distinguishes between two prediction regimes.
+
+The first regime is the full-history setting. In this setting, historical repository activity is available from GH Archive and the repository feature cache. The model can use time-windowed activity signals such as commits, releases, contributor dynamics, issue and pull-request behavior, and activity drops before the observation date. This setting is closest to the main research question because it evaluates whether historical repository signals can predict 12-month inactivity. It is the primary evaluated regime in this thesis.
+
+The second regime is the cold-start setting. In this setting, reconstructed historical GH Archive features are not available for the repository at scoring time. The model must rely on the public metadata and signals that can be obtained through the runtime enrichment workflow. This setting is important for practical use because a submitted repository may not yet be present in the local historical feature cache.
+
+The two regimes are not interchangeable, and they are not evaluated with the same weight. The full-history model is expected to perform better because it has access to richer temporal information, and it carries the main evaluation of the research question. The cold-start model is trained and reported as a secondary, more broadly applicable regime; it is expected to be less precise and is interpreted accordingly rather than as a competing result.
+
+\section{Leakage Prevention}
+\label{sec:method-leakage-prevention}
+
+Temporal leakage is a central threat in historical prediction tasks. The dataset builder applies the following rules to reduce leakage:
+
+\begin{enumerate}
+    \item Observation-time features are derived only from timestamps \( \leq t \).
+    \item Labels are derived only from timestamps in \( (t, t + 12\text{ months}] \).
+    \item Rows with incomplete future-window coverage remain unlabeled.
+    \item Live GitHub enrichment is limited to stable repository metadata such as creation time, default branch, and fork state.
+    \item Historical stars, forks, issues, pull requests, and releases are not taken from current GitHub API totals.
+    \item Seed strata such as active, dormant, and archived are used only for sampling provenance and not as labels.
+\end{enumerate}
+
+These rules are necessary because the model is intended to simulate a real prediction setting. At observation time \(t\), future activity is unknown. Therefore, information from after \(t\) must be excluded from feature construction and used only for label derivation.
+
+It is important to distinguish temporal leakage from a related but legitimate effect. Several observation-time features, such as days since the last commit, the activity-drop ratio, or days since the last release, are strongly correlated with future inactivity by construction: a repository that is already quiet at \(t\) is statistically likely to remain quiet. This is not leakage, because these features use only information available at or before \(t\). It does mean, however, that part of the predictive signal reflects activity persistence rather than the early detection of decline. This effect motivates both the trivial recency baseline and the active-at-\(t\) subset evaluation described in Section~\ref{sec:method-evaluation-strategy}.
+
+\section{Model Training}
+\label{sec:method-model-training}
+
+The training workflow is notebook-primary. The notebook \texttt{notebooks/oss-maintenance-training.ipynb} is used as the visible thesis workflow and as the artifact export boundary for the headless training command \texttt{npm run ml:train}. Runtime scoring is artifact-based: the scoring service expects staged model artifacts instead of retraining models during normal application use \cite{ossRiskRadarReadme}.
+
+The reported learned model families are Logistic Regression, XGBoost, and a feedforward neural network, each trained for the full-history and cold-start regimes. Logistic Regression is used as an interpretable linear model, XGBoost as a strong non-linear gradient-boosted tree model, and the neural network as a non-linear model that learns feature interactions through hidden layers \cite{james2021islr}. In addition, a trivial recency baseline is included as a non-learned reference. This baseline predicts inactivity directly from a single recency signal, such as days since the last commit or days since the last release, using a threshold selected on the validation slice. The recency baseline is necessary because the label is itself activity-related (Section~\ref{sec:method-leakage-prevention}); the learned models are only worth reporting if they outperform this baseline, especially on repositories that are still active at \(t\).
+
+The neural network is a multilayer perceptron implemented directly on top of numpy rather than a deep-learning framework, which keeps the artifact dependency-light and fully inspectable. It uses two hidden layers with 64 and 32 units, ReLU activations, and a sigmoid output. Inputs are standardized using training-set means and standard deviations, which are stored with the artifact and reapplied at inference time, and the weights are initialized with Xavier-uniform values under a fixed random seed for reproducibility. The network is trained by mini-batch stochastic gradient descent on the binary cross-entropy objective, with balanced class weights to counter label imbalance and L2 weight regularization. The default configuration uses a learning rate of \(0.01\), 150 epochs, a batch size of 256, and an L2 penalty of \(0.001\). Like the other learned models, its probabilities are calibrated on the validation slice before evaluation.
+
+Training uses a time-aware split with the default ratio:
+
+\[
+75\% \text{ training}, \quad 15\% \text{ validation}, \quad 10\% \text{ test}
+\]
+
+Rows are ordered by observation date before splitting. The model is fitted on the earliest training slice. The validation slice is used for probability calibration and threshold selection. A histogram-based (binned) calibrator is fitted on the validation predictions, and a decision threshold is selected from the validation data. The final test slice is held out for reporting evaluation results. This design avoids a random split that would mix earlier and later observation periods and would not match the intended forecasting setting.
+
+\section{Evaluation Strategy}
+\label{sec:method-evaluation-strategy}
+
+The evaluation consists of three layers.
+
+First, the trained models are evaluated quantitatively on the time-aware held-out test slice. This test slice is not used for model fitting or calibration and therefore provides the primary internal evaluation of the model. The reported metrics include accuracy, precision, recall, F1 score, Brier score, log loss, ROC-AUC, expected calibration error, and a combined quality score. ROC-AUC measures the model's ranking ability. Brier score and expected calibration error evaluate whether predicted probabilities are suitable for risk-oriented interpretation \cite{niculescu2005probabilities}. The combined quality score is a single summary value that normalizes ROC-AUC into ranking skill above random and combines it with a Brier skill score measured against a baseline that always predicts the dataset label rate; its exact definition is documented with the implementation \cite{ossRiskRadarDatasetBuilder}.
+
+Because the inactive base rate in the evaluation slice is close to balanced (approximately 0.56), ROC-AUC is a reasonable primary ranking metric. Precision-recall analysis is reported in addition, because the deployment prevalence is expected to differ from the sampled prevalence, and precision-recall curves are more informative than ROC curves when the positive class is rare \cite{saito2015precision}. For the same reason, reported precision and calibration values are interpreted as conditional on the sampled prevalence rather than as deployment guarantees.
+
+Two comparisons are used to guard against inflated headline numbers. The learned models are compared against the trivial recency baseline, and they are additionally evaluated on the subset of repositories that are still active at \(t\). The active-at-\(t\) subset is the harder and more decision-relevant case, because predicting that an already dormant repository stays inactive is close to trivial. Reporting this subset separately prevents activity persistence (Section~\ref{sec:method-leakage-prevention}) from dominating the overall metrics.
+
+Second, the model is evaluated qualitatively through manual case review. This step is important because inactivity risk is an operational proxy and not a directly observable universal truth. Manual review helps identify cases where the model assigns a plausible score for the wrong reason, or where repository context suggests that the score should be interpreted carefully. The first iteration of OSS Risk Radar used this type of review to identify weaknesses in the initial feature set.
+
+Third, the current held-out test split is treated as a valid internal evaluation, because the model has not seen those rows during fitting or calibration. It evaluates temporal generalization within the constructed dataset. It does not, however, evaluate generalization to a freshly sampled set of repositories; that question is left to future work and is discussed as a threat to external validity in Chapter~\ref{chap:validity}.
+
+The primary deployed full-history artifact is \texttt{xgboost-full-history}, version \texttt{0.2.0}, trained with \texttt{feature-set-v3-full-history}; it is the model staged for runtime scoring. Its held-out test metrics, together with those of the Logistic Regression model, the neural network (\texttt{neural-net-full-history}), and the trivial recency baseline, are reported and interpreted in Chapter~\ref{chap:evaluation}.
+
+\section{Reproducibility}
+\label{sec:method-reproducibility}
+
+The dataset builder and training pipeline are executed through repository scripts. The foundation seed can be generated with:
+
+\begin{verbatim}
+npm run ml:seed:foundation -- `
+  --target-repositories 5000 `
+  --github-token <TOKEN>
+\end{verbatim}
+
+The larger foundation dataset can then be built and trained with:
+
+\begin{verbatim}
+npm run ml:bootstrap:foundation -- `
+  --github-token <TOKEN> `
+  --gharchive-source <GHARCHIVE_PATH>
+\end{verbatim}
+
+The underlying full command path uses a generated foundation seed, a GH Archive source directory, a dedicated training output directory, a training snapshot export path, and a repository feature cache output path. The repository documentation recommends the foundation path for the thesis/training base, while the smaller default bootstrap path remains a local smoke-test workflow \cite{ossRiskRadarDatasetBuilder}.
+
+For each final training run, the following items should be documented:
+
+\begin{itemize}
+    \item seed generation command and seed metadata,
+    \item GH Archive coverage period,
+    \item output directory,
+    \item training snapshot path,
+    \item repository feature cache path,
+    \item dataset hash,
+    \item model artifact path,
+    \item model name and version,
+    \item feature version,
+    \item number of total, labeled, and unlabeled rows,
+    \item train, validation, and test split sizes,
+    \item held-out evaluation metrics.
+\end{itemize}
+
+The reported full-history run uses dataset hash:
+
+\begin{verbatim}
+c14ea4562c6e319d475c3387e68cf180879d403bff91d33c06b7fbc7430dbaab
+\end{verbatim}
+
+and exports the model artifact:
+
+\begin{verbatim}
+/app/tmp/training/runs/20260617T141157053388Z-xgboost-full-history-c14ea4562c6e.json
+\end{verbatim}
+
+The corresponding source revision is archived at the commit referenced in the artifact citation \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline.
+
+\section{Methodological Limitations}
+\label{sec:method-limitations}
+
+This section records limitations that are intrinsic to the method and its data. Broader validity threats and their mitigation are consolidated in Chapter~\ref{chap:validity}; this section is intentionally restricted to data and design limitations.
+
+First, the method depends on the completeness of the provided GH Archive files. If relevant event hours are missing, repository histories may be incomplete. Second, public GitHub activity does not capture all possible maintenance activity. Some projects may move development to other platforms, publish releases outside GitHub, or maintain stable software with little visible activity. Third, package-to-repository mappings can be ambiguous, especially when packages move repositories or when metadata is incomplete. Fourth, the inactivity label is a proxy for elevated maintenance risk and not a definitive statement that a project is abandoned or insecure, and the label thresholds described in Section~\ref{sec:method-definitions} are heuristic design choices whose effect on prevalence and results is a known robustness concern.
+
+The foundation seed also influences the scope and the prevalence of the results. Because the current thesis dataset targets repositories with a license object and a minimum star threshold, the evaluation focuses on visible open-source repositories rather than all public GitHub repositories. In addition, the deliberate oversampling of dormant and archived repositories means that the inactive base rate in the dataset (approximately 0.56 in the test slice) does not reflect the natural inactivity rate of the broader OSS population. As a result, predicted probabilities and precision values are conditional on this sampled prevalence and should be recalibrated before being interpreted as deployment-time risk estimates.
+
+Finally, the current internal test split evaluates temporal generalization within the constructed dataset. This is useful and valid for model development, but it does not replace external validation on a newly sampled repository set. For this reason, external validation on repositories outside the foundation dataset is identified as future work in Chapter~\ref{chap:conclusion} rather than claimed as a completed result.
+
+\section{Summary}
+\label{sec:method-summary}
+
+This chapter described the methodology used to develop and evaluate OSS Risk Radar. The approach follows an iterative artifact-development process, constructs a historical supervised dataset from real repositories, derives observation-time features without future leakage, labels snapshots using a 12-month future window, and trains separate model artifacts for full-history and cold-start scoring. It also fixes the predictive scope of the inactivity model, separates it from the parallel security-posture signal, and defines a recency baseline and an active-at-\(t\) subset evaluation to guard against activity-persistence effects and sampling-induced prevalence. The next chapter describes the implementation of OSS Risk Radar and explains how the dataset builder, model artifacts, scoring service, backend, and frontend are integrated into the overall artifact.

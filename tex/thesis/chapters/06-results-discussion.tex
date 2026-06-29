@@ -1,0 +1,33 @@
+\chapter{Results and Discussion}
+\label{chap:evaluation}
+
+This chapter reports and interprets the empirical results of the trained
+artifacts. The label \texttt{chap:evaluation} is retained for backward
+compatibility with existing cross-references.
+
+\section{Predictive Performance}
+\label{sec:results-performance}
+
+Report the held-out test metrics of the full-history model
+(\texttt{xgboost-full-history}, version \texttt{0.2.0}) and the
+cold-start models, together with the Logistic Regression model, the
+neural network (\texttt{neural-net-full-history}), and the trivial
+recency baseline. Discuss ROC-AUC, precision, recall, F1, and the
+combined quality score. Compare the learned models against the recency
+baseline, and report the additional active-at-\(t\) subset evaluation
+defined in Section~\ref{sec:method-evaluation-strategy}, so that activity
+persistence does not inflate the headline numbers.
+
+\section{Calibration and Threshold Selection}
+\label{sec:results-calibration}
+
+Report Brier score, log loss, expected calibration error, and the
+reliability of the calibrated probabilities. Note that calibration is
+conditional on the sampled prevalence (Section~\ref{sec:method-limitations}).
+
+\section{Feature Importance and Error Analysis}
+\label{sec:results-features}
+
+Report feature importance, qualitative case review, and error analysis,
+including the formative review repositories from
+Section~\ref{sec:method-iterative-development}.

@@ -1,0 +1,16 @@
+\chapter{Practical Demonstrator}
+\label{chap:demonstrator}
+
+This chapter demonstrates how the trained inactivity-risk model is applied end to end, from a project's dependency set to a ranked risk view that supports triage. While Chapter~\ref{chap:evaluation} evaluates the model on the held-out test set, this chapter shows the artifact operating on a realistic dependency input, as required by the demonstration phase of the Design Science Research process \cite{hevner2004design,peffers2007design}.
+
+\section{Example Dependency Set and Mapping}
+\label{sec:demo-mapping}
+
+Describe the demonstrator input: a project manifest or lockfile is parsed into a direct and transitive dependency set, and each package is mapped to its source repository through deps.dev and package registry metadata \cite{depsdevApi}. Report how many dependencies were resolved to repositories, and note unresolved or ambiguous mappings as a coverage limitation.
+
+\section{Risk Ranking Output and Interpretation Guidance}
+\label{sec:demo-ranking}
+
+Show the ranked inactivity-risk view produced by the scoring service for the example dependency set. For each scored dependency, the output includes the inactivity-risk score, the separate security-posture score, a confidence and signal-completeness value, an action level (\texttt{monitor}, \texttt{review}, or \texttt{replace\_candidate}), and the explanation factors and evidence items behind the score \cite{ossRiskRadarReadme}.
+
+Provide interpretation guidance consistent with the rest of the thesis: the score is a prioritization signal, not a trust or security verdict; low confidence or high missing-signal counts should reduce decisiveness; and predicted probabilities are calibrated to the sampled prevalence rather than to the demonstrator project's population (Section~\ref{sec:method-limitations}).

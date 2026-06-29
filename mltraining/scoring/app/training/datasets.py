@@ -148,6 +148,70 @@ def time_aware_split(rows: list[TrainingRow], train_ratio: float = 0.75, validat
     )
 
 
+def repository_key(row: TrainingRow) -> str:
+    """Stable repository identifier for a training row.
+
+    Dataset snapshot identities are ``"{repository_id}:{observation_date}"``, so stripping the
+    trailing observation date recovers the repository. Rows whose identity does not follow that
+    shape fall back to their full identity and form their own group.
+    """
+    return row.dependency_id.rsplit(":", 1)[0]
+
+
+def grouped_time_aware_split(
+    rows: list[TrainingRow],
+    train_ratio: float = 0.75,
+    validation_ratio: float = 0.15,
+    *,
+    key_fn=repository_key,
+) -> DatasetSplit:
+    """Repository-disjoint train/validation/test split.
+
+    Every snapshot of a given repository is assigned to exactly one partition, so the held-out
+    set measures generalization to unseen repositories rather than to future observations of
+    repositories already seen in training. Groups are ordered by their latest observation date
+    (with the repository key as a deterministic tie-breaker), which keeps the split time-aware
+    when observation times vary and deterministic when they do not. Partition sizes target the
+    same row ratios as the temporal split.
+    """
+    if len(rows) < 3:
+        raise ValueError("at least three labeled rows are required for a grouped split")
+    if train_ratio <= 0 or validation_ratio <= 0 or train_ratio + validation_ratio >= 1:
+        raise ValueError("train_ratio and validation_ratio must be positive and leave room for a test split")
+
+    groups: dict[str, list[TrainingRow]] = {}
+    for row in rows:
+        groups.setdefault(key_fn(row), []).append(row)
+    if len(groups) < 3:
+        raise ValueError("at least three repository groups are required for a grouped split")
+
+    ordered_keys = sorted(groups, key=lambda key: (max(row.observed_at for row in groups[key]), key))
+    total = len(rows)
+    group_count = len(ordered_keys)
+
+    train: list[TrainingRow] = []
+    validation: list[TrainingRow] = []
+    test: list[TrainingRow] = []
+    cumulative = 0
+    for index, key in enumerate(ordered_keys):
+        group_rows = sorted(groups[key], key=lambda row: row.observed_at)
+        remaining_groups = group_count - index
+        fraction = cumulative / total
+        if fraction < train_ratio and remaining_groups > 2:
+            train.extend(group_rows)
+        elif fraction < train_ratio + validation_ratio and remaining_groups > 1:
+            validation.extend(group_rows)
+        else:
+            test.extend(group_rows)
+        cumulative += len(group_rows)
+
+    return DatasetSplit(
+        train=sorted(train, key=lambda row: row.observed_at),
+        validation=sorted(validation, key=lambda row: row.observed_at),
+        test=sorted(test, key=lambda row: row.observed_at),
+    )
+
+
 def rows_to_matrix(rows: list[TrainingRow], feature_names: list[str]) -> tuple[list[list[float]], list[int]]:
     matrix = [[float(row.feature_values[name]) for name in feature_names] for row in rows]
     labels = [int(row.label_inactive_12m or 0) for row in rows]

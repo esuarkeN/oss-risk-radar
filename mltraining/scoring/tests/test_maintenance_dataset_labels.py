@@ -79,3 +79,53 @@ def test_build_snapshot_label_leaves_incomplete_future_windows_unlabeled() -> No
     assert label.maintained_12m is None
     assert label.label_inactive_12m is None
     assert "future_window_incomplete" in label.missing_label_signals
+
+
+def test_build_snapshot_label_labels_quiet_repo_within_dataset_coverage() -> None:
+    # A repository that falls silent before the horizon but is still inside the dataset's
+    # archive coverage must be labeled inactive, not dropped as "incomplete". This is the
+    # corrected behaviour: completeness is gated on the dataset coverage horizon, not the
+    # repository's own last event.
+    snapshot, repository, package = make_snapshot()
+    history = RepositoryHistory(
+        repository_full_name=repository.full_name,
+        commits=[CommitEvent(occurred_at=datetime(2024, 1, 10, tzinfo=UTC), actor="alice", count=2)],
+        coverage_start=datetime(2023, 1, 1, tzinfo=UTC),
+        coverage_end=datetime(2024, 6, 1, tzinfo=UTC),
+    )
+
+    label = build_snapshot_label(
+        snapshot,
+        repository,
+        package,
+        history,
+        dataset_coverage_end=datetime(2025, 2, 1, tzinfo=UTC),
+    )
+
+    assert label.maintained_12m is False
+    assert label.label_inactive_12m is True
+    assert "future_window_incomplete" not in label.missing_label_signals
+    assert "repo_silent_before_horizon" in label.missing_label_signals
+
+
+def test_build_snapshot_label_keeps_unlabeled_beyond_dataset_coverage() -> None:
+    # Past the dataset coverage horizon the row stays unlabeled even with an explicit cutoff.
+    snapshot, repository, package = make_snapshot()
+    history = RepositoryHistory(
+        repository_full_name=repository.full_name,
+        commits=[CommitEvent(occurred_at=datetime(2024, 1, 10, tzinfo=UTC), actor="alice", count=2)],
+        coverage_start=datetime(2023, 1, 1, tzinfo=UTC),
+        coverage_end=datetime(2024, 11, 1, tzinfo=UTC),
+    )
+
+    label = build_snapshot_label(
+        snapshot,
+        repository,
+        package,
+        history,
+        dataset_coverage_end=datetime(2024, 11, 1, tzinfo=UTC),
+    )
+
+    assert label.maintained_12m is None
+    assert label.label_inactive_12m is None
+    assert "future_window_incomplete" in label.missing_label_signals
