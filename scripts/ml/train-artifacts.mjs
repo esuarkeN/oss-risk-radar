@@ -10,11 +10,17 @@ const localNotebookPath = path.join(repoRoot, "notebooks", "oss-maintenance-trai
 const localExecutedNotebookPath = path.join(repoRoot, "tmp", "notebooks", "oss-maintenance-training.artifacts.executed.ipynb");
 const containerNotebookPath = "/workspace/notebooks/oss-maintenance-training.ipynb";
 const containerExecutedNotebookPath = "/workspace/tmp/notebooks/oss-maintenance-training.artifacts.executed.ipynb";
+// Models the training run is expected to produce and verify on disk. The neural-net variants are
+// trained and evaluated as comparison baselines; they are intentionally NOT part of the deployed
+// scoring ensemble (see defaultTrainingModelNames in the Go backend), so the live risk score is
+// unaffected by their presence here.
 const DEFAULT_MODEL_NAMES = [
   "logistic-regression-full-history",
   "xgboost-full-history",
   "logistic-regression-cold-start",
   "xgboost-cold-start",
+  "neural-net-full-history",
+  "neural-net-cold-start",
 ];
 
 function localPythonCommand() {
