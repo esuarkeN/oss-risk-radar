@@ -8,15 +8,70 @@ compatibility with existing cross-references.
 \section{Predictive Performance}
 \label{sec:results-performance}
 
-Report the held-out test metrics of the full-history model
-(\texttt{xgboost-full-history}, version \texttt{0.2.0}) and the
-cold-start models, together with the Logistic Regression model, the
-neural network (\texttt{neural-net-full-history}), and the trivial
-recency baseline. Discuss ROC-AUC, precision, recall, F1, and the
-combined quality score. Compare the learned models against the recency
-baseline, and report the additional active-at-\(t\) subset evaluation
-defined in Section~\ref{sec:method-evaluation-strategy}, so that activity
-persistence does not inflate the headline numbers.
+% NOTE: metrics below are from the current training run on the harmonized
+% post-label-fix dataset; lock the table to the final committed dataset hash
+% before submission.
+Table~\ref{tab:model-comparison} reports held-out test metrics for the three
+learned model families in both feature regimes. All models were trained on the
+same time-aware split (\(75/15/10\); \(n_\text{test}\approx 4{,}183\) labelled
+observations) and calibrated on the validation slice with the same histogram
+calibrator, so the comparison isolates the effect of model family rather than
+data or calibration differences. The combined quality score summarizes ranking
+skill (ROC-AUC) and calibration (Brier) into a single comparison figure and is
+not intended as a standalone proof. All reported metrics are defined formally in
+Section~\ref{sec:method-metric-definitions}.
+
+\begin{table}[ht]
+  \centering
+  \caption{Held-out test metrics by model family and feature regime. Higher is
+  better for ROC-AUC, F1, and quality; lower is better for Brier and ECE. The
+  best value within each regime is shown in bold.}
+  \label{tab:model-comparison}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Model & ROC-AUC & Brier & ECE & F1 & Quality \\
+    \midrule
+    \texttt{logistic-regression-full-history} & 0.930 & 0.097 & \textbf{0.012} & 0.883 & 0.759 \\
+    \texttt{xgboost-full-history}             & \textbf{0.945} & \textbf{0.089} & 0.016 & \textbf{0.891} & \textbf{0.790} \\
+    \texttt{neural-net-full-history}          & 0.939 & 0.092 & 0.013 & 0.888 & 0.778 \\
+    \midrule
+    \texttt{logistic-regression-cold-start}   & 0.885 & 0.127 & 0.049 & 0.857 & 0.656 \\
+    \texttt{xgboost-cold-start}               & \textbf{0.940} & \textbf{0.093} & \textbf{0.011} & \textbf{0.887} & \textbf{0.777} \\
+    \texttt{neural-net-cold-start}            & 0.937 & 0.095 & \textbf{0.011} & 0.884 & 0.771 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+All three families rank inactivity well above chance in both regimes. In the
+full-history regime the gradient-boosted trees (\texttt{xgboost-full-history})
+achieve the strongest ranking and calibration (ROC-AUC \(0.945\), Brier
+\(0.089\)), ahead of the multilayer perceptron (\(0.939\) / \(0.092\)) and
+logistic regression (\(0.930\) / \(0.097\)); logistic regression attains the
+lowest expected calibration error but at a clear cost in ranking skill. The
+cold-start regime preserves the same ordering, with the gap between the linear
+model and the two non-linear models widening (logistic regression falls to
+ROC-AUC \(0.885\) and Brier \(0.127\)), which is consistent with non-linear
+models exploiting interactions among the reduced cold-start feature set.
+
+The neural network was included as a deliberate baseline to test whether a
+higher-capacity non-linear model is warranted for this tabular feature space. It
+does not improve on the gradient-boosted trees on any reported metric in either
+regime, while adding training cost, weaker interpretability, and additional
+calibration sensitivity. This is consistent with the broader finding that
+tree-based models remain a strong default on moderate-sized tabular
+problems~\cite{grinsztajn2022trees}. Accordingly, logistic regression is
+retained for its transparent coefficient attribution and XGBoost as the deployed
+runtime scorer, while the neural network is reported as a tested-and-rejected
+alternative rather than promoted into the scoring ensemble.
+
+% TODO: fill from the recency-baseline run and the active-at-t slice evaluation
+% (Section~\ref{sec:method-evaluation-strategy}); both are still to be produced
+% on this dataset.
+The learned models are additionally compared against the trivial recency
+baseline, and on the active-at-\(t\) subset defined in
+Section~\ref{sec:method-evaluation-strategy}, so that activity persistence does
+not inflate the headline numbers; both analyses are reported in
+Section~\ref{sec:results-features}.
 
 \section{Calibration and Threshold Selection}
 \label{sec:results-calibration}

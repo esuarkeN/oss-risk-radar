@@ -236,7 +236,7 @@ Rows are ordered by observation date before splitting. The model is fitted on th
 
 The evaluation consists of three layers.
 
-First, the trained models are evaluated quantitatively on the time-aware held-out test slice. This test slice is not used for model fitting or calibration and therefore provides the primary internal evaluation of the model. The reported metrics include accuracy, precision, recall, F1 score, Brier score, log loss, ROC-AUC, expected calibration error, and a combined quality score. ROC-AUC measures the model's ranking ability. Brier score and expected calibration error evaluate whether predicted probabilities are suitable for risk-oriented interpretation \cite{niculescu2005probabilities}. The combined quality score is a single summary value that normalizes ROC-AUC into ranking skill above random and combines it with a Brier skill score measured against a baseline that always predicts the dataset label rate; its exact definition is documented with the implementation \cite{ossRiskRadarDatasetBuilder}.
+First, the trained models are evaluated quantitatively on the time-aware held-out test slice. This test slice is not used for model fitting or calibration and therefore provides the primary internal evaluation of the model. The reported metrics include accuracy, precision, recall, F1 score, Brier score, log loss, ROC-AUC, expected calibration error, and a combined quality score. ROC-AUC measures the model's ranking ability. Brier score and expected calibration error evaluate whether predicted probabilities are suitable for risk-oriented interpretation \cite{niculescu2005probabilities}. The combined quality score is a single summary value that normalizes ROC-AUC into ranking skill above random and combines it with a Brier skill score measured against a baseline that always predicts the dataset label rate; all reported metrics, including the quality score, are defined formally in Section~\ref{sec:method-metric-definitions}.
 
 Because the inactive base rate in the evaluation slice is close to balanced (approximately 0.56), ROC-AUC is a reasonable primary ranking metric. Precision-recall analysis is reported in addition, because the deployment prevalence is expected to differ from the sampled prevalence, and precision-recall curves are more informative than ROC curves when the positive class is rare \cite{saito2015precision}. For the same reason, reported precision and calibration values are interpreted as conditional on the sampled prevalence rather than as deployment guarantees.
 
@@ -247,6 +247,83 @@ Second, the model is evaluated qualitatively through manual case review. This st
 Third, the current held-out test split is treated as a valid internal evaluation, because the model has not seen those rows during fitting or calibration. It evaluates temporal generalization within the constructed dataset. It does not, however, evaluate generalization to a freshly sampled set of repositories; that question is left to future work and is discussed as a threat to external validity in Chapter~\ref{chap:validity}.
 
 The primary deployed full-history artifact is \texttt{xgboost-full-history}, version \texttt{0.2.0}, trained with \texttt{feature-set-v3-full-history}; it is the model staged for runtime scoring. Its held-out test metrics, together with those of the Logistic Regression model, the neural network (\texttt{neural-net-full-history}), and the trivial recency baseline, are reported and interpreted in Chapter~\ref{chap:evaluation}.
+
+\subsection{Metric Definitions}
+\label{sec:method-metric-definitions}
+
+All metrics are computed on the calibrated probabilities of the held-out test
+slice. Let \(N\) be the number of evaluation samples, \(p_i \in [0,1]\) the
+predicted probability of inactivity for sample \(i\), and \(y_i \in \{0,1\}\) the
+true label (\(1\) = inactive within twelve months). The positive (inactive) base
+rate of the slice is
+\begin{equation}
+  \bar{p} = \frac{1}{N}\sum_{i=1}^{N} y_i ,
+\end{equation}
+reported as the \emph{inactive 12m rate}.
+
+\paragraph{Ranking.} ROC-AUC is computed as the Mann--Whitney statistic over all
+positive--negative pairs, that is, the probability that a random inactive
+repository is scored above a random active one, with ties counted as one half:
+\begin{equation}
+  \mathrm{AUROC} = \frac{1}{N_{+}N_{-}}
+    \sum_{i:\,y_i=1}\;\sum_{j:\,y_j=0}
+    \Big( \mathbb{1}[p_i > p_j] + \tfrac{1}{2}\,\mathbb{1}[p_i = p_j] \Big),
+\end{equation}
+where \(N_{+}\) and \(N_{-}\) are the numbers of positive and negative samples.
+It is threshold- and calibration-independent: \(0.5\) is random ranking and
+\(1.0\) is a perfect ranking.
+
+\paragraph{Probabilistic accuracy.} The Brier score is the mean squared error
+between probability and outcome, and the log loss is the binary cross-entropy
+(with a small \(\varepsilon\) for numerical stability):
+\begin{align}
+  \mathrm{Brier}   &= \frac{1}{N}\sum_{i=1}^{N} (p_i - y_i)^2, \\
+  \mathrm{LogLoss} &= -\frac{1}{N}\sum_{i=1}^{N}
+     \Big[\, y_i \ln p_i + (1-y_i)\ln(1-p_i) \,\Big].
+\end{align}
+Both are lower-is-better and penalize miscalibration; the log loss grows without
+bound as a confident prediction approaches the wrong outcome, so it punishes
+overconfidence more sharply than the bounded Brier score.
+
+\paragraph{Calibration.} The expected calibration error partitions
+\([0,1]\) into \(B = 10\) equal-width bins. For bin \(b\) with member set
+\(\mathcal{B}_b\), let \(\mathrm{conf}_b\) be the mean predicted probability and
+\(\mathrm{acc}_b\) the empirical positive rate; the ECE is the sample-weighted
+average gap between predicted confidence and observed frequency:
+\begin{equation}
+  \mathrm{ECE} = \sum_{b=1}^{B} \frac{|\mathcal{B}_b|}{N}\,
+    \big|\,\mathrm{conf}_b - \mathrm{acc}_b\,\big|.
+\end{equation}
+
+\paragraph{Thresholded classification.} A decision threshold \(\tau\) maps
+probabilities to decisions \(\hat{d}_i = \mathbb{1}[p_i \ge \tau]\), yielding the
+counts of true and false positives and negatives (\(\mathrm{TP}, \mathrm{FP},
+\mathrm{FN}, \mathrm{TN}\)). From these,
+\begin{equation}
+  \mathrm{Precision} = \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FP}}, \qquad
+  \mathrm{Recall} = \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FN}}, \qquad
+  \mathrm{F1} = \frac{2\,\mathrm{Precision}\cdot\mathrm{Recall}}
+                    {\mathrm{Precision}+\mathrm{Recall}} .
+\end{equation}
+The F1 score is the harmonic mean of precision and recall, so it cannot be made
+large by optimizing one at the expense of the other; \(\tau\) is selected on the
+validation slice to maximize it.
+
+\paragraph{Combined quality score.} The quality score converts ranking and
+probabilistic accuracy into skill scores relative to the trivial base-rate
+predictor and averages them, weighting ranking at \(0.6\) and calibration at
+\(0.4\). With the climatological Brier score \(\bar{p}(1-\bar{p})\) and
+\(\operatorname{clip}_{[0,1]}\) clamping to the unit interval,
+\begin{align}
+  s_{\mathrm{AUC}}   &= \operatorname{clip}_{[0,1]}\!\left(\frac{\mathrm{AUROC} - 0.5}{0.5}\right), \\
+  s_{\mathrm{Brier}} &= \operatorname{clip}_{[0,1]}\!\left(1 - \frac{\mathrm{Brier}}{\bar{p}(1-\bar{p})}\right), \\
+  \mathrm{Quality}   &= \operatorname{clip}_{[0,1]}\!\big(0.6\,s_{\mathrm{AUC}} + 0.4\,s_{\mathrm{Brier}}\big).
+\end{align}
+A value of \(0\) indicates no improvement over predicting the base rate and \(1\)
+indicates perfect ranking and calibration. Because both skill terms are measured
+against the slice base rate \(\bar{p}\), the quality score is conditional on the
+sampled prevalence and is intended for model comparison rather than as a
+standalone performance guarantee.
 
 \section{Reproducibility}
 \label{sec:method-reproducibility}
