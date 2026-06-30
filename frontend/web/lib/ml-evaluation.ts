@@ -1,4 +1,4 @@
-import type { AnalysisRecord, ScoringMethodSummary, TrainingRunArtifact } from "@/lib/types";
+import type { AnalysisRecord, ScoringMethodSummary, TrainingRunArtifact, TrainingRunModelArtifact } from "@/lib/types";
 
 export interface CalibrationPoint {
   label: string;
@@ -159,6 +159,69 @@ export function runtimeScoringLabel(methods: ScoringMethodOverview[]) {
 
 export function latestCompletedRunForModel(runs: TrainingRunArtifact[], modelName: string) {
   return sortTrainingRuns(runs).find((run) => run.status === "completed" && run.modelName === modelName) ?? null;
+}
+
+/** True when the artifact carries a usable linear coefficient layer (logistic regression). */
+export function hasUsableCoefficients(artifact?: TrainingRunModelArtifact | null): artifact is TrainingRunModelArtifact {
+  return Boolean(
+    artifact &&
+      artifact.featureNames.length &&
+      artifact.coefficients?.length &&
+      artifact.standardization &&
+      artifact.featureNames.length === artifact.coefficients.length,
+  );
+}
+
+/**
+ * Pick the artifact to use for the per-repository coefficient/impact decomposition.
+ *
+ * The impact view is a linear (logistic) decomposition, so XGBoost artifacts — which have no
+ * coefficients — are skipped. Among usable logistic runs we prefer one whose model actually
+ * scored this repository (matched by name against the dependency's model results), falling back
+ * to the most recently cached usable run. This keeps the impact view consistent with the model
+ * that produced the score, e.g. a cold-start repo decomposes against the cold-start artifact.
+ */
+export function selectCoefficientArtifact(
+  runs: TrainingRunArtifact[],
+  preferredModelNames: string[] = [],
+): TrainingRunModelArtifact | null {
+  const usable = sortTrainingRuns(runs).filter(
+    (run) => run.status === "completed" && hasUsableCoefficients(run.modelArtifact),
+  );
+  if (!usable.length) {
+    return null;
+  }
+  const preferred = new Set(preferredModelNames);
+  const match = usable.find(
+    (run) => preferred.has(run.modelName) || (run.modelArtifact ? preferred.has(run.modelArtifact.modelName) : false),
+  );
+  return (match ?? usable[0]).modelArtifact ?? null;
+}
+
+/**
+ * Pick any usable scoring artifact (logistic OR tree) for the confidence/coverage view. Used as a
+ * fallback when no logistic artifact exists: a tree model still has a standardization profile and
+ * calibration bins, so coverage, in-distribution fit, and calibration support remain computable
+ * even though the per-feature coefficient impact chart does not apply.
+ */
+export function selectScoringArtifact(
+  runs: TrainingRunArtifact[],
+  preferredModelNames: string[] = [],
+): TrainingRunModelArtifact | null {
+  const usable = sortTrainingRuns(runs).filter(
+    (run) =>
+      run.status === "completed" &&
+      run.modelArtifact?.featureNames.length &&
+      run.modelArtifact.standardization,
+  );
+  if (!usable.length) {
+    return null;
+  }
+  const preferred = new Set(preferredModelNames);
+  const match = usable.find(
+    (run) => preferred.has(run.modelName) || (run.modelArtifact ? preferred.has(run.modelArtifact.modelName) : false),
+  );
+  return (match ?? usable[0]).modelArtifact ?? null;
 }
 
 export function logisticCoefficientsFromRun(run: TrainingRunArtifact | null, limit = 12): LogisticCoefficient[] {

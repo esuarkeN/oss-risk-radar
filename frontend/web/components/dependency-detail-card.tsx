@@ -94,8 +94,9 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
       {modelResults.length ? (
         <Card className="space-y-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">Model Outputs</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Model Outputs · This Repository</p>
             <h2 className="mt-2 text-lg font-semibold text-foreground">Side-by-side ML scoring</h2>
+            <p className="mt-1 text-sm text-muted">Each model&apos;s scores for this repository. Global model-quality metrics live in &ldquo;About this model&rdquo; below.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {modelResults.map((result) => (
@@ -124,25 +125,49 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
                     <p className="text-muted">Confidence</p>
                     <p className="font-semibold text-foreground">{formatConfidence(result.confidenceScore)}</p>
                   </div>
-                  <div>
-                    <p className="text-muted">AUROC</p>
-                    <p className="font-semibold text-foreground">{formatTrainingMetric(result.rocAuc)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted">Brier</p>
-                    <p className="font-semibold text-foreground">{formatTrainingMetric(result.brierScore)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted">ECE</p>
-                    <p className="font-semibold text-foreground">{formatTrainingMetric(result.expectedCalibrationError)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted">Samples</p>
-                    <p className="font-semibold text-foreground">{result.sampleCount || "Pending"}</p>
-                  </div>
                 </div>
               </div>
             ))}
+          </div>
+        </Card>
+      ) : null}
+
+      {modelResults.length ? (
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">About this model</p>
+            <h2 className="mt-2 text-lg font-semibold text-foreground">Global model quality</h2>
+            <p className="mt-1 text-sm text-muted">
+              These are held-out evaluation metrics for the model overall — the same for every repository it scores. They tell you how much to trust the model in general, not this specific prediction. See the{" "}
+              <Link href="/methodology" className="text-accent transition hover:text-foreground">methodology</Link> for definitions.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
+                  <th className="pb-3 pr-4">Model</th>
+                  <th className="pb-3 pr-4">AUROC</th>
+                  <th className="pb-3 pr-4">Brier</th>
+                  <th className="pb-3 pr-4">ECE</th>
+                  <th className="pb-3 pr-4">Samples</th>
+                </tr>
+              </thead>
+              <tbody>
+                {modelResults.map((result) => (
+                  <tr key={result.modelName} className="border-b border-line/70 last:border-b-0">
+                    <td className="py-3 pr-4 font-semibold text-foreground">
+                      {result.modelName}
+                      {result.modelVersion ? <span className="ml-2 text-xs font-medium text-muted">{result.modelVersion}</span> : null}
+                    </td>
+                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(result.rocAuc)}</td>
+                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(result.brierScore)}</td>
+                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(result.expectedCalibrationError)}</td>
+                    <td className="py-3 pr-4 text-foreground">{result.sampleCount || "Pending"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       ) : null}

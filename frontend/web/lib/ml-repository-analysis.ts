@@ -7,6 +7,12 @@ export interface RepositoryVariableImpact {
   coefficient: number;
   standardizedValue: number;
   impact: number;
+  /** Whether this feature came from a real observed signal (vs. an imputed default). */
+  observed: boolean;
+  /** The model's expected (training-cohort mean) raw value for this feature. */
+  cohortReference: number;
+  /** Plain-language effect of this feature on the repo's inactivity risk. */
+  direction: "raises" | "lowers" | "neutral";
 }
 
 export interface RepositoryModelAnalysis {
@@ -150,7 +156,28 @@ function calibratedProbability(rawProbability: number, artifact: TrainingRunMode
   return bin?.empiricalRate ?? rawProbability;
 }
 
-export function repositoryFeatureValues(dependency: DependencyRecord, featureNames: string[]) {
+export interface RepositoryFeatureResolution {
+  values: Record<string, number>;
+  /** Per-feature flag: true when the value came from a real signal, false when imputed/defaulted. */
+  observed: Record<string, boolean>;
+}
+
+/** Features that are structural or one-hot encodings rather than observed maintenance evidence. */
+export const NON_EVIDENTIAL_FEATURES = new Set([
+  "has_repository_mapping",
+  "is_direct_dependency",
+  "signal_completeness",
+  "ecosystem_npm",
+  "ecosystem_pypi",
+  "ecosystem_go",
+  "ecosystem_maven",
+  "ecosystem_other",
+]);
+
+export function resolveRepositoryFeatures(
+  dependency: DependencyRecord,
+  featureNames: string[],
+): RepositoryFeatureResolution {
   const repository = dependency.repository;
   const historicalFeatures = dependency.historicalFeatures ?? {};
   const ecosystem = normalizeEcosystem(dependency.ecosystem);
@@ -162,7 +189,7 @@ export function repositoryFeatureValues(dependency: DependencyRecord, featureNam
       ? modelCompletenessSignals.filter((signal) => missingSignals.has(signal)).length
       : expectedSignals.filter((signal) => missingSignals.has(signal)).length;
 
-  const values: Record<string, number> = {
+  const computed: Record<string, number> = {
     has_repository_mapping: repository ? 1 : 0,
     is_direct_dependency: dependency.direct ? 1 : 0,
     repo_archived: repository?.archived ? 1 : 0,
@@ -186,7 +213,65 @@ export function repositoryFeatureValues(dependency: DependencyRecord, featureNam
     ecosystem_other: ["npm", "pypi", "python", "go", "golang", "maven"].includes(ecosystem) ? 0 : 1,
   };
 
-  return Object.fromEntries(featureNames.map((feature) => [feature, values[feature] ?? historicalFeatures[feature] ?? 0]));
+  const values: Record<string, number> = {};
+  const observed: Record<string, boolean> = {};
+  for (const feature of featureNames) {
+    const computedValue = computed[feature];
+    const historicalValue = historicalFeatures[feature];
+    values[feature] = computedValue ?? historicalValue ?? 0;
+    // Structural and one-hot encodings are deterministic from the submission, so always "observed".
+    // Evidential signals count as observed only when a source resolved and the signal is not flagged missing.
+    observed[feature] = NON_EVIDENTIAL_FEATURES.has(feature)
+      ? true
+      : (computedValue !== undefined || historicalValue !== undefined) && !missingSignals.has(feature);
+  }
+
+  return { values, observed };
+}
+
+/** Backwards-compatible accessor returning only the resolved feature values. */
+export function repositoryFeatureValues(dependency: DependencyRecord, featureNames: string[]) {
+  return resolveRepositoryFeatures(dependency, featureNames).values;
+}
+
+/** Per-feature standardized position for a repo, independent of the model's algorithm. */
+export interface RepositoryFeatureStat {
+  feature: string;
+  label: string;
+  value: number;
+  cohortReference: number;
+  standardizedValue: number;
+  observed: boolean;
+}
+
+/**
+ * Resolve each model feature for a repository and express it as a z-score against the training
+ * distribution. Requires only a standardization profile, so it works for any artifact (logistic
+ * or tree) and underpins both the logistic impact decomposition and the per-prediction confidence.
+ */
+export function repositoryFeatureStats(
+  dependency: DependencyRecord,
+  artifact?: TrainingRunModelArtifact | null,
+): RepositoryFeatureStat[] | null {
+  const standardization = artifact?.standardization;
+  if (!artifact?.featureNames.length || !standardization) {
+    return null;
+  }
+
+  const { values, observed } = resolveRepositoryFeatures(dependency, artifact.featureNames);
+  return artifact.featureNames.map((feature, index) => {
+    const value = values[feature] ?? 0;
+    const cohortReference = standardization.means[index] ?? 0;
+    const scale = standardization.scales[index] || 1;
+    return {
+      feature,
+      label: featureLabel(feature),
+      value,
+      cohortReference,
+      standardizedValue: (value - cohortReference) / scale,
+      observed: observed[feature] ?? false,
+    };
+  });
 }
 
 export function repositoryModelAnalysis(
@@ -194,30 +279,19 @@ export function repositoryModelAnalysis(
   artifact?: TrainingRunModelArtifact | null,
 ): RepositoryModelAnalysis | null {
   const coefficients = artifact?.coefficients;
-  const standardization = artifact?.standardization;
-  if (
-    !artifact?.featureNames.length ||
-    !coefficients?.length ||
-    !standardization ||
-    artifact.featureNames.length !== coefficients.length
-  ) {
+  const stats = repositoryFeatureStats(dependency, artifact);
+  if (!artifact || !stats || !coefficients?.length || artifact.featureNames.length !== coefficients.length) {
     return null;
   }
 
-  const featureValues = repositoryFeatureValues(dependency, artifact.featureNames);
-  const impacts = artifact.featureNames.map((feature, index) => {
-    const value = featureValues[feature] ?? 0;
-    const scale = standardization.scales[index] || 1;
-    const standardizedValue = (value - (standardization.means[index] ?? 0)) / scale;
+  const impacts: RepositoryVariableImpact[] = stats.map((stat, index) => {
     const coefficient = coefficients[index] ?? 0;
-
+    const impact = coefficient * stat.standardizedValue;
     return {
-      feature,
-      label: featureLabel(feature),
-      value,
+      ...stat,
       coefficient,
-      standardizedValue,
-      impact: coefficient * standardizedValue,
+      impact,
+      direction: impact > 0.001 ? "raises" : impact < -0.001 ? "lowers" : "neutral",
     };
   });
 

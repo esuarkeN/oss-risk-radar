@@ -295,8 +295,9 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
       {scoringMethods.length ? (
         <Card className="space-y-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Scoring methods</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Scoring methods · global model quality</p>
             <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">{runtimeScoring}</h2>
+            <p className="mt-1 text-sm text-muted">AUROC, Brier, and ECE are held-out evaluation metrics for the model overall — identical for every repository. Per-repository confidence is shown in the ML analysis panel below.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
