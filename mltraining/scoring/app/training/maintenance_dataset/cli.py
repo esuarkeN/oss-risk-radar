@@ -52,6 +52,11 @@ def _add_shared_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Use repository identities from the seed file without live registry, deps.dev, or GitHub enrichment.",
     )
+    parser.add_argument(
+        "--include-bots",
+        action="store_true",
+        help="Ablation: disable the human-actor filter so bot accounts count toward features and labels.",
+    )
 
 
 def _parse_date(value: str) -> datetime:
@@ -76,6 +81,7 @@ def main() -> int:
         feature_cache_output_path=args.feature_cache_output_path,
         merge_existing_training_output=not args.replace_training_output,
         offline_repository_metadata=args.offline_repository_metadata,
+        filter_bots=not args.include_bots,
     )
     builder = DatasetBuilder(config=config, adapters=PipelineAdapters.live(github_token=args.github_token))
 

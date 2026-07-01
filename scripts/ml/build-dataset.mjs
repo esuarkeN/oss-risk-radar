@@ -38,6 +38,7 @@ export function parseArgs(argv) {
     sampleSeed: "42",
     offlineRepositoryMetadata: false,
     includeForks: false,
+    includeBots: false,
     replaceTrainingOutput: false,
     featureCacheOutputPath: null,
     seedFileProvided: false,
@@ -123,6 +124,9 @@ export function parseArgs(argv) {
         break;
       case "--offline-repository-metadata":
         args.offlineRepositoryMetadata = true;
+        break;
+      case "--include-bots":
+        args.includeBots = true;
         break;
       case "--replace-training-output":
         args.replaceTrainingOutput = true;
@@ -250,6 +254,9 @@ function applyNpmForwardedConfig(args, positionals) {
   }
   if (npmBooleanConfig("offline-repository-metadata")) {
     args.offlineRepositoryMetadata = true;
+  }
+  if (npmBooleanConfig("include-bots")) {
+    args.includeBots = true;
   }
   if (npmBooleanConfig("replace-training-output")) {
     args.replaceTrainingOutput = true;
@@ -592,6 +599,9 @@ export async function buildDataset(args) {
   }
   if (args.offlineRepositoryMetadata) {
     cliArgs.push("--offline-repository-metadata");
+  }
+  if (args.includeBots) {
+    cliArgs.push("--include-bots");
   }
   if (args.replaceTrainingOutput) {
     cliArgs.push("--replace-training-output");

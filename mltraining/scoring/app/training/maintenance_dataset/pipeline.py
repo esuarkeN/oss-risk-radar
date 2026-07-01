@@ -31,6 +31,7 @@ from app.training.maintenance_dataset.entities import (
     slugify_identifier,
 )
 from app.training.maintenance_dataset.events import GHArchiveAdapter
+from app.training.maintenance_dataset.events import set_bot_filtering
 from app.training.maintenance_dataset.features import build_snapshot_features
 from app.training.maintenance_dataset.labels import build_snapshot_label
 from app.training.maintenance_dataset.sampling import derive_popularity_tier, sample_candidates
@@ -89,6 +90,9 @@ class DatasetBuildConfig:
     merge_existing_training_output: bool = True
     offline_repository_metadata: bool = False
     coverage_end: datetime | None = None
+    # When False, the human-actor (bot) filter is disabled for this build (ablation experiment).
+    # Default True preserves the production dataset/model behaviour.
+    filter_bots: bool = True
 
 
 @dataclass(slots=True)
@@ -114,6 +118,9 @@ class DatasetBuilder:
     def __init__(self, config: DatasetBuildConfig, adapters: PipelineAdapters) -> None:
         self.config = config
         self.adapters = adapters
+        # Apply the bot-filter setting for the whole build (history ingest, features, and labels all
+        # consult events.is_human_actor). Default keeps production behaviour; disabled only for the ablation.
+        set_bot_filtering(config.filter_bots)
         self.paths = DatasetPaths.from_output_dir(
             config.output_dir,
             config.training_output_path,

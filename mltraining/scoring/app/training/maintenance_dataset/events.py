@@ -23,11 +23,27 @@ def normalize_repo_name(value: str | None) -> str | None:
     return value.strip().lower()
 
 
+# Module-level switch for the human-actor (bot) filter. Default True keeps the production behaviour;
+# the dataset builder flips it via set_bot_filtering() for the bot-filter ablation experiment.
+_FILTER_BOTS = True
+
+
+def set_bot_filtering(enabled: bool) -> None:
+    """Enable/disable the human-actor filter globally for a dataset build (ablation control)."""
+    global _FILTER_BOTS
+    _FILTER_BOTS = enabled
+
+
 def is_human_actor(actor: str | None) -> bool:
     if actor is None:
         return False
     normalized = actor.strip().lower()
-    return normalized != "" and not normalized.endswith("[bot]") and "[bot]" not in normalized and "bot/" not in normalized
+    if normalized == "":
+        return False
+    if not _FILTER_BOTS:
+        # Ablation: treat every non-empty actor as human (do not exclude bot accounts).
+        return True
+    return not normalized.endswith("[bot]") and "[bot]" not in normalized and "bot/" not in normalized
 
 
 class GHArchiveAdapter:
