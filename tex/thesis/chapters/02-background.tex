@@ -14,8 +14,7 @@ Open-source dependencies are especially relevant because they are reused across 
 
 For this thesis, software supply-chain security provides the practical context for inactivity-risk scoring. The goal is not to determine whether a dependency is secure or insecure in general. Instead, the goal is to estimate whether publicly observable repository signals indicate an elevated risk of future inactivity. Such a score can support dependency monitoring, replacement planning, or prioritization of manual review.
 
-% TODO: Later, briefly connect this to your real demonstrator workflow:
-% project manifest/lockfile -> dependency extraction -> package-to-repository mapping -> inactivity-risk score.
+This context also explains why the scoring is applied at the dependency level. In the practical demonstrator (Chapter~\ref{chap:demonstrator}), a project's manifest or lockfile is parsed into its direct and transitive dependency set, each package is mapped to its source repository, and the inactivity-risk model is applied per repository to produce a ranked triage view. Supply-chain security is therefore the reason to look beyond version numbers and consider the maintenance trajectory of the upstream repositories that a project depends on.
 
 \section{Open-Source Sustainability and Project Health}
 \label{sec:background-oss-health}
@@ -28,8 +27,26 @@ Security-practice indicators form a second category of observable signals. OpenS
 
 However, project health is broader than any single metric. Goggins et al. argue that making open-source project health transparent requires structured measurement and interpretation rather than isolated indicators \cite{goggins2021transparent}. This is important for the thesis because inactivity-risk scoring should not be interpreted as a complete judgement of project sustainability. Instead, the score is treated as a limited operational signal for dependency triage.
 
-% TODO: Later, add a table with possible health indicators:
-% Feature group | Example signals | Possible data source | Expected relevance.
+Table~\ref{tab:background-health-indicators} summarizes the categories of observable health indicators considered in this thesis, an example of the signals in each category, the public source they are derived from, and their expected relevance to inactivity risk. The categories motivate the feature groups introduced later; the exact per-feature definitions of the implemented set are given in Section~\ref{sec:method-feature-engineering} and Appendix~\ref{appendix:feature-reference}. Security-practice indicators are listed here for completeness but, as discussed in Section~\ref{sec:related-security-practice}, are kept as parallel triage context rather than as inputs to the inactivity model.
+
+\begin{table}[htbp]
+\centering
+\caption{Categories of observable health indicators and their expected relevance}
+\label{tab:background-health-indicators}
+\small
+\begin{tabular}{p{0.18\textwidth} p{0.29\textwidth} p{0.19\textwidth} p{0.21\textwidth}}
+\hline
+\textbf{Category} & \textbf{Example signals} & \textbf{Public source} & \textbf{Expected relevance} \\
+\hline
+Commit activity & Commits over recent windows; active commit months; days since last commit & GH Archive push events & Direct evidence of ongoing development \\
+Contributor activity & Recent and new contributors; contributor concentration & GH Archive commit actors & Team breadth and single-maintainer (bus-factor) risk \\
+Issue and PR activity & Opened/closed issues; PR merge ratio; response and merge latency & GH Archive issue/PR events & Maintenance interaction and responsiveness \\
+Release activity & Releases; days since last release; versions published & GH Archive releases and package registry & Whether usable versions still reach users \\
+Age and popularity & Repository and package age; stars; forks; popularity tier & GitHub metadata and package registry & Maturity and reach context \\
+Security practice & Selected OpenSSF Scorecard checks & OpenSSF Scorecard & Parallel security-posture context, not an inactivity predictor \\
+\hline
+\end{tabular}
+\end{table}
 
 \section{Metric Pitfalls and Limitations}
 \label{sec:background-metric-pitfalls}

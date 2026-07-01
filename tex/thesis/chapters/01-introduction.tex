@@ -20,7 +20,7 @@ These examples do not imply that every inactive repository is insecure, abandone
 The central research question of this thesis is:
 
 \begin{quote}
-To what extent can a machine-learning-based inactivity-risk scoring tool, using only publicly observable repository health indicators and security-practice signals, predict 12-month OSS dependency inactivity and support risk-based dependency triage in secure dependency management?
+To what extent can a machine-learning-based scoring tool, using only publicly observable repository health and maintenance indicators, predict 12-month OSS dependency inactivity, and how can this inactivity-risk score be combined with parallel security-practice signals to support risk-based dependency triage in secure dependency management?
 \end{quote}
 
 To answer this research question, the thesis pursues the following objectives:
@@ -28,7 +28,7 @@ To answer this research question, the thesis pursues the following objectives:
 \begin{enumerate}
     \item Define an operational inactivity label for open-source repositories within a 12-month prediction horizon.
     \item Construct a reproducible dataset from publicly observable repository metadata and dependency-related sources.
-    \item Engineer activity, maintenance, and selected security-practice features based on repository and project health indicators.
+    \item Engineer observation-time activity and maintenance features for the inactivity model, and surface selected security-practice signals as parallel triage context rather than as inputs to the inactivity prediction.
     \item Train and compare simple baselines and machine-learning models for inactivity-risk prediction.
     \item Evaluate the models using discrimination and calibration metrics that are suitable for risk scoring.
     \item Demonstrate how the trained model can be applied to a concrete dependency set to support risk-based triage.
@@ -53,7 +53,7 @@ This thesis makes the following contributions:
 \begin{enumerate}
     \item It defines a practical 12-month inactivity-risk label for open-source dependency repositories.
     \item It proposes a reproducible data collection and feature engineering workflow based on public repository, package, and dependency metadata.
-    \item It evaluates whether repository health indicators and security-practice signals can support machine-learning-based inactivity prediction.
+    \item It evaluates whether repository health and maintenance indicators can support machine-learning-based inactivity prediction, and integrates security-practice signals as complementary triage context rather than as inactivity predictors.
     \item It compares predictive models against simple baselines and assesses both discrimination and probability calibration.
     \item It demonstrates how an inactivity-risk score can be applied to a dependency set in order to produce a ranked triage view for secure dependency management.
 \end{enumerate}

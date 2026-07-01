@@ -64,25 +64,203 @@ retained for its transparent coefficient attribution and XGBoost as the deployed
 runtime scorer, while the neural network is reported as a tested-and-rejected
 alternative rather than promoted into the scoring ensemble.
 
-% TODO: fill from the recency-baseline run and the active-at-t slice evaluation
-% (Section~\ref{sec:method-evaluation-strategy}); both are still to be produced
-% on this dataset.
-The learned models are additionally compared against the trivial recency
-baseline, and on the active-at-\(t\) subset defined in
-Section~\ref{sec:method-evaluation-strategy}, so that activity persistence does
-not inflate the headline numbers; both analyses are reported in
-Section~\ref{sec:results-features}.
+To separate genuine predictive skill from activity persistence, the deployed
+full-history model is additionally re-scored on the active-at-\(t\) subset
+defined in Section~\ref{sec:method-evaluation-strategy}; this slice analysis is
+reported in Section~\ref{sec:results-features}. A comparison against an explicit
+trivial recency baseline is a complementary check that is not yet part of the
+reported results and is noted as a remaining item in
+Chapter~\ref{chap:conclusion}.
 
 \section{Calibration and Threshold Selection}
 \label{sec:results-calibration}
 
-Report Brier score, log loss, expected calibration error, and the
-reliability of the calibrated probabilities. Note that calibration is
-conditional on the sampled prevalence (Section~\ref{sec:method-limitations}).
+Because the score is intended to be read as a probability rather than only as a
+ranking, calibration is evaluated alongside discrimination. Every model's raw
+outputs are mapped through a histogram calibrator fitted on the validation slice
+and never on the test slice, so the reported calibration reflects held-out
+behaviour. For the deployed \texttt{xgboost-full-history} model this yields a
+Brier score of \(0.089\), a log loss of \(0.284\), and an expected calibration
+error of \(0.016\) at the default decision threshold of \(0.5\), where the
+operating point attains precision \(0.87\) and recall \(0.92\). The linear
+\texttt{logistic-regression-full-history} model reaches the lowest expected
+calibration error (\(0.012\)) but a weaker Brier score (\(0.097\)), consistent
+with its lower ranking skill in Table~\ref{tab:model-comparison}.
+
+The reliability of the calibrated probabilities is well behaved: the empirical
+inactivity rate rises monotonically across the calibration bins, from
+approximately \(0.02\) in the lowest predicted-probability band to \(0.98\) in
+the highest, so higher scores do correspond to higher observed inactivity
+frequencies rather than only to a higher rank. Two caveats apply. First, the two
+extreme bands hold most of the held-out mass, so mid-range probabilities are
+supported by fewer samples and are correspondingly less certain; the
+per-prediction confidence surfaced by the demonstrator (Chapter~\ref{chap:demonstrator})
+reflects exactly this bin-level support. Second, calibration is conditional on
+the sampled prevalence rather than a natural deployment prevalence
+(Section~\ref{sec:method-limitations}), so the absolute probabilities would
+require recalibration before being read as live population probabilities.
 
 \section{Feature Importance and Error Analysis}
 \label{sec:results-features}
 
-Report feature importance, qualitative case review, and error analysis,
-including the formative review repositories from
-Section~\ref{sec:method-iterative-development}.
+\subsection{Feature Attribution}
+\label{sec:results-attribution}
+
+Feature attribution is read from the logistic-regression model, which is
+retained precisely for its transparent coefficients (Section~\ref{sec:results-performance}).
+Because the inputs are standardized, the coefficient magnitudes are directly
+comparable, and their signs indicate the direction of the association with
+inactivity. The strongest inactivity-\emph{lowering} signals are the breadth of
+sustained development (\texttt{active\_commit\_months\_365d}, standardized
+coefficient \(-0.94\)) and recent maintainer integration
+(\texttt{has\_recent\_pr\_merge\_flag}, \(-0.47\)); the strongest inactivity-\emph{raising}
+signals are staleness and slow responsiveness, including days since the last
+commit and last push (each \(\approx +0.19\)), a slower median issue first
+response (\(+0.16\)), and a larger stale-issue share (\(+0.15\)). These
+directions match the intended semantics of the features
+(Appendix~\ref{appendix:feature-reference}). A few coefficients are less
+intuitive (for example a positive association for the log-scaled star count),
+which reflects partial associations under the sampled prevalence and
+correlations among features rather than a causal effect; the coefficients are
+therefore used to explain \emph{direction} for a given repository, while ranking
+performance is carried by the gradient-boosted model. Gain-based importance for
+the \texttt{xgboost-full-history} model is not reported here because the current
+artifact's importance export is invalid and needs regeneration.
+
+\subsection{Robustness to Repository Recurrence}
+\label{sec:results-robustness}
+
+Under the repository-disjoint split (Section~\ref{sec:impl-grouped-split}),
+where every snapshot of a repository is confined to one partition, held-out
+ROC-AUC decreases only from \(0.945\) to \(0.940\) and the Brier score rises only
+from \(0.089\) to \(0.090\). The small gap bounds the optimism attributable to a
+repository appearing in both training and test slices and indicates that the
+discrimination generalizes to unseen repositories rather than resting on
+repository memorization.
+
+\subsection{Slice Evaluation}
+\label{sec:results-slices}
+
+A single aggregate metric can average a strong subgroup with a weak one. The
+held-out predictions of the deployed \texttt{xgboost-full-history} model are
+therefore re-scored within subgroups that vary in ways relevant to deployment
+(Table~\ref{tab:slice-metrics}).
+
+\begin{table}[ht]
+  \centering
+  \caption{Held-out ROC-AUC and Brier score of \texttt{xgboost-full-history}
+  within subgroups of the test slice. ``Inactive rate'' is the positive rate in
+  the subgroup.}
+  \label{tab:slice-metrics}
+  \begin{tabular}{llrrr}
+    \toprule
+    Dimension & Subgroup & \(n\) & Inactive rate & ROC-AUC \\
+    \midrule
+    Popularity      & high            & 2178 & 0.48 & 0.968 \\
+    Popularity      & medium          & 1398 & 0.66 & 0.945 \\
+    Popularity      & low             & 607  & 0.64 & 0.689 \\
+    \midrule
+    Activity at \(t\) & active@\(t\)   & 1786 & 0.17 & 0.883 \\
+    Activity at \(t\) & quiet@\(t\)    & 2397 & 0.85 & 0.860 \\
+    \midrule
+    History regime  & has-history     & 2320 & 0.30 & 0.917 \\
+    History regime  & cold-start-like & 1863 & 0.88 & 0.872 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Three findings follow. First, the aggregate ROC-AUC masks a much weaker
+obscure-repository subgroup: low-popularity repositories are ranked at only
+\(0.689\), against \(0.968\) for high-popularity ones, so scores for
+low-visibility projects deserve more caution and are exactly where the
+per-prediction confidence should be low. Second, and most importantly for the
+activity-persistence threat (Section~\ref{sec:validity-internal}), the model
+still separates outcomes well \emph{among repositories that are active at the
+observation time} (ROC-AUC \(0.883\) on the active-at-\(t\) subset, where the
+inactive rate is only \(0.17\)); the headline metric is therefore not merely a
+restatement of ``already-quiet repositories stay quiet''. Third, full history
+helps: repositories with reconstructable history are ranked at \(0.917\) versus
+\(0.872\) for cold-start-like repositories, consistent with the two-regime
+design (Section~\ref{sec:method-prediction-regimes}).
+
+\subsection{Error Analysis}
+\label{sec:results-error-analysis}
+
+The formative case review that motivated the feature-set revision
+(Section~\ref{sec:method-iterative-development}) and a comparison against an
+explicit trivial recency baseline are complementary analyses that are not yet
+part of the reported results; they are noted as remaining items in
+Chapter~\ref{chap:conclusion}. The slice results above already give the main
+error-analysis conclusion: the dominant residual weakness is low-visibility
+repositories with sparse public signals, which the confidence layer is designed
+to flag rather than hide.
+
+\section{Ablation: The Human-Actor Filter}
+\label{sec:results-bot-ablation}
+
+Commit- and contributor-based features and the maintenance label are computed
+from human actors only; automated (bot) accounts are excluded
+(Section~\ref{sec:method-feature-engineering}). Because this is a design choice
+that could plausibly be omitted, it is tested directly by an ablation: the full
+5{,}000-repository dataset was rebuilt with the human-actor filter disabled
+through a single build flag, with every other setting identical, yielding
+50{,}000 snapshots that align one-to-one with the filtered build. Three effects
+are examined.
+
+\textbf{Label corruption.} Disabling the filter flips 357 of 50{,}000 labelled
+snapshots (\(0.71\%\)) from inactive to active, and \emph{none} in the opposite
+direction. The effect is strictly one-directional: a bot commit or merge inside
+the future window can satisfy the two-of-four maintenance rule, so an otherwise
+dormant repository is relabelled as maintained, whereas bots never make an
+active repository look inactive. Omitting the filter would therefore bias the
+target by systematically \emph{masking} inactivity, which is the error direction
+that matters most for a risk signal.
+
+\textbf{Feature inflation.} On the observation-time side, bots inflate the
+activity features substantially: with the filter disabled, \texttt{commits\_365d}
+changes on 7{,}858 of 50{,}000 snapshots (\(15.7\%\)) by a mean of \(+938\)
+commits, \texttt{commits\_90d} by \(+388\), and \texttt{contributors\_365d} by
+\(+1.4\) distinct contributors, while pull-request \emph{count} features are
+unaffected because they are not actor-filtered. A small number of bot-driven
+repositories would thus dominate the activity signal.
+
+\textbf{Predictive effect.} Retraining all four model families on the unfiltered
+dataset changes the held-out metrics only at the noise level
+(\(|\Delta\text{ROC-AUC}| \le 0.003\), \(|\Delta\text{Brier}| \le 0.002\));
+measured against each dataset's own labels, bots appear harmless. This is
+expected but misleading, because the unfiltered model is then scored against a
+partially corrupted target. A cleaner test trains on the bot-contaminated
+\emph{features} while evaluating against the clean, human-filtered \emph{labels}
+(Table~\ref{tab:bot-ablation-crosstest}): the contaminated features are
+consistently worse across all four families, though by a small margin (ROC-AUC
+falls by \(0.0007\)--\(0.0018\); Brier rises by up to \(0.0018\)).
+
+\begin{table}[ht]
+  \centering
+  \caption{Cross-test of the human-actor filter: training on bot-contaminated
+  features versus clean features, both evaluated against the identical clean
+  (human-filtered) label on the held-out slice. A lower ROC-AUC or higher Brier
+  for the contaminated features means the filter helps.}
+  \label{tab:bot-ablation-crosstest}
+  \begin{tabular}{lrrrr}
+    \toprule
+    Model & ROC-AUC (clean) & ROC-AUC (contam.) & \(\Delta\)ROC-AUC & \(\Delta\)Brier \\
+    \midrule
+    \texttt{logistic-regression-full-history} & 0.9379 & 0.9373 & \(-0.0007\) & \(+0.0009\) \\
+    \texttt{xgboost-full-history}             & 0.9529 & 0.9522 & \(-0.0007\) & \(+0.0001\) \\
+    \texttt{logistic-regression-cold-start}   & 0.8889 & 0.8871 & \(-0.0018\) & \(+0.0018\) \\
+    \texttt{xgboost-cold-start}               & 0.9488 & 0.9477 & \(-0.0011\) & \(+0.0018\) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\textbf{Interpretation.} The filter's justification is construct validity rather
+than discrimination. Its predictive cost when omitted is small, since the
+gradient-boosted models are largely robust to the minority of bot-inflated
+repositories, but it is consistently in the expected direction, and, more
+importantly, the filter removes a one-directional label bias that a headline
+metric computed on the corrupted data does not reveal. The human-actor filter is
+therefore retained. Absolute metrics in this ablation differ slightly from
+Table~\ref{tab:model-comparison} because the ablation uses a freshly rebuilt,
+fully labelled dataset; the comparison is internally controlled and varies only
+the filter.
