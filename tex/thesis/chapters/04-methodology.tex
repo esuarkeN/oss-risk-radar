@@ -147,7 +147,7 @@ For local development, a smaller GH Archive subset can be used to test the pipel
 \section{Feature Engineering}
 \label{sec:method-feature-engineering}
 
-The feature engineering step converts repository and package history before \(t\) into numeric variables. The reported full-history model uses feature set \texttt{feature-set-v3-full-history}. The implemented feature groups are shown in Table~\ref{tab:method-feature-groups}.
+The feature engineering step converts repository and package history before \(t\) into numeric variables. The reported full-history model uses feature set \texttt{feature-set-v3-full-history}, which comprises 43 features. The feature groups are summarized in Table~\ref{tab:method-feature-groups}; the exact definition and the rationale for every individual feature are documented in the full feature reference in Appendix~\ref{appendix:feature-reference} (Table~\ref{tab:method-feature-reference}).
 
 \begin{table}[htbp]
 \centering
@@ -157,8 +157,8 @@ The feature engineering step converts repository and package history before \(t\
 \hline
 \textbf{Feature group} & \textbf{Example features} \\
 \hline
-Repository mapping and dependency context &
-Repository mapping availability, direct dependency flag, dependency count at observation time. \\
+Dependency context &
+Dependency count of the resolved package version at the observation time. \\
 Commit activity &
 Commits in the last 30, 90, and 365 days; active commit months; days since last commit. \\
 Contributor activity &
@@ -171,8 +171,6 @@ Release activity &
 Releases in the last 365 days; days since last release; versions published in the last 365 days; recent release flag. \\
 Age and popularity proxies &
 Package age; repository age; stars and forks observed in the available historical data; popularity tier. \\
-Ecosystem indicators &
-npm, PyPI, Go, Maven, and other ecosystem flags. \\
 Derived risk proxies &
 Activity drop; contributor drop; release gap risk; concentration risk score. \\
 Responsiveness and backlog pressure &

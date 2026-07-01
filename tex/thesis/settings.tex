@@ -11,6 +11,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{tabularx}
+\usepackage{longtable}
 \usepackage{enumitem}
 \usepackage{xcolor}
 \usepackage{listings}
@@ -35,6 +36,11 @@
 \onehalfspacing
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.7em}
+
+% Breakable underscore for long snake_case feature identifiers in narrow table cells.
+\newcommand{\su}{\_\allowbreak}
+% Typeset a feature key in monospace (underscores written as \su so the key can wrap).
+\newcommand{\feat}[1]{\texttt{#1}}
 
 \addbibresource{references.bib}
 
