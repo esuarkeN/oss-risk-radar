@@ -37,7 +37,7 @@ spec:
       containers:
         - name: scoring
           image: ghcr.io/esuarken/oss-risk-radar-scoring:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8090
