@@ -159,6 +159,28 @@ def _assert_repository_disjoint_splits(split: DatasetSplit) -> None:
         raise ValueError("grouped split must be repository-disjoint; a repository crossed a split boundary")
 
 
+def _insufficient_data_result(
+    *,
+    model_name: str,
+    model_version: str,
+    trained_at: str,
+    dataset_summary: object | None,
+    note: str,
+) -> TrainingRunResult:
+    return TrainingRunResult(
+        status="insufficient_data",
+        model_name=model_name,
+        model_version=model_version,
+        trained_at=trained_at,
+        dataset_summary=dataset_summary,
+        split_summary=None,
+        metrics=None,
+        calibration_bins=[],
+        artifact=None,
+        note=note,
+    )
+
+
 def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
     algorithm, feature_regime, model_name, model_version = _model_spec(config.algorithm, config.feature_regime)
     feature_version = feature_version_for_regime(feature_regime)
@@ -173,20 +195,27 @@ def run_training_pipeline(config: TrainingRunConfig) -> TrainingRunResult:
     trained_at = datetime.now(UTC).isoformat()
 
     if len(labeled_dataset_rows) < 3:
-        return TrainingRunResult(
-            status="insufficient_data",
+        return _insufficient_data_result(
             model_name=model_name,
             model_version=model_version,
             trained_at=trained_at,
             dataset_summary=summary,
-            split_summary=None,
-            metrics=None,
-            calibration_bins=[],
-            artifact=None,
             note="At least three labeled snapshots are required for time-aware experimentation scaffolding.",
         )
 
     if config.split_strategy == "grouped":
+        repository_group_count = len({repository_key(row) for row in labeled_dataset_rows})
+        if repository_group_count < 3:
+            return _insufficient_data_result(
+                model_name=model_name,
+                model_version=model_version,
+                trained_at=trained_at,
+                dataset_summary=summary,
+                note=(
+                    "At least three repository groups are required for a repository-disjoint grouped split; "
+                    f"found {repository_group_count}."
+                ),
+            )
         split = grouped_time_aware_split(
             labeled_dataset_rows,
             train_ratio=config.train_ratio,

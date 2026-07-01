@@ -1,4 +1,5 @@
 import importlib.util
+from copy import deepcopy
 
 import pytest
 
@@ -63,6 +64,34 @@ def test_training_pipeline_returns_completed_result(training_snapshots: list[dic
     assert result.artifact.feature_version == "feature-set-v3-full-history"
     assert result.artifact.model_version == "0.4.0"
     assert len(result.artifact.feature_names) == len(result.artifact.coefficients)
+
+
+def test_training_pipeline_returns_insufficient_data_for_grouped_split_with_too_few_repositories(
+    training_snapshots: list[dict[str, object]],
+) -> None:
+    snapshots = []
+    for index, snapshot in enumerate(training_snapshots[:3], start=1):
+        cloned = deepcopy(snapshot)
+        dependency = dict(cloned["dependency"])
+        dependency["dependency_id"] = f"example__single-repo:{index}"
+        cloned["dependency"] = dependency
+        snapshots.append(cloned)
+
+    result = run_training_pipeline(
+        TrainingRunConfig(
+            snapshots=snapshots,
+            train_ratio=0.5,
+            validation_ratio=0.25,
+            calibration_bins=5,
+            split_strategy="grouped",
+        )
+    )
+
+    assert result.status == "insufficient_data"
+    assert result.split_summary is None
+    assert result.metrics is None
+    assert result.artifact is None
+    assert "three repository groups" in result.note
 
 
 def test_training_dataset_can_exclude_already_archived_observation_rows(
