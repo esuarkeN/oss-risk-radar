@@ -1,4 +1,7 @@
-import { InfoChipGroup, type InfoChipItem } from "@/components/info-chip-group";
+import Link from "next/link";
+
+import { DefinitionList } from "@/components/docs/definition-list";
+import type { InfoChipItem } from "@/components/info-chip-group";
 import { Card } from "@/components/ui/card";
 
 const dataSources: InfoChipItem[] = [
@@ -35,7 +38,14 @@ export default function DataSourcesPage() {
           true at the moment being scored, then combined with stable metadata and package-registry facts.
         </p>
       </div>
-      <InfoChipGroup items={dataSources} />
+      <DefinitionList items={dataSources} />
+      <p className="max-w-3xl text-sm leading-7 text-muted">
+        Next, see how these sources are turned into a leakage-controlled, labeled training table in{" "}
+        <Link href="/docs/dataset" className="font-medium text-accent">
+          Building the dataset
+        </Link>
+        .
+      </p>
     </Card>
   );
 }

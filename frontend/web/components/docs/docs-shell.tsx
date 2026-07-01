@@ -19,9 +19,16 @@ const sections: { title: string; items: DocsNavItem[] }[] = [
     items: [{ href: "/docs", label: "Overview" }],
   },
   {
-    title: "Data & features",
+    title: "Data & training",
     items: [
       { href: "/docs/data-sources", label: "Where data comes from" },
+      { href: "/docs/dataset", label: "Building the dataset" },
+      { href: "/docs/training", label: "Train it yourself" },
+    ],
+  },
+  {
+    title: "Features",
+    items: [
       { href: "/docs/feature-engineering", label: "Feature engineering" },
       { href: "/docs/features", label: "Feature reference" },
     ],
@@ -29,8 +36,15 @@ const sections: { title: string; items: DocsNavItem[] }[] = [
   {
     title: "Scoring",
     items: [
-      { href: "/docs/confidence", label: "How much to trust a score" },
-      { href: "/docs/ml", label: "Model performance" },
+      { href: "/docs/scoring", label: "How scoring a repo works" },
+      { href: "/docs/performance", label: "Training results explained" },
+      { href: "/docs/confidence", label: "Trust & confidence" },
+    ],
+  },
+  {
+    title: "Model evaluation (scientific)",
+    items: [
+      { href: "/docs/ml", label: "Overview" },
       { href: "/docs/ml/dataset", label: "Dataset", child: true },
       { href: "/docs/ml/repositories", label: "Training repositories", child: true },
       { href: "/docs/ml/runs", label: "Training runs", child: true },

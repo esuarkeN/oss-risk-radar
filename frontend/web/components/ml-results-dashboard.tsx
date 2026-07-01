@@ -7,7 +7,7 @@ import { CalibrationCurveChart } from "@/components/charts/calibration-curve-cha
 import { LogisticCoefficientChart } from "@/components/charts/logistic-coefficient-chart";
 import { ModelMetricComparisonChart } from "@/components/charts/model-metric-comparison-chart";
 import { TrainingMetricHistoryChart } from "@/components/charts/training-metric-history-chart";
-import { InfoChipGroup } from "@/components/info-chip-group";
+import { DefinitionList } from "@/components/docs/definition-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -491,7 +491,7 @@ export function MlResultsDashboard() {
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Metric Guide</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Read the top-line metrics without leaving the page</h2>
           </div>
-          <InfoChipGroup items={modelMetricGlossary} />
+          <DefinitionList items={modelMetricGlossary} />
         </Card>
       </section>
 

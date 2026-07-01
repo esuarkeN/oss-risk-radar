@@ -1,16 +1,9 @@
-import { InfoChip } from "@/components/info-chip";
-
+/**
+ * Shared shape for a labelled definition item. The popover-based InfoChip/InfoChipGroup were
+ * removed in favour of flowing text (see components/docs/definition-list.tsx); this type is kept
+ * because several glossaries and pages still describe their items with it.
+ */
 export interface InfoChipItem {
   label: string;
   description: string;
-}
-
-export function InfoChipGroup({ items }: { items: InfoChipItem[] }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((item) => (
-        <InfoChip key={item.label} label={item.label} description={item.description} />
-      ))}
-    </div>
-  );
 }

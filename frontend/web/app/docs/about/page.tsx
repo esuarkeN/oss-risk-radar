@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { InfoChipGroup } from "@/components/info-chip-group";
+import { DefinitionList } from "@/components/docs/definition-list";
 import { Card } from "@/components/ui/card";
 import { productGlossary } from "@/lib/metric-glossary";
 
@@ -23,7 +23,7 @@ export default function AboutPage() {
           OSS Risk Radar is a thesis-led prototype for understanding maintenance fragility in open source dependencies
           without collapsing the evidence into a black-box verdict.
         </p>
-        <InfoChipGroup items={productGlossary} />
+        <DefinitionList items={productGlossary} />
       </Card>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

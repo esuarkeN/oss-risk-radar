@@ -3,6 +3,14 @@ import Link from "next/link";
 
 import { Card } from "@/components/ui/card";
 
+const flow = [
+  { label: "Sources", body: "Public GitHub history + registry facts", href: "/docs/data-sources" },
+  { label: "Dataset", body: "Leakage-controlled labeled snapshots", href: "/docs/dataset" },
+  { label: "Training", body: "Fit, calibrate, evaluate, promote", href: "/docs/training" },
+  { label: "Scoring", body: "Enrich → features → model → calibrate", href: "/docs/scoring" },
+  { label: "Interpret", body: "Probability + confidence + evidence", href: "/docs/performance" },
+];
+
 const entries = [
   {
     href: "/docs/data-sources",
@@ -10,9 +18,14 @@ const entries = [
     body: "The public, point-in-time sources behind every signal — GH Archive history, GitHub metadata, and package registries.",
   },
   {
-    href: "/docs/feature-engineering",
-    title: "Feature engineering",
-    body: "How raw activity becomes comparable signals: trailing windows, human-only activity, and past-only measurement.",
+    href: "/docs/dataset",
+    title: "Building the dataset",
+    body: "How raw history becomes a leakage-controlled, labeled training table — the offline pipeline and the 12-month label.",
+  },
+  {
+    href: "/docs/training",
+    title: "Train it yourself",
+    body: "A runbook: prerequisites, the commands to build the dataset, train the artifacts, and promote a new model.",
   },
   {
     href: "/docs/features",
@@ -20,19 +33,14 @@ const entries = [
     body: "All 43 signals grouped by what they measure, each with an exact definition and the reason it exists.",
   },
   {
-    href: "/docs/confidence",
-    title: "How much to trust a score",
-    body: "What per-prediction confidence means and why it is separate from how decisive a score is.",
+    href: "/docs/scoring",
+    title: "How scoring a repo works",
+    body: "Step by step, what happens between hitting analyze and seeing a probability, confidence, and evidence.",
   },
   {
-    href: "/docs/ml",
-    title: "Model performance",
-    body: "How the model is evaluated overall, plus the dataset, training repositories, and training runs behind it.",
-  },
-  {
-    href: "/docs/about",
-    title: "About the project",
-    body: "What OSS Risk Radar is for, and the principles behind treating risk as decision support rather than a verdict.",
+    href: "/docs/performance",
+    title: "Training results explained",
+    body: "How well the model works in plain terms, where it is more or less reliable, and what that means for a score.",
   },
 ];
 
@@ -45,13 +53,35 @@ export default function DocsOverviewPage() {
           How OSS Risk Radar scores maintenance risk
         </h1>
         <p className="max-w-3xl text-sm leading-7 text-muted">
-          These docs explain where the data comes from, how a repository&apos;s raw activity is turned into model
-          signals, what each signal means and why it matters, and how the model behind the scores is evaluated. Use the
-          menu on the left, or start with a section below.
+          Built for developers: where the data comes from, how to train the model yourself, what the features are and how
+          they performed, and exactly what happens when a repository is scored. For the scientific evaluation of the
+          model, see{" "}
+          <Link href="/docs/ml" className="font-medium text-accent">
+            Model evaluation
+          </Link>
+          .
         </p>
       </Card>
 
-      <div className="grid animate-slide-up gap-4 md:grid-cols-2" style={{ animationDelay: "80ms" }}>
+      <Card className="animate-slide-up space-y-3" style={{ animationDelay: "60ms" }}>
+        <p className="text-xs uppercase tracking-[0.24em] text-muted">End to end</p>
+        <div className="flex flex-wrap items-stretch gap-2">
+          {flow.map((node, index) => (
+            <div key={node.label} className="flex items-center gap-2">
+              <Link
+                href={node.href}
+                className="block w-40 rounded-lg border border-line bg-panelAlt p-3 transition-colors hover:border-accent/40"
+              >
+                <p className="text-sm font-semibold text-foreground">{node.label}</p>
+                <p className="mt-1 text-xs leading-5 text-muted">{node.body}</p>
+              </Link>
+              {index < flow.length - 1 ? <ArrowRight className="h-4 w-4 shrink-0 text-muted" aria-hidden="true" /> : null}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div className="grid animate-slide-up gap-4 md:grid-cols-2" style={{ animationDelay: "120ms" }}>
         {entries.map((entry) => (
           <Link
             key={entry.href}
