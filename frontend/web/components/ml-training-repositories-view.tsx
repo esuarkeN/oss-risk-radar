@@ -379,10 +379,10 @@ export function MlTrainingRepositoriesView() {
       </Card>
 
       <div className="flex flex-wrap gap-3">
-        <Link href="/ml-evaluation/dataset" className="text-sm font-semibold text-accent transition hover:text-foreground">
+        <Link href="/docs/ml/dataset" className="text-sm font-semibold text-accent transition hover:text-foreground">
           Dataset coverage
         </Link>
-        <Link href="/ml-evaluation/runs" className="text-sm font-semibold text-accent transition hover:text-foreground">
+        <Link href="/docs/ml/runs" className="text-sm font-semibold text-accent transition hover:text-foreground">
           Run history
         </Link>
       </div>

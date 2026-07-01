@@ -83,7 +83,7 @@ export function MlTrainingRunsView() {
                       </p>
                     </div>
                   </div>
-                  <Link href="/ml-evaluation" className="text-sm font-semibold text-accent transition hover:text-foreground">
+                  <Link href="/docs/ml" className="text-sm font-semibold text-accent transition hover:text-foreground">
                     Back to overview
                   </Link>
                 </div>

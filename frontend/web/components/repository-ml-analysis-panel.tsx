@@ -1,13 +1,17 @@
 "use client";
 
 import { Activity, ShieldQuestion, Target, TriangleAlert } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { formatTrainingMetric, formatTrainingRate, selectCoefficientArtifact, selectScoringArtifact } from "@/lib/ml-evaluation";
+import { InfoTooltip } from "@/components/ui/tooltip";
+import { featureDocByKey } from "@/lib/feature-catalog";
+import { useCountUp } from "@/lib/use-count-up";
+import { formatTrainingRate, selectCoefficientArtifact, selectScoringArtifact } from "@/lib/ml-evaluation";
 import { confidenceFromAnalysis, confidenceFromStats, type ConfidenceComponent } from "@/lib/ml-prediction-confidence";
 import { NON_EVIDENTIAL_FEATURES, repositoryFeatureStats, repositoryModelAnalysis, type RepositoryVariableImpact } from "@/lib/ml-repository-analysis";
 import type { DependencyRecord } from "@/lib/types";
@@ -24,6 +28,40 @@ function formatValue(value: number) {
   }
   const rounded = Math.abs(value) >= 100 ? Math.round(value) : Math.round(value * 10) / 10;
   return rounded.toLocaleString();
+}
+
+// Features the model consumes on a log1p scale. The stored value/cohort mean are in log space,
+// so we invert with expm1 to show the real count a developer recognizes (e.g. 572, not 6.4).
+const LOG1P_FEATURES = new Set(["stars_log1p", "forks_log1p", "open_issues_log1p"]);
+
+type ValueScale = "real" | "model";
+
+// "real" de-logs log1p features into recognizable counts; "model" shows the raw value the model
+// consumes (log1p for those features). Non-log features are identical under both.
+function driverValue(feature: string, value: number, scale: ValueScale) {
+  return scale === "real" && LOG1P_FEATURES.has(feature) ? Math.expm1(value) : value;
+}
+
+function ScaleToggle({ value, onChange }: { value: ValueScale; onChange: (next: ValueScale) => void }) {
+  const options: { id: ValueScale; label: string }[] = [
+    { id: "real", label: "Real values" },
+    { id: "model", label: "Model input" },
+  ];
+  return (
+    <div className="inline-flex shrink-0 rounded-md border border-line bg-panelAlt p-0.5 text-[11px] font-medium">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          onClick={() => onChange(option.id)}
+          aria-pressed={value === option.id}
+          className={`rounded px-2 py-0.5 transition-colors ${value === option.id ? "bg-panel text-foreground" : "text-muted hover:text-foreground"}`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function formatPercent(value: number | null) {
@@ -83,6 +121,20 @@ function SectionHeading({ icon, eyebrow, title }: { icon: ReactNode; eyebrow: st
   );
 }
 
+function featureTooltipContent(feature: string): ReactNode {
+  const doc = featureDocByKey[feature];
+  if (!doc) {
+    return null;
+  }
+  return (
+    <>
+      <span className="block font-semibold text-foreground">{doc.label} · {doc.window}</span>
+      <span className="mt-1 block">{doc.definition}</span>
+      <span className="mt-1 block italic">Why: {doc.rationale}</span>
+    </>
+  );
+}
+
 export function RepositoryMlAnalysisPanel({ dependency }: { dependency: DependencyRecord | null }) {
   const { runs, loading } = useMlEvaluationState();
   const preferredModelNames = useMemo(
@@ -127,33 +179,27 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
     }
     return null;
   }, [modelAnalysis, logisticArtifact, fallbackStats, fallbackArtifact, fallbackProbability]);
+  const [valueScale, setValueScale] = useState<ValueScale>("real");
+  const probabilityValue = modelAnalysis?.calibratedProbability ?? fallbackProbability ?? null;
+  // Count-up animations must run before any early return to keep hook order stable.
+  const animatedProbability = useCountUp(probabilityValue ?? 0);
+  const animatedConfidence = useCountUp(confidence?.rollup ?? 0);
 
   if (!dependency?.repository) {
     return null;
   }
 
   const modelResults = dependency.riskProfile?.modelResults ?? [];
-  const activeArtifact = logisticArtifact ?? fallbackArtifact;
   const hasImpacts = Boolean(modelAnalysis);
-  const probability = modelAnalysis?.calibratedProbability ?? fallbackProbability ?? null;
-  const threshold = modelAnalysis?.threshold ?? fallbackArtifact?.threshold ?? null;
   const featureRows: { feature: string; label: string; observed: boolean }[] = modelAnalysis?.impacts ?? fallbackStats ?? [];
   const topImpacts = modelAnalysis?.impacts.slice(0, 8) ?? [];
   const topDrivers = modelAnalysis?.impacts.filter((impact) => impact.direction !== "neutral").slice(0, 4) ?? [];
   const missingSignals = featureRows.filter(
     (row) => !NON_EVIDENTIAL_FEATURES.has(row.feature) && !row.observed,
   );
-  const calibrationShift = modelAnalysis ? modelAnalysis.calibratedProbability - modelAnalysis.rawProbability : undefined;
-  const modelName = modelResults.length > 1
-    ? `ML ensemble ${modelResults.map((result) => result.modelName.replace("-baseline", "")).join(" + ")}`
-    : modelResults[0]
-      ? `${modelResults[0].modelName} ${modelResults[0].modelVersion ?? ""}`.trim()
-      : activeArtifact
-        ? `${activeArtifact.modelName} ${activeArtifact.modelVersion}`
-        : "No cached model";
 
   return (
-    <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+    <section className="grid animate-slide-up gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <Card className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -162,7 +208,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge tone={modelResults.length || modelAnalysis || confidence ? "low" : "neutral"}>{modelResults.length ? "Analysis scored" : modelAnalysis || confidence ? "Model ready" : loading ? "Loading" : "No artifact"}</Badge>
-            <Badge tone="neutral">{modelName}</Badge>
+            <Badge tone="neutral">ML maintenance model</Badge>
           </div>
         </div>
 
@@ -171,8 +217,8 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted">Inactivity-risk probability</p>
-              <p className="mt-1 text-4xl font-semibold tracking-tight text-foreground">
-                {probability != null ? formatTrainingRate(probability) : "Pending"}
+              <p className="mt-1 text-4xl font-semibold tracking-tight text-foreground tabular-nums">
+                {probabilityValue != null ? formatTrainingRate(animatedProbability) : "Pending"}
               </p>
             </div>
             {confidence ? (
@@ -180,23 +226,14 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
                 <Badge tone={confidence.marginLabel === "Decisive" ? "low" : confidence.marginLabel === "Borderline" ? "medium" : "neutral"}>
                   {confidence.marginLabel}
                 </Badge>
-                <span className="text-[11px] text-muted">{formatTrainingRate(confidence.marginToThreshold)} from threshold</span>
+                <span className="text-[11px] text-muted">{formatTrainingRate(confidence.marginToThreshold)} margin</span>
               </div>
             ) : null}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted">
-            {modelAnalysis ? (
-              <span>
-                Raw {formatTrainingRate(modelAnalysis.rawProbability)} → calibrated {formatTrainingRate(modelAnalysis.calibratedProbability)}
-                {calibrationShift != null ? ` (${formatImpact(calibrationShift)})` : ""}
-              </span>
-            ) : fallbackArtifact ? (
-              <span>From the {fallbackArtifact.algorithm ?? "tree"} model score — no linear per-feature decomposition</span>
-            ) : null}
-            {threshold != null ? <span>Decision threshold {formatTrainingMetric(threshold)}</span> : null}
             <span className="inline-flex items-center gap-1">
               <Activity className="size-3.5" aria-hidden="true" />
-              Heuristic score {formatTrainingRate((dependency.riskProfile?.inactivityRiskScore ?? 0) / 100)} · {dependency.riskProfile?.riskBucket ?? "unscored"}
+              Rule-based score {formatTrainingRate((dependency.riskProfile?.inactivityRiskScore ?? 0) / 100)} · {dependency.riskProfile?.riskBucket ?? "unscored"}
             </span>
           </div>
         </div>
@@ -211,8 +248,8 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
             />
             {confidence ? (
               <div className="text-right">
-                <p className="text-2xl font-semibold tracking-tight" style={{ color: scoreBarColor(confidence.rollup) }}>
-                  {formatPercent(confidence.rollup)}
+                <p className="text-2xl font-semibold tracking-tight tabular-nums" style={{ color: scoreBarColor(confidence.rollup) }}>
+                  {formatPercent(animatedConfidence)}
                 </p>
                 <Badge tone={scoreTone(confidence.rollup)}>{confidence.rollup >= 0.66 ? "Solid" : confidence.rollup >= 0.33 ? "Limited" : "Weak"}</Badge>
               </div>
@@ -224,7 +261,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
                 <ConfidenceBar key={component.key} component={component} />
               ))}
               <p className="text-[11px] leading-5 text-muted">
-                Confidence is the geometric mean of these per-repository factors — it reflects evidence available for <em>this</em> repo, not the model&apos;s overall accuracy.
+                Confidence combines these per-repository factors — it reflects the evidence available for <em>this</em> repo, not the model&apos;s overall accuracy.
               </p>
             </div>
           ) : (
@@ -241,11 +278,21 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
               title={`${missingSignals.length} expected signals missing`}
             />
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {missingSignals.slice(0, 10).map((impact) => (
-                <span key={impact.feature} className="rounded-md border border-line bg-panel px-2 py-1 text-xs text-muted">
-                  {impact.label}
-                </span>
-              ))}
+              {missingSignals.slice(0, 10).map((impact) =>
+                featureDocByKey[impact.feature] ? (
+                  <InfoTooltip
+                    key={impact.feature}
+                    content={featureTooltipContent(impact.feature)}
+                    className="rounded-md border border-line bg-panel px-2 py-1 text-xs text-muted"
+                  >
+                    {impact.label}
+                  </InfoTooltip>
+                ) : (
+                  <span key={impact.feature} className="rounded-md border border-line bg-panel px-2 py-1 text-xs text-muted">
+                    {impact.label}
+                  </span>
+                ),
+              )}
             </div>
             <p className="mt-3 text-xs leading-5 text-muted">
               These were imputed to the cohort average, so they contribute no evidence and cap the confidence above.
@@ -260,10 +307,13 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
           <p className="text-xs uppercase tracking-[0.24em] text-muted">Variable Impact</p>
           <h2 className="text-xl font-semibold tracking-tight text-foreground">What drove this repo&apos;s score</h2>
           {hasImpacts ? (
-            <p className="text-sm text-muted">Each bar is one feature&apos;s contribution to the logit. Red pushes toward inactivity risk; green reduces it. The final probability is the sigmoid of the <em>sum</em> of all impacts plus the intercept, so a few strong green bars can outweigh many weak red ones.</p>
+            <p className="text-sm text-muted">Each bar shows how much a signal moved this repository&apos;s risk. Red pushes the risk up; green pulls it down. A few strong green signals of healthy maintenance can outweigh many weak red ones.</p>
           ) : (
-            <p className="text-sm text-muted">Per-feature attribution for this repository&apos;s score.</p>
+            <p className="text-sm text-muted">Per-signal breakdown of this repository&apos;s score.</p>
           )}
+          <Link href="/docs" className="inline-flex items-center gap-1 text-xs font-semibold text-accent transition hover:text-foreground">
+            How to read this →
+          </Link>
         </div>
         {topImpacts.length ? (
           <>
@@ -293,14 +343,23 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
             </div>
             {topDrivers.length ? (
               <div className="mt-4 space-y-2 border-t border-line pt-4">
-                <SectionHeading icon={<Target className="size-4" aria-hidden="true" />} eyebrow="Top drivers in plain terms" title="Read against the training cohort" />
+                <div className="flex items-center justify-between gap-3">
+                  <SectionHeading icon={<Target className="size-4" aria-hidden="true" />} eyebrow="Top drivers in plain terms" title="Read against the training cohort" />
+                  <ScaleToggle value={valueScale} onChange={setValueScale} />
+                </div>
                 <div className="mt-2 grid gap-2">
                   {topDrivers.map((impact: RepositoryVariableImpact) => (
                     <div key={impact.feature} className="flex items-center justify-between gap-3 text-sm">
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-foreground">{impact.label}</p>
+                        {featureDocByKey[impact.feature] ? (
+                          <InfoTooltip content={featureTooltipContent(impact.feature)}>
+                            <span className="font-medium text-foreground">{impact.label}</span>
+                          </InfoTooltip>
+                        ) : (
+                          <p className="truncate font-medium text-foreground">{impact.label}</p>
+                        )}
                         <p className="text-xs text-muted">
-                          {formatValue(impact.value)} (typical ≈ {formatValue(impact.cohortReference)}) · {positionWord(impact.standardizedValue)}
+                          {formatValue(driverValue(impact.feature, impact.value, valueScale))} (typical ≈ {formatValue(driverValue(impact.feature, impact.cohortReference, valueScale))}) · {positionWord(impact.standardizedValue)}
                           {impact.observed ? "" : " · imputed"}
                         </p>
                       </div>
@@ -316,11 +375,10 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
         ) : fallbackArtifact ? (
           <div className="flex min-h-[260px] flex-1 flex-col items-center justify-center gap-2 rounded-[1.25rem] border border-dashed border-line bg-panelAlt/70 px-6 text-center text-sm text-muted">
             <TriangleAlert className="size-5 text-[hsl(var(--warning))]" aria-hidden="true" />
-            <p className="font-medium text-foreground">Per-feature impact isn&apos;t available for this model</p>
+            <p className="font-medium text-foreground">Per-signal breakdown isn&apos;t available for this score</p>
             <p className="max-w-sm text-xs leading-5">
-              This repository was scored by a {fallbackArtifact.algorithm ?? "tree"} model, which has no linear coefficients to
-              decompose. The probability, confidence, and data-quality breakdown on the left still apply; a per-feature
-              attribution would need a logistic model or SHAP values.
+              This repository&apos;s score doesn&apos;t expose a per-signal breakdown. The probability, confidence, and
+              data-quality summary on the left still apply.
             </p>
           </div>
         ) : (

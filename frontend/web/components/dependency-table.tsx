@@ -180,7 +180,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
           {mappedOnly ? <Badge tone="neutral">Mapped repos</Badge> : null}
           {filters.bucket !== "all" ? <Badge tone={filters.bucket}>{filters.bucket}</Badge> : null}
           {filters.ecosystem !== "all" ? <Badge tone="neutral">{filters.ecosystem}</Badge> : null}
-          {filters.search ? <Badge tone="neutral">"{filters.search}"</Badge> : null}
+          {filters.search ? <Badge tone="neutral">&ldquo;{filters.search}&rdquo;</Badge> : null}
           <Button type="button" onClick={resetFilters} className="h-auto border-transparent bg-transparent px-0 py-0 text-xs text-accent hover:bg-transparent hover:text-foreground">
             Reset
           </Button>

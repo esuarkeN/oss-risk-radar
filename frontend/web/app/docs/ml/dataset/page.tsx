@@ -1,5 +1,5 @@
 import { MlTrainingDatasetView } from "@/components/ml-training-dataset-view";
 
-export default function MlEvaluationDatasetPage() {
+export default function DocsMlDatasetPage() {
   return <MlTrainingDatasetView />;
 }

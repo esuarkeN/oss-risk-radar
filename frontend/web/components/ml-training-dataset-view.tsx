@@ -347,7 +347,7 @@ export function MlTrainingDatasetView() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link href="/ml-evaluation/repositories" className="text-sm font-semibold text-accent transition hover:text-foreground">
+            <Link href="/docs/ml/repositories" className="text-sm font-semibold text-accent transition hover:text-foreground">
               Open full repo list
             </Link>
             <Badge tone="neutral">{trainingRepositories.length} repos</Badge>
@@ -416,7 +416,7 @@ export function MlTrainingDatasetView() {
             <p className="text-xs uppercase tracking-[0.24em] text-muted">Feature Inventory</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">Latest training feature set</h2>
           </div>
-          <Link href="/ml-evaluation/runs" className="text-sm font-semibold text-accent transition hover:text-foreground">
+          <Link href="/docs/ml/runs" className="text-sm font-semibold text-accent transition hover:text-foreground">
             Go to run history
           </Link>
         </div>

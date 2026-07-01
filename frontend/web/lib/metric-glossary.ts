@@ -19,41 +19,6 @@ export const productGlossary: InfoChipItem[] = [
   }
 ];
 
-export const modelFeatureGlossary: InfoChipItem[] = [
-  {
-    label: "Last push age",
-    description: "How old the latest repository push is. Older push activity is a strong inactivity signal."
-  },
-  {
-    label: "Release cadence",
-    description: "The approximate time between releases. Slower cadence can indicate fragility, depending on the project context."
-  },
-  {
-    label: "Contributor depth",
-    description: "How many distinct recent contributors were observed. More depth reduces single-maintainer fragility."
-  },
-  {
-    label: "Contributor concentration",
-    description: "How dominant one maintainer appears within recent activity. Higher concentration increases continuity risk."
-  },
-  {
-    label: "Issue growth",
-    description: "Whether open issues are growing faster than they are being resolved. Persistent growth can signal maintenance strain."
-  },
-  {
-    label: "PR responsiveness",
-    description: "The median time to respond to pull requests. Slower responses can indicate operational bottlenecks."
-  },
-  {
-    label: "Scorecard score",
-    description: "An OpenSSF hygiene indicator used as security-practice context, not as a standalone trust verdict."
-  },
-  {
-    label: "Signal completeness",
-    description: "A feature showing how much of the expected public evidence was actually available for a dependency snapshot."
-  }
-];
-
 export const modelMetricGlossary: InfoChipItem[] = [
   {
     label: "Quality",

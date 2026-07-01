@@ -1,5 +1,5 @@
 import { MlResultsDashboard } from "@/components/ml-results-dashboard";
 
-export default function MlEvaluationPage() {
+export default function DocsMlOverviewPage() {
   return <MlResultsDashboard />;
 }

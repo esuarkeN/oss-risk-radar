@@ -1,7 +1,6 @@
 import Link from "next/link";
 
 import { InfoChipGroup } from "@/components/info-chip-group";
-import { WorkspaceLayout } from "@/components/workspace-layout";
 import { Card } from "@/components/ui/card";
 import { productGlossary } from "@/lib/metric-glossary";
 
@@ -14,8 +13,8 @@ const pillars = [
 
 export default function AboutPage() {
   return (
-    <WorkspaceLayout>
-      <Card className="space-y-4">
+    <>
+      <Card className="animate-slide-up space-y-4">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--accent))]">About</p>
         <h1 className="text-2xl font-extrabold tracking-tight text-[hsl(var(--foreground))] lg:text-3xl">
           What this project is trying to achieve.
@@ -39,12 +38,12 @@ export default function AboutPage() {
         <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">Next click</p>
         <p className="text-sm text-[hsl(var(--muted))]">
           Need the exact signals? Open{" "}
-          <Link href="/methodology" className="font-medium text-accent">
-            Methodology
+          <Link href="/docs/features" className="font-medium text-accent">
+            Feature reference
           </Link>
           . Need the model figures? Open{" "}
-          <Link href="/ml-evaluation" className="font-medium text-accent">
-            ML Results
+          <Link href="/docs/ml" className="font-medium text-accent">
+            Model performance
           </Link>
           . Need the live repository picture? Open{" "}
           <Link href="/repositories" className="font-medium text-accent">
@@ -53,6 +52,6 @@ export default function AboutPage() {
           .
         </p>
       </Card>
-    </WorkspaceLayout>
+    </>
   );
 }

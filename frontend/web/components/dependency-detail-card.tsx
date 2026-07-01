@@ -7,7 +7,6 @@ import { RiskBadge } from "@/components/risk-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getDependency } from "@/lib/api";
-import { formatTrainingMetric } from "@/lib/ml-evaluation";
 import { dependencyDisplayName, dependencyDisplayVersion, isRepositoryProfile } from "@/lib/repository-profile";
 import type { DependencyRecord } from "@/lib/types";
 import { formatConfidence, formatOutlookScore, formatRiskScore } from "@/lib/utils";
@@ -133,41 +132,27 @@ export function DependencyDetailCard({ dependencyId }: DependencyDetailCardProps
       ) : null}
 
       {modelResults.length ? (
-        <Card className="space-y-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-muted">About this model</p>
-            <h2 className="mt-2 text-lg font-semibold text-foreground">Global model quality</h2>
-            <p className="mt-1 text-sm text-muted">
-              These are held-out evaluation metrics for the model overall — the same for every repository it scores. They tell you how much to trust the model in general, not this specific prediction. See the{" "}
-              <Link href="/methodology" className="text-accent transition hover:text-foreground">methodology</Link> for definitions.
+        <Card className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">About this score</p>
+            <p className="mt-1 max-w-xl text-sm text-muted">
+              This score comes from a machine-learning maintenance model. What each signal means is documented in Docs;
+              how the model is evaluated lives in ML explained.
             </p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-[0.16em] text-muted">
-                  <th className="pb-3 pr-4">Model</th>
-                  <th className="pb-3 pr-4">AUROC</th>
-                  <th className="pb-3 pr-4">Brier</th>
-                  <th className="pb-3 pr-4">ECE</th>
-                  <th className="pb-3 pr-4">Samples</th>
-                </tr>
-              </thead>
-              <tbody>
-                {modelResults.map((result) => (
-                  <tr key={result.modelName} className="border-b border-line/70 last:border-b-0">
-                    <td className="py-3 pr-4 font-semibold text-foreground">
-                      {result.modelName}
-                      {result.modelVersion ? <span className="ml-2 text-xs font-medium text-muted">{result.modelVersion}</span> : null}
-                    </td>
-                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(result.rocAuc)}</td>
-                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(result.brierScore)}</td>
-                    <td className="py-3 pr-4 text-foreground">{formatTrainingMetric(result.expectedCalibrationError)}</td>
-                    <td className="py-3 pr-4 text-foreground">{result.sampleCount || "Pending"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Link
+              href="/docs"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-panelAlt px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40"
+            >
+              Docs
+            </Link>
+            <Link
+              href="/docs/ml"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-panelAlt px-3 py-1.5 text-xs font-semibold text-foreground transition hover:border-accent/40"
+            >
+              ML explained
+            </Link>
           </div>
         </Card>
       ) : null}

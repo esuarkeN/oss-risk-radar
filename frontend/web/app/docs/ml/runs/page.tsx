@@ -1,5 +1,5 @@
 import { MlTrainingRunsView } from "@/components/ml-training-runs-view";
 
-export default function MlEvaluationRunsPage() {
+export default function DocsMlRunsPage() {
   return <MlTrainingRunsView />;
 }

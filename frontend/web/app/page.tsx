@@ -13,19 +13,18 @@ import {
 import Link from "next/link";
 
 import { CreateAnalysisForm } from "@/components/landing/create-analysis-form";
+import { ResumeAnalysisCard } from "@/components/landing/resume-analysis-card";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const navLinks = [
   { href: "/repositories", label: "Repositories" },
-  { href: "/methodology", label: "Methodology" },
-  { href: "/ml-evaluation", label: "ML Results" },
-  { href: "/about", label: "About" },
+  { href: "/docs", label: "Docs" },
 ];
 
 const stats = [
-  { value: "12+", label: "Signal sources per package" },
+  { value: "43", label: "Maintenance signals per repo" },
   { value: "4", label: "Risk buckets" },
-  { value: "0.82", label: "Ensemble AUROC" },
+  { value: "12mo", label: "Inactivity outlook" },
   { value: "npm · PyPI · Go", label: "Supported ecosystems" },
 ];
 
@@ -40,7 +39,7 @@ const features = [
     icon: ShieldCheck,
     color: "text-danger bg-danger/10",
     title: "ML Risk Scoring",
-    body: "XGBoost and logistic regression ensemble calibrated on historical maintenance outcomes — not just CVE presence.",
+    body: "A machine-learning model trained on historical maintenance outcomes — it scores operational fragility, not just known CVEs.",
   },
   {
     icon: Zap,
@@ -148,7 +147,7 @@ export default function HomePage() {
               "deps.dev enrichment",
               "GitHub signal extraction",
               "OpenSSF Scorecard",
-              "XGBoost + LR ensemble",
+              "ML-scored maintenance risk",
             ].map((tag) => (
               <span
                 key={tag}
@@ -178,6 +177,7 @@ export default function HomePage() {
 
       {/* Submission form */}
       <div id="analyze" className="px-6 pb-16 lg:pb-20">
+        <ResumeAnalysisCard />
         <div className="mx-auto max-w-2xl">
           <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-7 shadow-panel">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-[hsl(var(--accent))]">
@@ -256,16 +256,16 @@ export default function HomePage() {
               body: "Rank tracked repositories and package snapshots by maintenance signal.",
             },
             {
-              href: "/methodology",
+              href: "/docs",
               num: "02",
-              title: "Methodology",
-              body: "Inspect signal definitions, scoring boundaries, and model feature layer.",
+              title: "Docs",
+              body: "Where the data comes from, how features are engineered, and what each one means.",
             },
             {
-              href: "/ml-evaluation",
+              href: "/docs/ml",
               num: "03",
-              title: "ML results",
-              body: "Review model quality, calibration metrics, and cached training runs.",
+              title: "ML explained",
+              body: "How the model is evaluated and how much to trust an individual score.",
             },
           ].map((item) => (
             <Link

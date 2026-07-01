@@ -683,7 +683,7 @@ export function RepositoryRadar() {
                 <p className="text-xs uppercase tracking-[0.24em] text-muted">Base Repos</p>
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">Top training projects</h2>
               </div>
-              <Link href="/ml-evaluation/dataset" className="text-sm font-semibold text-accent transition hover:text-foreground">
+              <Link href="/docs/ml/dataset" className="text-sm font-semibold text-accent transition hover:text-foreground">
                 Full list
               </Link>
             </div>

@@ -1,18 +1,17 @@
 "use client";
 
-import { BarChart3, BookOpen, CircleDot, Home, Info, LayoutDashboard, Menu, Network, X } from "lucide-react";
+import { BookOpen, CircleDot, History, Home, LayoutDashboard, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getLastAnalysis, type LastAnalysis } from "@/lib/last-analysis";
 import { cn } from "@/lib/utils";
 
 const globalNavItems = [
   { href: "/repositories", label: "Repositories", icon: LayoutDashboard },
-  { href: "/methodology", label: "Methodology", icon: BookOpen },
-  { href: "/ml-evaluation", label: "ML Results", icon: BarChart3 },
-  { href: "/about", label: "About", icon: Info },
+  { href: "/docs", label: "Docs", icon: BookOpen },
 ] as const;
 
 function extractAnalysisId(pathname: string): string | null {
@@ -23,6 +22,15 @@ function extractAnalysisId(pathname: string): string | null {
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
   const analysisId = extractAnalysisId(pathname);
+  const [lastAnalysis, setLastAnalysisState] = useState<LastAnalysis | null>(null);
+
+  useEffect(() => {
+    // Read after mount to avoid hydration mismatch; refresh when the route changes.
+    setLastAnalysisState(getLastAnalysis());
+  }, [pathname]);
+
+  // Offer a resume link only when there is a remembered analysis we are not already viewing.
+  const showLastAnalysis = Boolean(lastAnalysis && lastAnalysis.id !== analysisId);
 
   return (
     <div className="flex h-full flex-col">
@@ -58,6 +66,19 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
           Home
         </Link>
 
+        {/* Resume last analysis */}
+        {showLastAnalysis && lastAnalysis ? (
+          <Link
+            href={`/analyses/${lastAnalysis.id}`}
+            onClick={onNavClick}
+            title={lastAnalysis.label}
+            className="mb-1 flex items-center gap-3 rounded-[7px] px-3 py-2 text-sm font-medium text-[hsl(var(--muted))] transition-colors hover:bg-[hsl(var(--panel-alt))] hover:text-[hsl(var(--foreground))]"
+          >
+            <History className="h-4 w-4 shrink-0" />
+            <span className="truncate">Last analysis</span>
+          </Link>
+        ) : null}
+
         {/* Analysis-specific section */}
         {analysisId && (
           <>
@@ -72,12 +93,6 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 label: "Dashboard",
                 icon: LayoutDashboard,
                 exact: true,
-              },
-              {
-                href: `/analyses/${analysisId}/tree`,
-                label: "Dep Tree",
-                icon: Network,
-                exact: false,
               },
             ].map((item) => {
               const isActive = item.exact

@@ -336,19 +336,19 @@ export function MlResultsDashboard() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/ml-evaluation/dataset"
+              href="/docs/ml/dataset"
               className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:bg-panelAlt"
             >
               Inspect dataset
             </Link>
             <Link
-              href="/ml-evaluation/repositories"
+              href="/docs/ml/repositories"
               className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:bg-panelAlt"
             >
               Inspect repos
             </Link>
             <Link
-              href="/ml-evaluation/runs"
+              href="/docs/ml/runs"
               className="inline-flex items-center justify-center rounded-md border border-line px-4 py-2 text-sm font-medium text-foreground transition hover:border-accent/40 hover:bg-panelAlt"
             >
               Inspect runs

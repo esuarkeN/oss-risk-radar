@@ -3,13 +3,12 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { DependencyPathExplorer } from "@/components/dependency-path-explorer";
-import { EvidenceList, FactorList, RiskScorePill } from "@/components/analysis/detail-sections";
+import { EvidenceList, FactorList } from "@/components/analysis/detail-sections";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { getDependencies, getDependency, getDependencyGraph } from "@/lib/api";
 import { formatConfidence, formatDate, formatOutlookScore, formatScore, titleCase } from "@/lib/format";
-import { formatTrainingMetric } from "@/lib/ml-evaluation";
 
 const BUCKET_SCORE_COLORS: Record<string, string> = {
   critical: "text-[hsl(var(--danger))]",
@@ -162,9 +161,8 @@ export default async function DependencyDetailPage({
                       <div key={result.modelName} className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-4 py-4 text-sm">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="font-semibold text-[hsl(var(--foreground))]">{result.modelName}</p>
-                            <p className="mt-0.5 text-[10px] uppercase tracking-widest text-[hsl(var(--muted))]">
-                              {result.algorithm || "model"} {result.modelVersion ?? ""}
+                            <p className="font-semibold text-[hsl(var(--foreground))]">
+                              {result.modelName.includes("cold-start") ? "Cold-start scoring" : "Full-history scoring"}
                             </p>
                           </div>
                           <Badge tone={result.riskBucket}>{result.riskBucket}</Badge>
@@ -173,7 +171,6 @@ export default async function DependencyDetailPage({
                           <p>Outlook <span className="font-semibold text-[hsl(var(--foreground))]">{formatOutlookScore(result.maintenanceOutlook12mScore)}</span></p>
                           <p>Security <span className="font-semibold text-[hsl(var(--foreground))]">{formatScore(result.securityPostureScore)}</span></p>
                           <p>Confidence <span className="font-semibold text-[hsl(var(--foreground))]">{formatConfidence(result.confidenceScore)}</span></p>
-                          <p>AUROC <span className="font-semibold text-[hsl(var(--foreground))]">{formatTrainingMetric(result.rocAuc)}</span></p>
                         </div>
                       </div>
                     ))}

@@ -35,6 +35,26 @@ const nextConfig = {
         destination: "/analyses/:path*",
         permanent: false,
       },
+      {
+        source: "/ml-evaluation",
+        destination: "/docs/ml",
+        permanent: false,
+      },
+      {
+        source: "/ml-evaluation/:path*",
+        destination: "/docs/ml/:path*",
+        permanent: false,
+      },
+      {
+        source: "/about",
+        destination: "/docs/about",
+        permanent: false,
+      },
+      {
+        source: "/methodology",
+        destination: "/docs",
+        permanent: false,
+      },
     ];
   },
 };
