@@ -1,0 +1,102 @@
+{
+  "generatedAt": "2026-06-11T09:19:26.666Z",
+  "outputFile": "tmp/training-foundation/foundation-seed.csv",
+  "targetRepositories": 5000,
+  "rowsWritten": 5000,
+  "includeArchived": true,
+  "requireLicense": true,
+  "minimumStars": 100,
+  "pageSize": 100,
+  "samplingFrame": "GitHub Search repositories filtered to public, non-fork repositories with at least 100 stars across active, dormant, and archived strata; seed bucket is sampling provenance, not a training label.",
+  "bucketSummaries": [
+    {
+      "label": "active-elite",
+      "target": 250,
+      "query": "is:public fork:false archived:false stars:>=5000 pushed:>=2025-06-11",
+      "added": 250,
+      "skippedUnlicensed": 20,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "active-high",
+      "target": 500,
+      "query": "is:public fork:false archived:false stars:1000..4999 pushed:>=2025-06-11",
+      "added": 500,
+      "skippedUnlicensed": 38,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "active-medium",
+      "target": 500,
+      "query": "is:public fork:false archived:false stars:500..999 pushed:>=2025-06-11",
+      "added": 500,
+      "skippedUnlicensed": 75,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "active-foundation",
+      "target": 1000,
+      "query": "is:public fork:false archived:false stars:100..499 pushed:>=2025-06-11",
+      "added": 845,
+      "skippedUnlicensed": 155,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "dormant-high",
+      "target": 350,
+      "query": "is:public fork:false archived:false stars:>=1000 pushed:<=2024-06-11",
+      "added": 350,
+      "skippedUnlicensed": 126,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "dormant-medium",
+      "target": 400,
+      "query": "is:public fork:false archived:false stars:500..999 pushed:<=2024-06-11",
+      "added": 400,
+      "skippedUnlicensed": 191,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "dormant-foundation",
+      "target": 1000,
+      "query": "is:public fork:false archived:false stars:100..499 pushed:<=2024-06-11",
+      "added": 649,
+      "skippedUnlicensed": 351,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "archived-high",
+      "target": 250,
+      "query": "is:public fork:false archived:true stars:>=1000",
+      "added": 250,
+      "skippedUnlicensed": 33,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "archived-medium",
+      "target": 250,
+      "query": "is:public fork:false archived:true stars:500..999",
+      "added": 250,
+      "skippedUnlicensed": 46,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "archived-foundation",
+      "target": 500,
+      "query": "is:public fork:false archived:true stars:100..499",
+      "added": 500,
+      "skippedUnlicensed": 138,
+      "skippedBelowMinimumStars": 0
+    },
+    {
+      "label": "fallback-active",
+      "target": null,
+      "query": "is:public fork:false archived:false stars:>=100 pushed:>=2024-12-18",
+      "added": 506,
+      "skippedUnlicensed": 50,
+      "skippedBelowMinimumStars": 0,
+      "fallback": true
+    }
+  ]
+}
