@@ -19,15 +19,7 @@ The scope of the predictive model must be stated precisely, because the research
 
 OSS Risk Radar was developed iteratively. The first iteration validated the end-to-end workflow with a small pilot training run. This run was used to check whether the pipeline could create historical snapshots, train a model, export an artifact, and return risk scores for manually inspected repositories. It was not treated as the empirical basis of the thesis and is not used in any reported result.
 
-Manual inspection of the first model outputs revealed that the initial scoring behavior was not sufficiently plausible in all cases. Three repositories were used as informal, formative review examples during this diagnostic step; they are reported as qualitative development evidence and not as a measure of model accuracy:
-
-\begin{itemize}
-    \item \texttt{prometheus-community/helm-charts}: the model assigned high risk, although the repository appeared operationally active and the result was considered implausible.
-    \item \texttt{DuNeSliM/AIO}: the model assigned low risk, although manual inspection suggested that a higher risk assessment would be more plausible.
-    \item \texttt{telekom/Open-Telekom-Integration-Platform}: the model assigned low risk. This was broadly acceptable, but the interpretation was nuanced because the repository had not received a recent commit at the time of inspection.
-\end{itemize}
-
-These cases were used as an error-analysis step. The feature set and training setup were then revised to better separate activity, release behavior, contributor dynamics, responsiveness, backlog pressure, and concentration-related risk. This process is consistent with the Design Science Research framing of the thesis: the artifact was built, evaluated, diagnosed, and refined based on observed shortcomings.
+Manual inspection of the first model outputs revealed that the initial scoring behavior was not sufficiently plausible in all cases. A small number of repositories were used as informal, formative review examples during this diagnostic step --- one operationally active project scored implausibly high, and others scored low where a higher or more nuanced assessment seemed warranted --- and are reported as qualitative development evidence rather than as a measure of model accuracy. These cases were used as an error-analysis step, after which the feature set and training setup were revised to better separate activity, release behavior, contributor dynamics, responsiveness, backlog pressure, and concentration-related risk. This process is consistent with the Design Science Research framing of the thesis: the artifact was built, evaluated, diagnosed, and refined based on observed shortcomings.
 
 The second iteration produced the dataset and model artifacts used for the reported evaluation. It expanded the empirical basis to a repository-first foundation dataset with a target of 5,000 repositories. The foundation seed is generated from public, non-fork GitHub repositories with a license object and a minimum star threshold. The documented default threshold is 100 stars \cite{ossRiskRadarDatasetBuilder}. The seed is stratified across active, dormant, and archived buckets. These buckets are used only as sampling provenance and not as training labels. The actual supervised label is derived from future repository behavior.
 
@@ -81,27 +73,6 @@ The historical dataset builder creates an inspectable dataset through a sequence
 \label{sec:method-observation-window}
 
 The full-history training run used in the reported evaluation contains 50,000 total rows. Of these, 41,832 rows are labeled and 8,168 rows remain unlabeled. The observation dates range from \texttt{2023-01-01} to \texttt{2025-04-01}. The labeled rows are split into 31,374 training rows, 6,275 validation rows, and 4,183 held-out test rows.
-
-\begin{table}[htbp]
-\centering
-\caption{Full-history dataset summary for the reported run}
-\label{tab:method-current-dataset-summary}
-\begin{tabular}{p{0.38\textwidth} p{0.42\textwidth}}
-\hline
-\textbf{Item} & \textbf{Value} \\
-\hline
-Target repository count & 5,000 \\
-Total snapshot rows & 50,000 \\
-Labeled rows & 41,832 \\
-Unlabeled rows & 8,168 \\
-Earliest observation date & \texttt{2023-01-01} \\
-Latest observation date & \texttt{2025-04-01} \\
-Training rows & 31,374 \\
-Validation rows & 6,275 \\
-Test rows & 4,183 \\
-\hline
-\end{tabular}
-\end{table}
 
 The label horizon is 12 months. Therefore, a repository snapshot can only be used as a labeled training example if the available historical data covers the full future label window. If this condition is not met, the row remains unlabeled. This is important because the absence of future activity is only meaningful when the future observation period is actually covered.
 
