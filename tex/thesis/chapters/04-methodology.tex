@@ -75,44 +75,7 @@ The seed deliberately oversamples inactive repositories: before sampling, the do
 \section{Dataset Construction Workflow}
 \label{sec:method-dataset-construction}
 
-The historical dataset builder creates an inspectable dataset through a sequence of intermediate steps. The implemented workflow is summarized in Table~\ref{tab:method-dataset-flow}.
-
-\begin{table}[htbp]
-\centering
-\caption{Historical dataset construction workflow}
-\label{tab:method-dataset-flow}
-\begin{tabular}{p{0.08\textwidth} p{0.82\textwidth}}
-\hline
-\textbf{Step} & \textbf{Description} \\
-\hline
-1 & Load repository candidates from the foundation seed. \\
-2 & Use the seed strata to obtain a mixture of active, dormant, and archived repository histories. \\
-3 & Resolve repository identities from explicit seed fields or package metadata where required. \\
-4 & Enrich stable repository metadata through GitHub. \\
-5 & Parse GH Archive event files into normalized repository histories. \\
-6 & Build quarterly observation snapshots for each repository. \\
-7 & Compute observation-time features using only data available at or before \(t\). \\
-8 & Compute 12-month labels using only the future window \((t, t + 12\text{ months}]\). \\
-9 & Export the final snapshot dataset for the existing model-training workflow. \\
-10 & Write a repository feature cache for runtime full-history scoring. \\
-\hline
-\end{tabular}
-\end{table}
-
-The builder writes intermediate files under the configured output directory. These files make the dataset construction process auditable and allow the generated dataset to be inspected before training. The documented intermediate outputs include:
-
-\begin{itemize}
-    \item \texttt{repositories.jsonl}
-    \item \texttt{packages.jsonl}
-    \item \texttt{package\_repository\_links.jsonl}
-    \item \texttt{observation\_snapshots.jsonl}
-    \item \texttt{snapshot\_features.jsonl}
-    \item \texttt{snapshot\_labels.jsonl}
-    \item \texttt{training\_snapshots.json}
-    \item \texttt{repository-feature-cache.json}
-\end{itemize}
-
-The final export follows the existing training snapshot contract used by OSS Risk Radar. This allows the historical dataset builder to feed the notebook-based training pipeline without requiring a separate model-training interface.
+The historical dataset builder creates an inspectable dataset through a sequence of intermediate steps: it loads repository candidates from the foundation seed, resolves repository identities, enriches stable metadata through GitHub, parses GH Archive event files into normalized repository histories, builds quarterly observation snapshots, computes observation-time features using only data available at or before \(t\), computes 12-month labels using only the future window \((t, t + 12\text{ months}]\), and exports the training snapshot dataset together with a repository feature cache for runtime full-history scoring. The individual steps and the intermediate files written at each stage --- which make the construction process auditable and allow the dataset to be inspected before training --- are listed in Appendix~\ref{appendix:dataset-construction}. The final export follows the existing training snapshot contract used by OSS Risk Radar, so the historical dataset builder can feed the notebook-based training pipeline without requiring a separate model-training interface.
 
 \section{Observation Window and Historical Coverage}
 \label{sec:method-observation-window}
@@ -223,7 +186,7 @@ The training workflow is notebook-primary. The notebook \texttt{notebooks/oss-ma
 
 The reported learned model families are Logistic Regression, XGBoost, and a feedforward neural network, each trained for the full-history and cold-start regimes. Logistic Regression is used as an interpretable linear model, XGBoost as a strong non-linear gradient-boosted tree model, and the neural network as a non-linear model that learns feature interactions through hidden layers \cite{james2021islr}. In addition, a trivial recency baseline is included as a non-learned reference. This baseline predicts inactivity directly from a single recency signal, such as days since the last commit or days since the last release, using a threshold selected on the validation slice. The recency baseline is necessary because the label is itself activity-related (Section~\ref{sec:method-leakage-prevention}); the learned models are only worth reporting if they outperform this baseline, especially on repositories that are still active at \(t\).
 
-The neural network is a multilayer perceptron implemented directly on top of numpy rather than a deep-learning framework, which keeps the artifact dependency-light and fully inspectable. It uses two hidden layers with 64 and 32 units, ReLU activations, and a sigmoid output. Inputs are standardized using training-set means and standard deviations, which are stored with the artifact and reapplied at inference time, and the weights are initialized with Xavier-uniform values under a fixed random seed for reproducibility. The network is trained by mini-batch stochastic gradient descent on the binary cross-entropy objective, with balanced class weights to counter label imbalance and L2 weight regularization. The default configuration uses a learning rate of \(0.01\), 150 epochs, a batch size of 256, and an L2 penalty of \(0.001\). Like the other learned models, its probabilities are calibrated on the validation slice before evaluation.
+The exact model configurations and hyperparameters are documented in Appendix~\ref{appendix:impl-detail}; all learned models are calibrated on the validation slice before evaluation.
 
 Training uses a time-aware split with the default ratio:
 
@@ -249,135 +212,6 @@ Second, the model is evaluated qualitatively through manual case review. This st
 Third, the current held-out test split is treated as a valid internal evaluation, because the model has not seen those rows during fitting or calibration. It evaluates temporal generalization within the constructed dataset. It does not, however, evaluate generalization to a freshly sampled set of repositories; that question is left to future work and is discussed as a threat to external validity in Chapter~\ref{chap:validity}.
 
 The primary deployed full-history artifact is \texttt{xgboost-full-history}, version \texttt{0.2.0}, trained with \texttt{feature-set-v3-full-history}; it is the model staged for runtime scoring. Its held-out test metrics, together with those of the Logistic Regression model, the neural network (\texttt{neural-net-full-history}), and the trivial recency baseline, are reported and interpreted in Chapter~\ref{chap:evaluation}.
-
-\subsection{Metric Definitions}
-\label{sec:method-metric-definitions}
-
-All metrics are computed on the calibrated probabilities of the held-out test
-slice. Let \(N\) be the number of evaluation samples, \(p_i \in [0,1]\) the
-predicted probability of inactivity for sample \(i\), and \(y_i \in \{0,1\}\) the
-true label (\(1\) = inactive within twelve months). The positive (inactive) base
-rate of the slice is
-\begin{equation}
-  \bar{p} = \frac{1}{N}\sum_{i=1}^{N} y_i ,
-\end{equation}
-reported as the \emph{inactive 12m rate}.
-
-\paragraph{Ranking.} ROC-AUC is computed as the Mann--Whitney statistic over all
-positive--negative pairs, that is, the probability that a random inactive
-repository is scored above a random active one, with ties counted as one half:
-\begin{equation}
-  \mathrm{AUROC} = \frac{1}{N_{+}N_{-}}
-    \sum_{i:\,y_i=1}\;\sum_{j:\,y_j=0}
-    \Big( \mathbb{1}[p_i > p_j] + \tfrac{1}{2}\,\mathbb{1}[p_i = p_j] \Big),
-\end{equation}
-where \(N_{+}\) and \(N_{-}\) are the numbers of positive and negative samples.
-It is threshold- and calibration-independent: \(0.5\) is random ranking and
-\(1.0\) is a perfect ranking.
-
-\paragraph{Probabilistic accuracy.} The Brier score is the mean squared error
-between probability and outcome, and the log loss is the binary cross-entropy
-(with a small \(\varepsilon\) for numerical stability):
-\begin{align}
-  \mathrm{Brier}   &= \frac{1}{N}\sum_{i=1}^{N} (p_i - y_i)^2, \\
-  \mathrm{LogLoss} &= -\frac{1}{N}\sum_{i=1}^{N}
-     \Big[\, y_i \ln p_i + (1-y_i)\ln(1-p_i) \,\Big].
-\end{align}
-Both are lower-is-better and penalize miscalibration; the log loss grows without
-bound as a confident prediction approaches the wrong outcome, so it punishes
-overconfidence more sharply than the bounded Brier score.
-
-\paragraph{Calibration.} The expected calibration error partitions
-\([0,1]\) into \(B = 10\) equal-width bins. For bin \(b\) with member set
-\(\mathcal{B}_b\), let \(\mathrm{conf}_b\) be the mean predicted probability and
-\(\mathrm{acc}_b\) the empirical positive rate; the ECE is the sample-weighted
-average gap between predicted confidence and observed frequency:
-\begin{equation}
-  \mathrm{ECE} = \sum_{b=1}^{B} \frac{|\mathcal{B}_b|}{N}\,
-    \big|\,\mathrm{conf}_b - \mathrm{acc}_b\,\big|.
-\end{equation}
-
-\paragraph{Thresholded classification.} A decision threshold \(\tau\) maps
-probabilities to decisions \(\hat{d}_i = \mathbb{1}[p_i \ge \tau]\), yielding the
-counts of true and false positives and negatives (\(\mathrm{TP}, \mathrm{FP},
-\mathrm{FN}, \mathrm{TN}\)). From these,
-\begin{equation}
-  \mathrm{Precision} = \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FP}}, \qquad
-  \mathrm{Recall} = \frac{\mathrm{TP}}{\mathrm{TP}+\mathrm{FN}}, \qquad
-  \mathrm{F1} = \frac{2\,\mathrm{Precision}\cdot\mathrm{Recall}}
-                    {\mathrm{Precision}+\mathrm{Recall}} .
-\end{equation}
-The F1 score is the harmonic mean of precision and recall, so it cannot be made
-large by optimizing one at the expense of the other; \(\tau\) is selected on the
-validation slice to maximize it.
-
-\paragraph{Combined quality score.} The quality score converts ranking and
-probabilistic accuracy into skill scores relative to the trivial base-rate
-predictor and averages them, weighting ranking at \(0.6\) and calibration at
-\(0.4\). With the climatological Brier score \(\bar{p}(1-\bar{p})\) and
-\(\operatorname{clip}_{[0,1]}\) clamping to the unit interval,
-\begin{align}
-  s_{\mathrm{AUC}}   &= \operatorname{clip}_{[0,1]}\!\left(\frac{\mathrm{AUROC} - 0.5}{0.5}\right), \\
-  s_{\mathrm{Brier}} &= \operatorname{clip}_{[0,1]}\!\left(1 - \frac{\mathrm{Brier}}{\bar{p}(1-\bar{p})}\right), \\
-  \mathrm{Quality}   &= \operatorname{clip}_{[0,1]}\!\big(0.6\,s_{\mathrm{AUC}} + 0.4\,s_{\mathrm{Brier}}\big).
-\end{align}
-A value of \(0\) indicates no improvement over predicting the base rate and \(1\)
-indicates perfect ranking and calibration. Because both skill terms are measured
-against the slice base rate \(\bar{p}\), the quality score is conditional on the
-sampled prevalence and is intended for model comparison rather than as a
-standalone performance guarantee.
-
-\section{Reproducibility}
-\label{sec:method-reproducibility}
-
-The dataset builder and training pipeline are executed through repository scripts. The foundation seed can be generated with:
-
-\begin{verbatim}
-npm run ml:seed:foundation -- `
-  --target-repositories 5000 `
-  --github-token <TOKEN>
-\end{verbatim}
-
-The larger foundation dataset can then be built and trained with:
-
-\begin{verbatim}
-npm run ml:bootstrap:foundation -- `
-  --github-token <TOKEN> `
-  --gharchive-source <GHARCHIVE_PATH>
-\end{verbatim}
-
-The underlying full command path uses a generated foundation seed, a GH Archive source directory, a dedicated training output directory, a training snapshot export path, and a repository feature cache output path. The repository documentation recommends the foundation path for the thesis/training base, while the smaller default bootstrap path remains a local smoke-test workflow \cite{ossRiskRadarDatasetBuilder}.
-
-For each final training run, the following items should be documented:
-
-\begin{itemize}
-    \item seed generation command and seed metadata,
-    \item GH Archive coverage period,
-    \item output directory,
-    \item training snapshot path,
-    \item repository feature cache path,
-    \item dataset hash,
-    \item model artifact path,
-    \item model name and version,
-    \item feature version,
-    \item number of total, labeled, and unlabeled rows,
-    \item train, validation, and test split sizes,
-    \item held-out evaluation metrics.
-\end{itemize}
-
-The reported full-history run uses dataset hash:
-
-\begin{verbatim}
-c14ea4562c6e319d475c3387e68cf180879d403bff91d33c06b7fbc7430dbaab
-\end{verbatim}
-
-and exports the model artifact:
-
-\begin{verbatim}
-/app/tmp/training/runs/20260617T141157053388Z-xgboost-full-history-c14ea4562c6e.json
-\end{verbatim}
-
-The corresponding source revision is archived at the commit referenced in the artifact citation \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline.
 
 \section{Methodological Limitations}
 \label{sec:method-limitations}
