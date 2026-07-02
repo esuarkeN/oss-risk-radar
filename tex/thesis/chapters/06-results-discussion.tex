@@ -2,23 +2,22 @@
 \label{chap:evaluation}
 
 This chapter reports and interprets the empirical results of the trained
-artifacts. The label \texttt{chap:evaluation} is retained for backward
-compatibility with existing cross-references.
+artifacts: predictive performance against baselines, calibration behaviour,
+feature attribution and error analysis, and an ablation of the human-actor
+filter.
 
 \section{Predictive Performance}
 \label{sec:results-performance}
 
-% NOTE: metrics below are from the current training run on the harmonized
-% post-label-fix dataset; lock the table to the final committed dataset hash
-% before submission.
 Table~\ref{tab:model-comparison} reports held-out test metrics for the three
-learned model families in both feature regimes. All models were trained on the
-same time-aware split (\(75/15/10\); \(n_\text{test}\approx 4{,}183\) labelled
-observations) and calibrated on the validation slice with the same histogram
-calibrator, so the comparison isolates the effect of model family rather than
-data or calibration differences. The combined quality score summarizes ranking
-skill (ROC-AUC) and calibration (Brier) into a single comparison figure and is
-not intended as a standalone proof. All reported metrics are defined formally in
+learned model families in both feature regimes, together with the trivial recency
+baseline. All learned models were trained on the same time-aware split
+(\(75/15/10\); \(n_\text{test}=4{,}183\) labelled observations) and calibrated on
+the validation slice with the same histogram calibrator, so the comparison
+isolates the effect of model family rather than data or calibration differences.
+The combined quality score summarizes ranking skill (ROC-AUC) and calibration
+(Brier) into a single comparison figure and is not intended as a standalone proof.
+All reported metrics are defined formally in
 Section~\ref{sec:method-metric-definitions}.
 
 \begin{table}[ht]
@@ -38,6 +37,8 @@ Section~\ref{sec:method-metric-definitions}.
     \texttt{logistic-regression-cold-start}   & 0.885 & 0.127 & 0.049 & 0.857 & 0.656 \\
     \texttt{xgboost-cold-start}               & \textbf{0.940} & \textbf{0.093} & \textbf{0.011} & \textbf{0.887} & \textbf{0.777} \\
     \texttt{neural-net-cold-start}            & 0.937 & 0.095 & \textbf{0.011} & 0.884 & 0.771 \\
+    \midrule
+    \texttt{recency-baseline} (days since commit) & 0.655 & --- & --- & 0.718 & --- \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -64,13 +65,32 @@ retained for its transparent coefficient attribution and XGBoost as the deployed
 runtime scorer, while the neural network is reported as a tested-and-rejected
 alternative rather than promoted into the scoring ensemble.
 
-To separate genuine predictive skill from activity persistence, the deployed
-full-history model is additionally re-scored on the active-at-\(t\) subset
-defined in Section~\ref{sec:method-evaluation-strategy}; this slice analysis is
-reported in Section~\ref{sec:results-features}. A comparison against an explicit
-trivial recency baseline is a complementary check that is not yet part of the
-reported results and is noted as a remaining item in
-Chapter~\ref{chap:conclusion}.
+Two runtime compositions of these evaluated models are reported as engineering
+mechanisms rather than as separately benchmarked results. At scoring time the
+backend averages the staged models of a regime into an ensemble profile and
+attaches a model-agreement factor, and it derives a per-prediction confidence
+from signal completeness and prediction decisiveness. Both are exercised in the
+demonstrator (Chapter~\ref{chap:demonstrator}); the headline metrics in this
+chapter are, however, always reported for the individual artifacts, so no claim
+is made that the runtime ensemble outperforms its strongest member. Quantifying a
+possible ensemble gain is left to future work (Chapter~\ref{chap:conclusion}).
+
+The learned models are worth reporting only if they improve on the trivial
+recency signal that the label is partly built from
+(Section~\ref{sec:method-model-training}). The last row of
+Table~\ref{tab:model-comparison} reports this baseline: ranking the held-out test
+slice purely by days since the last commit attains a ROC-AUC of only \(0.655\),
+and selecting an F1-optimal single threshold on the validation slice degenerates
+to predicting inactivity for essentially every repository (threshold at zero days,
+recall \(1.0\), F1 \(0.718\) at the balanced base rate). Every learned model
+clears this bar by a wide margin --- the deployed \texttt{xgboost-full-history}
+model raises ROC-AUC from \(0.655\) to \(0.945\) --- so the models add substantial
+ranking skill over recency alone rather than merely restating it. To further
+separate genuine predictive skill from activity persistence, the deployed
+full-history model is additionally re-scored on the active-at-\(t\) subset defined
+in Section~\ref{sec:method-evaluation-strategy}; this slice analysis is reported in
+Section~\ref{sec:results-features}, where the same recency baseline is also
+revisited.
 
 \section{Calibration and Threshold Selection}
 \label{sec:results-calibration}
@@ -123,9 +143,22 @@ intuitive (for example a positive association for the log-scaled star count),
 which reflects partial associations under the sampled prevalence and
 correlations among features rather than a causal effect; the coefficients are
 therefore used to explain \emph{direction} for a given repository, while ranking
-performance is carried by the gradient-boosted model. Gain-based importance for
-the \texttt{xgboost-full-history} model is not reported here because the current
-artifact's importance export is invalid and needs regeneration.
+performance is carried by the gradient-boosted model.
+
+The gradient-boosted model exposes a complementary, non-linear view through its
+gain-based feature importances (normalized to sum to one over the 39 features
+that receive at least one split). Its ranking is dominated by recent commit
+volume: \texttt{commits\_365d} (\(0.29\)) and \texttt{commits\_90d} (\(0.26\))
+together account for over half of the total gain, followed by
+\texttt{recent\_contributors\_90d} (\(0.12\)) and
+\texttt{active\_commit\_months\_365d} (\(0.05\)); pull-request and issue-flow
+features (\texttt{opened\_prs\_90d}, \texttt{open\_issue\_growth\_90d},
+\texttt{merged\_prs\_90d}), popularity (\texttt{stars\_log1p}), and release
+activity (\texttt{releases\_365d}) contribute the next tier. The two views agree
+on the substantive story --- sustained recent development activity and
+contributor breadth are the strongest signals --- while differing in emphasis:
+the linear model leans on the breadth of active commit months, whereas the
+gradient-boosted model concentrates gain on the raw recent-commit-volume windows.
 
 \subsection{Robustness to Repository Recurrence}
 \label{sec:results-robustness}
@@ -178,7 +211,10 @@ activity-persistence threat (Section~\ref{sec:validity-internal}), the model
 still separates outcomes well \emph{among repositories that are active at the
 observation time} (ROC-AUC \(0.883\) on the active-at-\(t\) subset, where the
 inactive rate is only \(0.17\)); the headline metric is therefore not merely a
-restatement of ``already-quiet repositories stay quiet''. Third, full history
+restatement of ``already-quiet repositories stay quiet''. On this same
+active-at-\(t\) subset the trivial recency baseline reaches only ROC-AUC
+\(0.777\), so the learned model retains a clear margin over recency exactly where
+early-warning skill matters most. Third, full history
 helps: repositories with reconstructable history are ranked at \(0.917\) versus
 \(0.872\) for cold-start-like repositories, consistent with the two-regime
 design (Section~\ref{sec:method-prediction-regimes}).
@@ -186,10 +222,11 @@ design (Section~\ref{sec:method-prediction-regimes}).
 \subsection{Error Analysis}
 \label{sec:results-error-analysis}
 
-The formative case review that motivated the feature-set revision
-(Section~\ref{sec:method-iterative-development}) and a comparison against an
-explicit trivial recency baseline are complementary analyses that are not yet
-part of the reported results; they are noted as remaining items in
+The comparison against an explicit trivial recency baseline is now part of the
+reported results (Section~\ref{sec:results-performance} and the slice analysis
+above); the systematic formative case review that motivated the feature-set
+revision (Section~\ref{sec:method-iterative-development}) remains a complementary
+qualitative analysis and is noted as a remaining item in
 Chapter~\ref{chap:conclusion}. The slice results above already give the main
 error-analysis conclusion: the dominant residual weakness is low-visibility
 repositories with sparse public signals, which the confidence layer is designed

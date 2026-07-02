@@ -1,16 +1,139 @@
 \chapter{Practical Demonstrator}
 \label{chap:demonstrator}
 
-This chapter demonstrates how the trained inactivity-risk model is applied end to end, from a project's dependency set to a ranked risk view that supports triage. While Chapter~\ref{chap:evaluation} evaluates the model on the held-out test set, this chapter shows the artifact operating on a realistic dependency input, as required by the demonstration phase of the Design Science Research process \cite{hevner2004design,peffers2007design}.
+This chapter demonstrates how the trained inactivity-risk model is applied end to
+end, from a set of dependency repositories to a ranked risk view that supports
+triage. While Chapter~\ref{chap:evaluation} evaluates the model on the held-out
+test set, this chapter shows the artifact operating on a realistic input, as
+required by the demonstration phase of the Design Science Research process
+\cite{hevner2004design,peffers2007design}. The demonstrator is run against the
+deployed OSS Risk Radar instance using the staged model bundle (primary
+full-history artifact \texttt{xgboost-full-history}, version \texttt{0.2.0});
+all figures reported here are real outputs of that deployed artifact and reflect
+the public repository state at the time of analysis.
 
-\section{Example Dependency Set and Mapping}
+\section{Example Repository Set}
 \label{sec:demo-mapping}
 
-Describe the demonstrator input: a project manifest or lockfile is parsed into a direct and transitive dependency set, and each package is mapped to its source repository through deps.dev and package registry metadata \cite{depsdevApi}. Report how many dependencies were resolved to repositories, and note unresolved or ambiguous mappings as a coverage limitation.
+The unit of analysis is a single repository, and each repository is scored
+independently. Enumerating which repositories a project depends on is the task of
+established software-composition-analysis tooling, such as the OSS Review Toolkit
+\cite{ortAnalyzer}; the artifact treats this dependency inventory as an external
+input rather than resolving dependency graphs itself.
+
+For this demonstration the input is the set of dependency repositories of
+\texttt{ArchipelagoMW/Archipelago}, a large and actively developed open-source
+multi-world game randomizer. Its declared Python dependencies correspond to 30
+source repositories, ranging from widely used infrastructure libraries (for
+example \texttt{flask}, \texttt{jinja2}, \texttt{werkzeug}) to smaller, more
+specialized packages. This project was chosen because that mixture is expected to
+produce a non-trivial triage view rather than a uniformly low-risk one.
+
+Each repository is scored through the deployed analysis workflow, which enriches
+live repository metadata and applies the staged model ensemble. The two prediction
+regimes of Section~\ref{sec:method-prediction-regimes} appear directly in this
+run: one repository (\texttt{flask}) is present in the staged repository feature
+cache and is therefore scored in the richer full-history regime, while the
+remaining 29 are absent from the foundation cache and fall back to the cold-start
+regime. This distribution is itself an honest illustration of the cold-start
+coverage limitation highlighted in Chapter~\ref{chap:conclusion}: an arbitrary
+project's dependency repositories are mostly outside the precomputed foundation
+seed and are consequently scored by the weaker cold-start model, a fact the
+confidence layer is designed to surface rather than hide.
 
 \section{Risk Ranking Output and Interpretation Guidance}
 \label{sec:demo-ranking}
 
-Show the ranked inactivity-risk view produced by the scoring service for the example dependency set. For each scored dependency, the output includes the inactivity-risk score, the separate security-posture score, a confidence and signal-completeness value, an action level (\texttt{monitor}, \texttt{review}, or \texttt{replace\_candidate}), and the explanation factors and evidence items behind the score \cite{ossRiskRadarReadme}.
+Table~\ref{tab:demo-ranking} shows the ranked inactivity-risk view produced by the
+scoring service for the 30 repositories. For each repository the output includes
+the inactivity-risk score (0--100), the discrete action level (\texttt{monitor},
+\texttt{review}, or \texttt{replace\_candidate}), a confidence value derived from
+signal completeness and prediction decisiveness, and the prediction regime. Of the
+30 scored repositories, the distribution is one high-risk item (action
+\texttt{review}), five medium-risk items, and 24 low-risk items; all but one are
+assigned the \texttt{monitor} action, so the ranking concentrates analyst
+attention on a single repository rather than diluting it across the whole set.
 
-Provide interpretation guidance consistent with the rest of the thesis: the score is a prioritization signal, not a trust or security verdict; low confidence or high missing-signal counts should reduce decisiveness; and predicted probabilities are calibrated to the sampled prevalence rather than to the demonstrator project's population (Section~\ref{sec:method-limitations}).
+\begin{table}[htbp]
+  \centering
+  \small
+  \caption{Ranked inactivity-risk view for the dependency repositories of
+  \texttt{ArchipelagoMW/Archipelago}, as produced by the deployed model. Risk is
+  the 0--100 inactivity-risk score; ``Conf.'' is the per-prediction confidence;
+  ``Regime'' is full-history (FH) or cold-start (CS).}
+  \label{tab:demo-ranking}
+  \begin{tabular}{llrlrl}
+    \toprule
+    Package & Source repository & Risk & Action & Conf. & Regime \\
+    \midrule
+    bsdiff4           & \texttt{ilanschnell/bsdiff4}        & 77.9 & review  & 0.69 & CS \\
+    \midrule
+    cymem             & \texttt{explosion/cymem}            & 46.6 & monitor & 0.81 & CS \\
+    kivymd            & \texttt{kivymd/KivyMD}              & 46.6 & monitor & 0.71 & CS \\
+    pymem             & \texttt{srounet/Pymem}              & 46.6 & monitor & 0.71 & CS \\
+    markupsafe        & \texttt{pallets/markupsafe}         & 46.6 & monitor & 0.81 & CS \\
+    setproctitle      & \texttt{dvarrazzo/py-setproctitle}  & 46.6 & monitor & 0.67 & CS \\
+    \midrule
+    jinja2            & \texttt{pallets/jinja}              & 26.0 & monitor & 0.70 & CS \\
+    schema            & \texttt{keleshev/schema}            &  8.8 & monitor & 0.86 & CS \\
+    platformdirs      & \texttt{tox-dev/platformdirs}       &  8.8 & monitor & 0.91 & CS \\
+    typing-extensions & \texttt{python/typing\_extensions}  &  8.8 & monitor & 0.86 & CS \\
+    pyshortcuts       & \texttt{newville/pyshortcuts}       &  8.8 & monitor & 0.86 & CS \\
+    pony              & \texttt{ponyorm/pony}               &  8.8 & monitor & 0.86 & CS \\
+    flask-caching     & \texttt{pallets-eco/flask-caching}  &  8.8 & monitor & 0.91 & CS \\
+    colorama          & \texttt{tartley/colorama}           &  5.8 & monitor & 0.83 & CS \\
+    kivy              & \texttt{kivy/kivy}                  &  5.8 & monitor & 0.94 & CS \\
+    certifi           & \texttt{certifi/python-certifi}     &  5.8 & monitor & 0.78 & CS \\
+    orjson            & \texttt{ijl/orjson}                 &  5.8 & monitor & 0.89 & CS \\
+    pathspec          & \texttt{cpburnz/python-pathspec}    &  5.8 & monitor & 0.89 & CS \\
+    werkzeug          & \texttt{pallets/werkzeug}           &  5.8 & monitor & 0.89 & CS \\
+    waitress          & \texttt{Pylons/waitress}            &  5.8 & monitor & 0.94 & CS \\
+    flask-compress    & \texttt{colour-science/flask-compress} & 5.8 & monitor & 0.78 & CS \\
+    flask-limiter     & \texttt{alisaifee/flask-limiter}    &  5.8 & monitor & 0.89 & CS \\
+    flask-cors        & \texttt{corydolphin/flask-cors}     &  5.8 & monitor & 0.89 & CS \\
+    websockets        & \texttt{python-websockets/websockets} & 1.8 & monitor & 0.98 & CS \\
+    pyyaml            & \texttt{yaml/pyyaml}                &  1.8 & monitor & 0.93 & CS \\
+    cython            & \texttt{cython/cython}              &  1.8 & monitor & 0.98 & CS \\
+    bokeh             & \texttt{bokeh/bokeh}                &  1.8 & monitor & 0.87 & CS \\
+    mistune           & \texttt{lepture/mistune}            &  1.8 & monitor & 0.93 & CS \\
+    psutil            & \texttt{giampaolo/psutil}           &  1.8 & monitor & 0.81 & CS \\
+    flask             & \texttt{pallets/flask}              &  1.7 & monitor & 0.97 & FH \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{The flagged repository.} The single item that the ranking elevates for
+review is \texttt{bsdiff4} (\texttt{ilanschnell/bsdiff4}), a small binary-diff
+library with a risk score of \(77.9\). Its explanation factors, taken directly
+from the scored output, are consistent with the intended semantics of the model:
+the two cold-start ensemble members predict a \(78.7\%\) and \(77.1\%\) inactivity
+risk respectively, the model-agreement factor reports a narrow spread between
+them, and the input-completeness factor records that \(88\%\) of expected signals
+were available before imputation. The score reflects a genuinely quiet
+maintenance profile (a low-popularity repository with no contributor activity in
+the recent window and no detected release cadence), which is exactly the kind of
+small, single-maintainer dependency that a supply-chain reviewer would want
+surfaced. The confidence of \(0.69\) is moderate rather than high, and a caveat
+records that the score was produced by the cold-start model because no
+full-history cache row was available, so the flag is presented as a prompt for
+manual review rather than as a definitive judgement.
+
+\paragraph{A low-risk repository for contrast.} At the opposite end,
+\texttt{flask} (\texttt{pallets/flask}) receives a risk score of \(1.7\) with a
+confidence of \(0.97\). It is the one repository scored in the full-history
+regime, and both full-history ensemble members agree on a \(1.7\%\) inactivity
+risk with \(98\%\) signal completeness. This contrast between a moderate-confidence
+cold-start flag and a high-confidence full-history clearance illustrates why the
+confidence value, not only the risk score, is part of the triage output.
+
+Interpretation guidance follows the rest of the thesis. The score is a
+prioritization signal, not a trust or security verdict: a low score does not
+certify a repository as secure, and the elevated score for \texttt{bsdiff4}
+indicates thin public maintenance signals rather than a known defect. Low
+confidence or a large number of imputed signals should reduce the decisiveness of
+any action, and cold-start scores in particular are conditional on the reduced
+feature set and on the sampled prevalence to which the model is calibrated
+(Section~\ref{sec:method-limitations}), so they warrant recalibration before being
+read as absolute deployment probabilities. Used this way, the ranked view converts
+a flat list of 30 repositories into a single reviewable candidate plus a small
+medium-risk cluster, which is the intended practical contribution of the artifact.

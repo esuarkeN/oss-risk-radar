@@ -1,10 +1,32 @@
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
 
-This thesis investigates how open source dependency risk can be assessed by
-combining repository metadata, security signals, maintenance activity, and
-explainable scoring. Replace this placeholder with the final abstract once the
-research question, method, and results are fixed.
+Modern software depends heavily on open-source components, yet downstream
+projects remain exposed when an upstream repository quietly stops being
+maintained. This thesis asks to what extent publicly observable repository
+health and maintenance indicators can predict whether an open-source dependency
+becomes inactive within a twelve-month horizon, and how the resulting risk score
+can support risk-based dependency triage. Following a Design Science Research
+approach, the work develops and evaluates OSS Risk Radar, an artifact that
+constructs a leakage-controlled historical dataset from GH Archive event data
+and public package metadata, engineers observation-time activity, responsiveness,
+and contributor-concentration features, and trains calibrated inactivity-risk
+models.
+
+On a repository foundation dataset of 5{,}000 projects and 50{,}000 quarterly
+observation snapshots, a gradient-boosted model reaches a held-out ROC-AUC of
+\(0.945\) with a Brier score of \(0.089\), clearly outperforming a trivial
+recency baseline (ROC-AUC \(0.655\)). The skill largely persists under a
+repository-disjoint split (\(0.940\)) and among repositories that are still
+active at the observation time (\(0.883\)), indicating that the model detects
+early decline rather than merely restating existing quietness. A human-actor
+filter is validated by ablation, and security-practice signals are kept as
+parallel triage context rather than as predictors of inactivity. A practical
+demonstrator applies the deployed model per repository to the dependency
+repositories of a real project, producing a calibrated, confidence-aware, and
+evidence-backed ranked triage view.
+The score is positioned as a decision-support signal for prioritizing dependency
+review, not as a verdict on abandonment.
 
 \chapter*{Declaration of Authorship}
 \addcontentsline{toc}{chapter}{Declaration of Authorship}
