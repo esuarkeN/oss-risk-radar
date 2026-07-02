@@ -2,8 +2,6 @@ import type {
   AnalysisRecord,
   CreateAnalysisRequest,
   CreateAnalysisResponse,
-  CreateUploadResponse,
-  DependencyGraphResponse,
   DependencyRecord,
   GetAnalysisResponse,
   GetDependenciesResponse,
@@ -58,16 +56,6 @@ export function createAnalysis(payload: CreateAnalysisRequest) {
   });
 }
 
-export function createUpload(file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  return request<CreateUploadResponse>("/uploads", {
-    method: "POST",
-    body: formData
-  });
-}
-
 export async function getAnalysis(analysisId: string): Promise<AnalysisRecord> {
   const response = await request<GetAnalysisResponse>(`/analyses/${analysisId}`);
   return response.analysis;
@@ -81,15 +69,6 @@ export async function getDependencies(analysisId: string): Promise<DependencyRec
 export async function getDependency(dependencyId: string): Promise<DependencyRecord> {
   const response = await request<GetDependencyResponse>(`/dependencies/${dependencyId}`);
   return response.dependency;
-}
-
-export async function getDependencyGraph(analysisId: string): Promise<DependencyGraphResponse | null> {
-  try {
-    const response = await request<{ graph: DependencyGraphResponse }>(`/analyses/${analysisId}/graph`);
-    return response.graph;
-  } catch {
-    return null;
-  }
 }
 
 export async function getTrainingDatasetSummary(): Promise<TrainingDatasetSummary> {

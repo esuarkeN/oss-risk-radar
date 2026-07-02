@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"oss-risk-radar/backend/api/internal/analysis"
-	depsdevclient "oss-risk-radar/backend/api/internal/clients/depsdev"
 	githubclient "oss-risk-radar/backend/api/internal/clients/github"
 	scorecardclient "oss-risk-radar/backend/api/internal/clients/scorecard"
 	scoringclient "oss-risk-radar/backend/api/internal/clients/scoring"
@@ -44,8 +43,6 @@ func main() {
 		MethodologyVersion:       cfg.MethodologyVersion,
 		Store:                    store,
 		Scorer:                   scorer,
-		ManifestFetcher:          github,
-		PackageResolver:          depsdevclient.New(cfg.DepsDevBaseURL),
 		RepositoryClient:         github,
 		ScorecardClient:          scorecardclient.New(cfg.ScorecardBaseURL),
 		UploadDir:                cfg.UploadDir,

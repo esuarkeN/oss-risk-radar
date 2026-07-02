@@ -5,13 +5,6 @@ import (
 	"time"
 )
 
-type PackageMetadata struct {
-	RepositoryURL string
-	Ecosystem     string
-	Name          string
-	Version       string
-}
-
 type RepositorySnapshot struct {
 	FullName                      string
 	URL                           string
@@ -45,13 +38,8 @@ type ScorecardSnapshot struct {
 	Checks []ScorecardCheck
 }
 
-type DepsDevClient interface {
-	ResolvePackage(ctx context.Context, ecosystem string, name string, version string) (PackageMetadata, error)
-}
-
 type GitHubClient interface {
 	GetRepository(ctx context.Context, repositoryURL string) (*RepositorySnapshot, error)
-	FetchManifest(ctx context.Context, repositoryURL string, path string) ([]byte, error)
 }
 
 type ScorecardClient interface {

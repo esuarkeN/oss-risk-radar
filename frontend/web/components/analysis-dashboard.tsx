@@ -7,7 +7,6 @@ import { ArrowRight, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
 
 import { EcosystemBreakdownChart } from "@/components/charts/ecosystem-breakdown-chart";
 import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart";
-import { DependencyPathExplorer } from "@/components/dependency-path-explorer";
 import { DependencyTable } from "@/components/dependency-table";
 import { RepositoryMlAnalysisPanel } from "@/components/repository-ml-analysis-panel";
 import { SummaryCard } from "@/components/summary-card";
@@ -15,11 +14,11 @@ import { useToast } from "@/components/toast-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { createAnalysis, getAnalysis, getDependencies, getDependencyGraph } from "@/lib/api";
+import { createAnalysis, getAnalysis, getDependencies } from "@/lib/api";
 import { formatDate, titleCase } from "@/lib/format";
 import { setLastAnalysis } from "@/lib/last-analysis";
 import { dependencyDisplayName, dependencyDisplayVersion, isRepositoryProfile } from "@/lib/repository-profile";
-import type { AnalysisRecord, DependencyGraphResponse, DependencyRecord } from "@/lib/types";
+import type { AnalysisRecord, DependencyRecord } from "@/lib/types";
 
 interface AnalysisDashboardProps {
   analysisId: string;
@@ -58,7 +57,6 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
   const { toast } = useToast();
   const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
   const [dependencies, setDependencies] = useState<DependencyRecord[]>([]);
-  const [graph, setGraph] = useState<DependencyGraphResponse | null>(null);
   const [selectedDependencyId, setSelectedDependencyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rerunning, setRerunning] = useState(false);
@@ -71,10 +69,9 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
 
     async function load() {
       try {
-        const [analysisRecord, dependencyRecords, graphResponse] = await Promise.all([
+        const [analysisRecord, dependencyRecords] = await Promise.all([
           getAnalysis(analysisId),
-          getDependencies(analysisId),
-          getDependencyGraph(analysisId)
+          getDependencies(analysisId)
         ]);
 
         if (cancelled) {
@@ -83,7 +80,6 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
 
         setAnalysis(analysisRecord);
         setDependencies(dependencyRecords);
-        setGraph(graphResponse);
         setError(null);
         setLastAnalysis(
           analysisId,
@@ -176,7 +172,6 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
 
   const analysisStatusActive = ACTIVE_STATUSES.has(analysis.status);
   const canRerunAnalysis = analysis.submission.kind === "repository_url" && !analysisStatusActive;
-  const selectedIsRepositoryProfile = isRepositoryProfile(selectedDependency);
   const isRepositoryAnalysis = analysis.submission.kind === "repository_url";
   const multipleSubjects = dependencies.length > 1;
 
@@ -281,11 +276,6 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
         </Card>
       )}
 
-      {/* How the transitive dependency reaches you (only for a selected package, not a repo profile) */}
-      {selectedDependency && !selectedIsRepositoryProfile ? (
-        <DependencyPathExplorer dependency={selectedDependency} dependencies={dependencies} graph={graph} />
-      ) : null}
-
       {/* Package picker — only when the analysis covers more than one subject */}
       {multipleSubjects ? (
         <div className="animate-slide-up space-y-2" style={{ animationDelay: "120ms" }}>
@@ -310,7 +300,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
             <SummaryCard
               label={isRepositoryAnalysis ? "Profiles" : "Dependencies"}
               value={analysis.summary.dependencyCount}
-              caption={isRepositoryAnalysis ? "Repository target plus resolved packages." : "Direct and transitive packages in this analysis."}
+              caption={isRepositoryAnalysis ? "Repository scored in this analysis." : "Repositories in this analysis."}
               tone="neutral"
             />
             <SummaryCard

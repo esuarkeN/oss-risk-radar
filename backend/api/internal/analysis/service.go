@@ -10,12 +10,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"oss-risk-radar/backend/api/internal/manifest"
 	"oss-risk-radar/backend/api/internal/providers"
 )
 
@@ -44,8 +42,6 @@ type ServiceOptions struct {
 	MethodologyVersion       string
 	Store                    Store
 	Scorer                   Scorer
-	ManifestFetcher          providers.GitHubClient
-	PackageResolver          providers.DepsDevClient
 	RepositoryClient         providers.GitHubClient
 	ScorecardClient          providers.ScorecardClient
 	UploadDir                string
@@ -62,8 +58,6 @@ type Service struct {
 	methodologyVersion   string
 	store                Store
 	scorer               Scorer
-	manifestFetcher      providers.GitHubClient
-	packageResolver      providers.DepsDevClient
 	repositoryClient     providers.GitHubClient
 	scorecardClient      providers.ScorecardClient
 	uploadDir            string
@@ -109,8 +103,6 @@ func NewServiceWithOptions(options ServiceOptions) *Service {
 		methodologyVersion:   options.MethodologyVersion,
 		store:                options.Store,
 		scorer:               options.Scorer,
-		manifestFetcher:      options.ManifestFetcher,
-		packageResolver:      options.PackageResolver,
 		repositoryClient:     options.RepositoryClient,
 		scorecardClient:      options.ScorecardClient,
 		uploadDir:            options.UploadDir,
@@ -128,35 +120,6 @@ func (s *Service) Start(ctx context.Context) {
 	s.startOnce.Do(func() {
 		go s.workerLoop(ctx)
 	})
-}
-
-func (s *Service) CreateUpload(ctx context.Context, fileName string, contentType string, content []byte) (UploadArtifact, error) {
-	if strings.TrimSpace(fileName) == "" {
-		return UploadArtifact{}, errors.New("file name is required")
-	}
-	uploadID := newID("upload")
-	safeName := sanitizeFileName(fileName)
-	storagePath := filepath.Join(s.uploadDir, uploadID+"_"+safeName)
-	if err := os.MkdirAll(filepath.Dir(storagePath), 0o755); err != nil {
-		return UploadArtifact{}, err
-	}
-	if err := os.WriteFile(storagePath, content, 0o600); err != nil {
-		return UploadArtifact{}, err
-	}
-
-	upload := UploadArtifact{
-		ID:          uploadID,
-		FileName:    safeName,
-		ContentType: contentType,
-		SizeBytes:   int64(len(content)),
-		UploadedAt:  time.Now().UTC(),
-		Status:      UploadStatusReceived,
-		StorageHint: storagePath,
-	}
-	if err := s.store.SaveUpload(ctx, upload); err != nil {
-		return UploadArtifact{}, err
-	}
-	return upload, nil
 }
 
 func (s *Service) ListAnalyses(ctx context.Context) ([]AnalysisRecord, error) {
@@ -188,11 +151,6 @@ func (s *Service) CreateAnalysis(ctx context.Context, submission AnalysisSubmiss
 	}
 	if submission.Kind == SubmissionRepositoryURL {
 		submission.RepositoryURL = NormalizeRepositoryURL(submission.RepositoryURL)
-	}
-	if submission.Kind == SubmissionUpload {
-		if _, err := s.store.GetUpload(ctx, submission.UploadID); err != nil {
-			return AnalysisRecord{}, JobRecord{}, err
-		}
 	}
 
 	now := time.Now().UTC()
@@ -401,14 +359,6 @@ func (s *Service) GetDependency(ctx context.Context, id string) (DependencyRecor
 	return s.store.GetDependency(ctx, id)
 }
 
-func (s *Service) GetDependencyGraph(ctx context.Context, analysisID string) (DependencyGraphResponse, error) {
-	analysisRecord, err := s.store.GetAnalysis(ctx, analysisID)
-	if err != nil {
-		return DependencyGraphResponse{}, err
-	}
-	return DependencyGraphResponse{AnalysisID: analysisID, Nodes: analysisRecord.Dependencies, Edges: analysisRecord.DependencyEdges}, nil
-}
-
 func (s *Service) GetJob(ctx context.Context, id string) (JobRecord, error) {
 	return s.store.GetJob(ctx, id)
 }
@@ -487,24 +437,6 @@ func (s *Service) executeAnalysis(ctx context.Context, queued AnalysisRecord) (A
 	switch queued.Submission.Kind {
 	case SubmissionDemo:
 		dependencies = DemoDependencies(queued.ID, time.Now().UTC())
-	case SubmissionUpload:
-		upload, err := s.store.GetUpload(ctx, queued.Submission.UploadID)
-		if err != nil {
-			return analysisRecord, err
-		}
-		parsed, err := s.parseUpload(upload)
-		if err != nil {
-			upload.Status = UploadStatusFailed
-			upload.ParseError = err.Error()
-			_ = s.store.UpdateUpload(ctx, upload)
-			return analysisRecord, err
-		}
-		upload.Status = UploadStatusParsed
-		upload.ParseError = ""
-		if err := s.store.UpdateUpload(ctx, upload); err != nil {
-			s.logger.Warn("failed to update upload status", "upload_id", upload.ID, "error", err)
-		}
-		dependencies = parsed
 	case SubmissionRepositoryURL:
 		parsed, err := s.parseRepositorySubmission(ctx, queued.Submission)
 		if err != nil {
@@ -540,13 +472,7 @@ func (s *Service) executeAnalysis(ctx context.Context, queued AnalysisRecord) (A
 	}
 
 	analysisRecord.Dependencies = dependencies
-	analysisRecord.DependencyEdges = buildDependencyEdges(analysisRecord.ID, dependencies)
 	analysisRecord.Summary = summarizeDependencies(dependencies)
-	if queued.Submission.Kind == SubmissionUpload {
-		if upload, err := s.store.GetUpload(ctx, queued.Submission.UploadID); err == nil {
-			analysisRecord.Uploads = []UploadArtifact{upload}
-		}
-	}
 	return analysisRecord, nil
 }
 
@@ -637,99 +563,21 @@ func (s *Service) scoreDependencies(ctx context.Context, analysisID string, depe
 	return combinedResults, nil
 }
 
-func (s *Service) parseUpload(upload UploadArtifact) ([]DependencyRecord, error) {
-	content, err := os.ReadFile(upload.StorageHint)
-	if err != nil {
-		return nil, err
-	}
-	packages, err := manifest.ParseArtifact(upload.FileName, content)
-	if err != nil {
-		return nil, fmt.Errorf("parse upload: %w", err)
-	}
-	return packageRefsToDependencies(upload.AnalysisID, upload.ID, packages.Dependencies), nil
-}
-
-func (s *Service) parseRepositorySubmission(ctx context.Context, submission AnalysisSubmission) ([]DependencyRecord, error) {
-	if s.manifestFetcher == nil && s.repositoryClient == nil && s.scorecardClient == nil {
+func (s *Service) parseRepositorySubmission(_ context.Context, submission AnalysisSubmission) ([]DependencyRecord, error) {
+	if s.repositoryClient == nil && s.scorecardClient == nil {
 		return nil, errors.New("repository analysis is unavailable without a GitHub client")
 	}
 
-	repositoryProfile := repositoryProfileDependency(submission)
-	candidates := manifestCandidates(submission.ArtifactName)
-	merged := map[string]DependencyRecord{}
-	parsedAny := false
-
-	if s.manifestFetcher != nil {
-		for _, candidate := range candidates {
-			content, err := s.manifestFetcher.FetchManifest(ctx, submission.RepositoryURL, candidate)
-			if err != nil {
-				continue
-			}
-			packages, err := manifest.ParseArtifact(candidate, content)
-			if err != nil {
-				continue
-			}
-			parsedAny = true
-			for _, dependency := range packageRefsToDependencies("", "", packages.Dependencies) {
-				key := dependency.Ecosystem + "|" + dependency.PackageName + "|" + dependency.PackageVersion
-				existing, ok := merged[key]
-				if ok {
-					if dependency.Direct {
-						existing.Direct = true
-					}
-					if len(existing.DependencyPath) == 0 || len(dependency.DependencyPath) < len(existing.DependencyPath) {
-						existing.DependencyPath = dependency.DependencyPath
-					}
-					merged[key] = existing
-					continue
-				}
-				merged[key] = dependency
-			}
-		}
-	}
-
-	dependencies := make([]DependencyRecord, 0, len(merged)+1)
-	dependencies = append(dependencies, repositoryProfile)
-	for _, dependency := range merged {
-		dependencies = append(dependencies, dependency)
-	}
-	sort.Slice(dependencies, func(i, j int) bool {
-		if dependencies[i].PackageVersion == "repository profile" || dependencies[j].PackageVersion == "repository profile" {
-			return dependencies[i].PackageVersion == "repository profile"
-		}
-		if dependencies[i].Direct != dependencies[j].Direct {
-			return dependencies[i].Direct && !dependencies[j].Direct
-		}
-		if dependencies[i].Ecosystem != dependencies[j].Ecosystem {
-			return dependencies[i].Ecosystem < dependencies[j].Ecosystem
-		}
-		return dependencies[i].PackageName < dependencies[j].PackageName
-	})
-
-	if !parsedAny {
-		s.logger.Info("repository submission produced repository profile without supported manifests", "repository_url", submission.RepositoryURL)
-	}
-	return dependencies, nil
+	// The unit of analysis is a single repository. The dependency inventory of a
+	// project is expected to be supplied by an external software-composition-analysis
+	// tool (for example the OSS Review Toolkit), so the artifact scores each
+	// submitted repository on its own rather than resolving dependency graphs.
+	return []DependencyRecord{repositoryProfileDependency(submission)}, nil
 }
 
 func (s *Service) enrichDependencies(ctx context.Context, dependencies []DependencyRecord) []DependencyRecord {
 	for index := range dependencies {
 		dependency := dependencies[index]
-		repositoryURL := ""
-		if dependency.Repository != nil {
-			repositoryURL = dependency.Repository.URL
-		}
-		if repositoryURL == "" && s.packageResolver != nil {
-			if metadata, err := s.packageResolver.ResolvePackage(ctx, dependency.Ecosystem, dependency.PackageName, dependency.PackageVersion); err == nil {
-				repositoryURL = metadata.RepositoryURL
-			}
-		}
-		if repositoryURL == "" {
-			repositoryURL = inferRepositoryURL(dependency)
-		}
-		if repositoryURL != "" {
-			dependency.Repository = &RepositorySnapshot{URL: repositoryURL, FullName: strings.TrimPrefix(strings.TrimPrefix(repositoryURL, "https://github.com/"), "http://github.com/"), DefaultBranch: "main"}
-		}
 		if dependency.Repository != nil && dependency.Repository.URL != "" && s.repositoryClient != nil {
 			if repositorySnapshot, err := s.repositoryClient.GetRepository(ctx, dependency.Repository.URL); err == nil && repositorySnapshot != nil {
 				dependency.Repository = providerRepositoryToAnalysis(*repositorySnapshot)
@@ -785,33 +633,9 @@ func validateSubmission(submission AnalysisSubmission) error {
 			return errors.New("repositoryUrl is required")
 		}
 		return nil
-	case SubmissionUpload:
-		if strings.TrimSpace(submission.UploadID) == "" {
-			return errors.New("uploadId is required")
-		}
-		return nil
 	default:
 		return errors.New("unsupported submission kind")
 	}
-}
-
-func packageRefsToDependencies(analysisID string, uploadID string, packages []manifest.PackageRef) []DependencyRecord {
-	dependencies := make([]DependencyRecord, 0, len(packages))
-	for _, pkg := range packages {
-		dependency := DependencyRecord{
-			ID:                  newID("dep"),
-			AnalysisID:          analysisID,
-			PackageName:         pkg.Name,
-			PackageVersion:      pkg.Version,
-			Ecosystem:           pkg.Ecosystem,
-			Direct:              pkg.Direct,
-			DependencyPath:      pkg.Path,
-			RawSignalsAvailable: false,
-			ParsedFromUploadID:  uploadID,
-		}
-		dependencies = append(dependencies, dependency)
-	}
-	return dependencies
 }
 
 func repositoryProfileDependency(submission AnalysisSubmission) DependencyRecord {
@@ -930,62 +754,6 @@ func buildRawSignals(dependency DependencyRecord) []RawSignalItem {
 	return signals
 }
 
-func buildDependencyEdges(analysisID string, dependencies []DependencyRecord) []DependencyEdge {
-	nameToID := map[string]string{}
-	for _, dependency := range dependencies {
-		if _, exists := nameToID[dependency.PackageName]; !exists {
-			nameToID[dependency.PackageName] = dependency.ID
-		}
-	}
-
-	seen := map[string]bool{}
-	edges := make([]DependencyEdge, 0)
-	rootNode := "root:" + analysisID
-	for _, dependency := range dependencies {
-		if len(dependency.DependencyPath) <= 1 {
-			if dependency.Direct {
-				key := rootNode + "->" + dependency.ID
-				if !seen[key] {
-					seen[key] = true
-					edges = append(edges, DependencyEdge{From: rootNode, To: dependency.ID, Kind: "direct"})
-				}
-			}
-			continue
-		}
-
-		for index := 1; index < len(dependency.DependencyPath); index++ {
-			currentName := dependency.DependencyPath[index]
-			currentID := nameToID[currentName]
-			if currentID == "" {
-				continue
-			}
-			if index == 1 {
-				key := rootNode + "->" + currentID
-				if !seen[key] {
-					seen[key] = true
-					kind := "direct"
-					if !dependency.Direct {
-						kind = "transitive"
-					}
-					edges = append(edges, DependencyEdge{From: rootNode, To: currentID, Kind: kind})
-				}
-				continue
-			}
-
-			previousID := nameToID[dependency.DependencyPath[index-1]]
-			if previousID == "" {
-				continue
-			}
-			key := previousID + "->" + currentID
-			if !seen[key] {
-				seen[key] = true
-				edges = append(edges, DependencyEdge{From: previousID, To: currentID, Kind: "transitive"})
-			}
-		}
-	}
-	return edges
-}
-
 func summarizeDependencies(dependencies []DependencyRecord) AnalysisSummary {
 	summary := AnalysisSummary{
 		DependencyCount:        len(dependencies),
@@ -1016,32 +784,6 @@ func summarizeDependencies(dependencies []DependencyRecord) AnalysisSummary {
 		}
 	}
 	return summary
-}
-
-func inferRepositoryURL(dependency DependencyRecord) string {
-	if strings.HasPrefix(dependency.PackageName, "github.com/") {
-		parts := strings.Split(strings.TrimPrefix(dependency.PackageName, "github.com/"), "/")
-		if len(parts) >= 2 {
-			return "https://github.com/" + parts[0] + "/" + parts[1]
-		}
-	}
-	return ""
-}
-
-func manifestCandidates(artifactName string) []string {
-	if trimmed := strings.TrimSpace(artifactName); trimmed != "" {
-		return []string{trimmed}
-	}
-	return []string{"package-lock.json", "requirements.txt", "poetry.lock", "go.mod"}
-}
-
-func sanitizeFileName(fileName string) string {
-	cleaned := filepath.Base(strings.ReplaceAll(fileName, "\\", "/"))
-	cleaned = strings.TrimSpace(cleaned)
-	if cleaned == "" {
-		return "upload.dat"
-	}
-	return cleaned
 }
 
 func newID(prefix string) string {

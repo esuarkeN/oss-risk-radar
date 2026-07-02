@@ -160,44 +160,6 @@ func TestCreateAnalysisQueuesAndCompletesDemo(t *testing.T) {
 	}
 }
 
-func TestCreateAnalysisFromUploadParsesManifest(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tempDir := t.TempDir()
-	runsDir := filepath.Join(tempDir, "runs")
-	writeModelArtifactBundle(t, runsDir)
-	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
-		MethodologyVersion:  "model-v1",
-		Store:               storage.NewMemoryStore(),
-		Scorer:              &fakeModelScorer{},
-		UploadDir:           tempDir,
-		TrainingDatasetPath: tempDir + "/snapshots.json",
-		TrainingRunsDir:     runsDir,
-		WorkerPollInterval:  10 * time.Millisecond,
-		RetryDelay:          10 * time.Millisecond,
-	})
-	service.Start(ctx)
-
-	upload, err := service.CreateUpload(ctx, "requirements.txt", "text/plain", []byte("requests==2.32.3\nurllib3>=2.2.1\n"))
-	if err != nil {
-		t.Fatalf("CreateUpload returned error: %v", err)
-	}
-
-	created, _, err := service.CreateAnalysis(ctx, analysis.AnalysisSubmission{Kind: analysis.SubmissionUpload, UploadID: upload.ID})
-	if err != nil {
-		t.Fatalf("CreateAnalysis returned error: %v", err)
-	}
-
-	completed := waitForAnalysis(t, ctx, service, created.ID)
-	if completed.Summary.DependencyCount != 2 {
-		t.Fatalf("expected 2 parsed dependencies, got %d", completed.Summary.DependencyCount)
-	}
-	if completed.Dependencies[0].PackageName != "requests" {
-		t.Fatalf("expected requests dependency, got %#v", completed.Dependencies[0])
-	}
-}
-
 func TestCreateAnalysisFailsWhenScorerDoesNotSupportModels(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -623,24 +585,6 @@ func TestRepositorySubmissionCreatesRepositoryProfileWithoutManifest(t *testing.
 		MethodologyVersion: "model-v1",
 		Store:              storage.NewMemoryStore(),
 		Scorer:             &fakeModelScorer{},
-		ManifestFetcher: fakeGitHubClient{
-			repository: &providers.RepositorySnapshot{
-				FullName:                      "facebook/react",
-				URL:                           "https://github.com/facebook/react",
-				DefaultBranch:                 "main",
-				Archived:                      false,
-				Stars:                         230000,
-				Forks:                         47000,
-				OpenIssues:                    1000,
-				LastPushAt:                    now.AddDate(0, 0, -2),
-				LastPushAgeDays:               2,
-				RecentContributors90d:         intPtr(35),
-				ContributorConcentration:      floatPtr(0.14),
-				PullRequestMedianResponseDays: floatPtr(2),
-				OpenIssueGrowth90d:            floatPtr(0.06),
-			},
-			manifests: map[string][]byte{},
-		},
 		RepositoryClient: fakeGitHubClient{
 			repository: &providers.RepositorySnapshot{
 				FullName:                      "facebook/react",
@@ -772,23 +716,6 @@ func TestRepositorySubmissionUsesCachedHistoricalFeaturesForModelScoring(t *test
 		MethodologyVersion: "model-v1",
 		Store:              storage.NewMemoryStore(),
 		Scorer:             scorer,
-		ManifestFetcher: fakeGitHubClient{
-			repository: &providers.RepositorySnapshot{
-				FullName:                      "facebook/react",
-				URL:                           "https://github.com/facebook/react",
-				DefaultBranch:                 "main",
-				Stars:                         230000,
-				Forks:                         47000,
-				OpenIssues:                    1000,
-				LastPushAt:                    now.AddDate(0, 0, -2),
-				LastPushAgeDays:               2,
-				RecentContributors90d:         intPtr(35),
-				ContributorConcentration:      floatPtr(0.14),
-				PullRequestMedianResponseDays: floatPtr(2),
-				OpenIssueGrowth90d:            floatPtr(0.06),
-			},
-			manifests: map[string][]byte{},
-		},
 		RepositoryClient: fakeGitHubClient{
 			repository: &providers.RepositorySnapshot{
 				FullName:                      "facebook/react",
@@ -853,24 +780,6 @@ func TestRepositorySubmissionFiltersInvalidScorecardChecks(t *testing.T) {
 		MethodologyVersion: "model-v1",
 		Store:              storage.NewMemoryStore(),
 		Scorer:             &fakeModelScorer{validateScorecard: true},
-		ManifestFetcher: fakeGitHubClient{
-			repository: &providers.RepositorySnapshot{
-				FullName:                      "vercel/next.js",
-				URL:                           "https://github.com/vercel/next.js",
-				DefaultBranch:                 "canary",
-				Archived:                      false,
-				Stars:                         132000,
-				Forks:                         28600,
-				OpenIssues:                    3200,
-				LastPushAt:                    now.AddDate(0, 0, -1),
-				LastPushAgeDays:               1,
-				RecentContributors90d:         intPtr(48),
-				ContributorConcentration:      floatPtr(0.12),
-				PullRequestMedianResponseDays: floatPtr(3),
-				OpenIssueGrowth90d:            floatPtr(0.08),
-			},
-			manifests: map[string][]byte{},
-		},
 		RepositoryClient: fakeGitHubClient{
 			repository: &providers.RepositorySnapshot{
 				FullName:                      "vercel/next.js",

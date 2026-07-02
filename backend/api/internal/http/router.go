@@ -21,14 +21,12 @@ func NewRouter(cfg config.Config, logger *slog.Logger, service *analysis.Service
 	mux.HandleFunc("POST /api/v1/analyses", handler.CreateAnalysis)
 	mux.HandleFunc("GET /api/v1/analyses/{analysisId}", handler.GetAnalysis)
 	mux.HandleFunc("GET /api/v1/analyses/{analysisId}/dependencies", handler.GetDependencies)
-	mux.HandleFunc("GET /api/v1/analyses/{analysisId}/graph", handler.GetDependencyGraph)
 	mux.HandleFunc("GET /api/v1/dependencies/{dependencyId}", handler.GetDependency)
 	mux.HandleFunc("GET /api/v1/jobs/{jobId}", handler.GetJob)
 	mux.HandleFunc("GET /api/v1/training/dataset", handler.GetTrainingDatasetSummary)
 	mux.HandleFunc("GET /api/v1/training/effects", handler.GetTrainingEffects)
 	mux.HandleFunc("GET /api/v1/training/runs", handler.ListTrainingRuns)
 	mux.HandleFunc("GET /api/v1/training/runs/latest", handler.GetLatestTrainingRun)
-	mux.HandleFunc("POST /api/v1/uploads", handler.UploadArtifact)
 
 	return withCORS(withLogging(logger, mux), cfg.AllowedOrigin)
 }

@@ -32,8 +32,8 @@ const features = [
   {
     icon: Network,
     color: "text-accent bg-accent/10",
-    title: "Dependency Tree Visualization",
-    body: "Interactive graph of your full transitive closure. Pan, zoom, click any node to drill into its risk profile.",
+    title: "Repository Risk Ranking",
+    body: "Score a set of repositories and rank them by predicted 12-month inactivity risk, so the most fragile ones surface first.",
   },
   {
     icon: ShieldCheck,
@@ -50,8 +50,8 @@ const features = [
   {
     icon: Search,
     color: "text-warning bg-warning/10",
-    title: "Path Explorer",
-    body: "Trace exactly how a vulnerable or fragile package enters your codebase through the transitive dependency chain.",
+    title: "Regime & Confidence",
+    body: "Every score shows whether it used full-history or cold-start signals plus a confidence value, so low-signal cases stay visible.",
   },
   {
     icon: BarChart3,
@@ -67,13 +67,11 @@ const features = [
   },
 ];
 
-const manifestFormats = [
-  "package-lock.json",
-  "requirements.txt",
-  "poetry.lock",
-  "go.mod",
-  "yarn.lock",
-  "pnpm-lock.yaml",
+const supportedEcosystems = [
+  "npm",
+  "PyPI",
+  "Go",
+  "Maven",
 ];
 
 export default function HomePage() {
@@ -184,7 +182,7 @@ export default function HomePage() {
               Start an analysis
             </p>
             <h2 className="mt-2 text-xl font-bold tracking-tight text-[hsl(var(--foreground))]">
-              Paste a repository URL or upload a manifest
+              Paste a GitHub repository URL
             </h2>
             <p className="mt-1 text-sm text-[hsl(var(--muted))]">
               Analysis typically completes in 30–90 seconds.
@@ -193,12 +191,12 @@ export default function HomePage() {
               <CreateAnalysisForm />
             </div>
             <div className="mt-4 flex flex-wrap gap-1.5">
-              {manifestFormats.map((fmt) => (
+              {supportedEcosystems.map((eco) => (
                 <span
-                  key={fmt}
+                  key={eco}
                   className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-2 py-0.5 font-mono text-[11px] text-[hsl(var(--muted))]"
                 >
-                  {fmt}
+                  {eco}
                 </span>
               ))}
             </div>
@@ -216,7 +214,7 @@ export default function HomePage() {
             End-to-end supply chain clarity
           </h2>
           <p className="mx-auto mb-12 max-w-md text-center text-sm leading-6 text-[hsl(var(--muted))]">
-            From raw manifest to scored dependency tree — in under two minutes.
+            From a repository URL to a calibrated, evidence-backed risk score — in under two minutes.
           </p>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -301,11 +299,11 @@ export default function HomePage() {
           <div className="flex flex-wrap gap-5 text-xs text-[hsl(var(--muted))]">
             <span className="flex items-center gap-1.5">
               <GitBranch className="h-3.5 w-3.5 text-[hsl(var(--accent))]" />
-              Repository and manifest intake
+              Repository intake
             </span>
             <span className="flex items-center gap-1.5">
               <Workflow className="h-3.5 w-3.5 text-[hsl(var(--accent))]" />
-              Dependency graph context
+              Per-repository scoring
             </span>
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-[hsl(var(--accent))]" />

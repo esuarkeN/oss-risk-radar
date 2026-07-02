@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrowRight, FileUp, FlaskConical, GitBranch } from "lucide-react";
+import { ArrowRight, FlaskConical, GitBranch } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ChangeEvent, type FormEvent, startTransition, useState } from "react";
+import { type FormEvent, startTransition, useState } from "react";
 
 import { useToast } from "@/components/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createAnalysis, createUpload } from "@/lib/api";
-import type { AnalysisSubmission, CreateUploadResponse, SubmissionKind } from "@/lib/types";
+import { createAnalysis } from "@/lib/api";
+import type { AnalysisSubmission, SubmissionKind } from "@/lib/types";
 
 const submissionModes: Array<{
   kind: SubmissionKind;
@@ -23,20 +23,12 @@ const submissionModes: Array<{
     icon: GitBranch
   },
   {
-    kind: "upload",
-    label: "Dependency File",
-    description: "Register a manifest or lockfile.",
-    icon: FileUp
-  },
-  {
     kind: "demo",
     label: "Demo Profile",
     description: "Open a seeded walkthrough.",
     icon: FlaskConical
   }
 ];
-
-const supportedArtifacts = ["package-lock.json", "requirements.txt", "poetry.lock", "go.mod"];
 
 function analysisHref(analysisId: string, cached: boolean) {
   const normalizedId = analysisId.trim();
@@ -51,24 +43,8 @@ export function CreateAnalysisForm() {
   const { toast } = useToast();
   const [mode, setMode] = useState<SubmissionKind>("repository_url");
   const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [includeTransitiveDependencies, setIncludeTransitiveDependencies] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadedArtifact, setUploadedArtifact] = useState<CreateUploadResponse["upload"] | null>(null);
   const [demoProfile, setDemoProfile] = useState("thesis-demo");
   const [submitting, setSubmitting] = useState(false);
-
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
-    setSelectedFile(file);
-    setUploadedArtifact(null);
-    if (file) {
-      toast({
-        tone: "info",
-        title: "Artifact selected",
-        description: `${file.name} is ready for upload-backed analysis.`,
-      });
-    }
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,36 +56,12 @@ export function CreateAnalysisForm() {
       if (mode === "repository_url") {
         submission = {
           kind: "repository_url",
-          repositoryUrl,
-          includeTransitiveDependencies
-        };
-      } else if (mode === "upload") {
-        if (!selectedFile && !uploadedArtifact) {
-          throw new Error("Choose a dependency artifact before creating an upload-based analysis.");
-        }
-
-        const shouldRegisterUpload = !uploadedArtifact;
-        const upload = uploadedArtifact ?? (await createUpload(selectedFile as File)).upload;
-        setUploadedArtifact(upload);
-        if (shouldRegisterUpload) {
-          toast({
-            tone: "success",
-            title: "Upload registered",
-            description: `${upload.fileName} is now attached with provenance before the analysis starts.`,
-          });
-        }
-
-        submission = {
-          kind: "upload",
-          uploadId: upload.id,
-          artifactName: selectedFile?.name ?? upload.fileName,
-          includeTransitiveDependencies
+          repositoryUrl
         };
       } else {
         submission = {
           kind: "demo",
-          demoProfile,
-          includeTransitiveDependencies: true
+          demoProfile
         };
       }
 
@@ -147,7 +99,7 @@ export function CreateAnalysisForm() {
         </div>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-2">
         {submissionModes.map((option) => {
           const selected = option.kind === mode;
           const Icon = option.icon;
@@ -187,58 +139,10 @@ export function CreateAnalysisForm() {
                 className="mt-2"
               />
             </div>
-            <label className="flex items-center gap-3 text-sm text-[hsl(var(--muted))]">
-              <input
-                type="checkbox"
-                checked={includeTransitiveDependencies}
-                onChange={(event) => setIncludeTransitiveDependencies(event.target.checked)}
-                className="h-4 w-4 rounded border-[hsl(var(--border))] bg-transparent"
-              />
-              Include transitive dependencies when available.
-            </label>
-          </div>
-        ) : null}
-
-        {mode === "upload" ? (
-          <div className="space-y-4">
-            <div className="rounded-[9px] border border-dashed border-[hsl(var(--border))] bg-[hsl(var(--panel))] p-4">
-              <label htmlFor="artifact" className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
-                Dependency artifact
-              </label>
-              <Input
-                id="artifact"
-                type="file"
-                accept=".json,.txt,.lock,.mod"
-                onChange={handleFileChange}
-                className="mt-3 file:mr-4 file:rounded-md file:border-0 file:bg-foreground file:px-4 file:py-2 file:text-sm file:font-medium file:text-background"
-              />
-              <p className="mt-3 text-sm text-muted">
-                Supported: {supportedArtifacts.join(", ")}
-              </p>
-            </div>
-            <label className="flex items-center gap-3 text-sm text-muted">
-              <input
-                type="checkbox"
-                checked={includeTransitiveDependencies}
-                onChange={(event) => setIncludeTransitiveDependencies(event.target.checked)}
-                className="h-4 w-4 rounded border-line bg-transparent"
-              />
-              Expand transitive dependencies when parsing supports it.
-            </label>
-            {selectedFile || uploadedArtifact ? (
-              <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.14em] text-muted">
-                {selectedFile ? (
-                  <span className="rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-emerald-700 dark:text-emerald-200">
-                    {selectedFile.name} selected
-                  </span>
-                ) : null}
-                {uploadedArtifact ? (
-                  <span className="rounded-md border border-accent/25 bg-accent/10 px-3 py-2 text-accent">
-                    Upload registered
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
+            <p className="text-sm text-[hsl(var(--muted))]">
+              Each repository is scored on its own. A project&apos;s dependency inventory is expected to come from an
+              external software-composition-analysis tool (for example the OSS Review Toolkit).
+            </p>
           </div>
         ) : null}
 
@@ -271,7 +175,7 @@ export function CreateAnalysisForm() {
           Triage signal only. Evidence stays reviewable.
         </div>
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Creating analysis..." : mode === "upload" ? "Upload and analyze" : mode === "demo" ? "Run demo analysis" : "Score and rank repository"}
+          {submitting ? "Creating analysis..." : mode === "demo" ? "Run demo analysis" : "Score and rank repository"}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

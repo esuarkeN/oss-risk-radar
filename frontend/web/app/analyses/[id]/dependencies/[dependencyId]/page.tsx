@@ -2,12 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
-import { DependencyPathExplorer } from "@/components/dependency-path-explorer";
 import { EvidenceList, FactorList } from "@/components/analysis/detail-sections";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { getDependencies, getDependency, getDependencyGraph } from "@/lib/api";
+import { getDependencies, getDependency } from "@/lib/api";
 import { formatConfidence, formatDate, formatOutlookScore, formatScore, titleCase } from "@/lib/format";
 
 const BUCKET_SCORE_COLORS: Record<string, string> = {
@@ -26,14 +25,11 @@ export default async function DependencyDetailPage({
   const { id, dependencyId } = await params;
 
   try {
-    const [dependency, dependencies, graph] = await Promise.all([
+    const [dependency, dependencies] = await Promise.all([
       getDependency(dependencyId),
-      getDependencies(id),
-      getDependencyGraph(id)
+      getDependencies(id)
     ]);
 
-    const graphNodeCount = graph?.nodes?.length ?? dependencies.length;
-    const graphEdgeCount = graph?.edges?.length ?? 0;
     const missingSignals = dependency.riskProfile?.missingSignals ?? [];
     const modelResults = dependency.riskProfile?.modelResults ?? [];
     const bucket = dependency.riskProfile?.riskBucket ?? "unscored";
@@ -207,23 +203,6 @@ export default async function DependencyDetailPage({
                 )}
               </Card>
 
-              {/* Graph availability */}
-              <Card className="space-y-3">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted))]">
-                  Graph Availability
-                </p>
-                <div className="flex gap-4">
-                  <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-2.5 flex-1 text-center">
-                    <p className="text-xl font-extrabold text-[hsl(var(--foreground))]">{graphNodeCount}</p>
-                    <p className="text-[10px] text-[hsl(var(--muted))]">Nodes</p>
-                  </div>
-                  <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-3 py-2.5 flex-1 text-center">
-                    <p className="text-xl font-extrabold text-[hsl(var(--foreground))]">{graphEdgeCount}</p>
-                    <p className="text-[10px] text-[hsl(var(--muted))]">Edges</p>
-                  </div>
-                </div>
-              </Card>
-
               {/* OpenSSF Scorecard */}
               <Card className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -293,9 +272,6 @@ export default async function DependencyDetailPage({
               </Card>
             </div>
           </div>
-
-          {/* Dependency path explorer — full width */}
-          <DependencyPathExplorer dependency={dependency} dependencies={dependencies} graph={graph} />
         </div>
       </WorkspaceLayout>
     );

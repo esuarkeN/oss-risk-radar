@@ -4,8 +4,8 @@ import { Card } from "@/components/ui/card";
 
 const steps = [
   {
-    title: "Submit a repository or manifest",
-    body: "You paste a GitHub repository URL or upload a lockfile/manifest. A manifest is parsed into its direct and transitive dependencies; each dependency is resolved to its source repository where possible.",
+    title: "Submit a repository",
+    body: "You paste a GitHub repository URL. The unit of analysis is a single repository; the set of dependency repositories for a project is expected to come from an external software-composition-analysis tool (for example the OSS Review Toolkit), and each repository is scored on its own.",
   },
   {
     title: "Enrich from public sources",
