@@ -74,9 +74,4 @@ Model evaluation should consider both discrimination and calibration. Discrimina
 
 To avoid overly optimistic evaluation, the dataset should be split in a time-aware way. A random split could allow information from later periods to influence model development for earlier periods, which would not reflect the real prediction setting. A time-aware split better matches the intended use case: using historical repository information to predict future inactivity.
 
-\section{Summary}
-\label{sec:background-summary}
-
-This chapter established the background for the thesis. Software supply-chain security motivates the need to monitor open-source dependencies as externally maintained components. Open-source project health metrics provide observable signals that can be used for inactivity-risk prediction. However, such metrics are context-dependent and can be distorted by project-specific practices, automation, or incomplete data. Machine-learning-based risk scoring can combine multiple signals, but it must be evaluated against simple baselines and assessed using both discrimination and calibration metrics.
-
 The following chapter discusses related work on open-source inactivity, repository health measurement, and security-practice indicators in more detail.

@@ -390,7 +390,4 @@ The foundation seed also influences the scope and the prevalence of the results.
 
 Finally, the current internal test split evaluates temporal generalization within the constructed dataset. This is useful and valid for model development, but it does not replace external validation on a newly sampled repository set. For this reason, external validation on repositories outside the foundation dataset is identified as future work in Chapter~\ref{chap:conclusion} rather than claimed as a completed result.
 
-\section{Summary}
-\label{sec:method-summary}
-
-This chapter described the methodology used to develop and evaluate OSS Risk Radar. The approach follows an iterative artifact-development process, constructs a historical supervised dataset from real repositories, derives observation-time features without future leakage, labels snapshots using a 12-month future window, and trains separate model artifacts for full-history and cold-start scoring. It also fixes the predictive scope of the inactivity model, separates it from the parallel security-posture signal, and defines a recency baseline and an active-at-\(t\) subset evaluation to guard against activity-persistence effects and sampling-induced prevalence. The next chapter describes the implementation of OSS Risk Radar and explains how the dataset builder, model artifacts, scoring service, backend, and frontend are integrated into the overall artifact.
+The next chapter describes the implementation of OSS Risk Radar and explains how the dataset builder, model artifacts, scoring service, backend, and frontend are integrated into the overall artifact.
