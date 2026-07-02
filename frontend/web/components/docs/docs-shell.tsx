@@ -16,7 +16,11 @@ interface DocsNavItem {
 const sections: { title: string; items: DocsNavItem[] }[] = [
   {
     title: "Getting started",
-    items: [{ href: "/docs", label: "Overview" }],
+    items: [
+      { href: "/docs", label: "Overview" },
+      { href: "/docs/architecture", label: "System architecture" },
+      { href: "/docs/api", label: "API reference" },
+    ],
   },
   {
     title: "Data & training",

@@ -13,6 +13,16 @@ const flow = [
 
 const entries = [
   {
+    href: "/docs/architecture",
+    title: "How it's set up",
+    body: "The four services behind the product, the offline/online split that keeps scores fast and honest, and how to run the whole stack locally.",
+  },
+  {
+    href: "/docs/api",
+    title: "API reference",
+    body: "Every endpoint the Go API exposes, the async create → poll flow, and the JSON conventions — the web app is just a client of this.",
+  },
+  {
     href: "/docs/data-sources",
     title: "Where data comes from",
     body: "The public, point-in-time sources behind every signal — GH Archive history, GitHub metadata, and package registries.",
@@ -53,9 +63,9 @@ export default function DocsOverviewPage() {
           How OSS Risk Radar scores maintenance risk
         </h1>
         <p className="max-w-3xl text-sm leading-7 text-muted">
-          Built for developers: where the data comes from, how to train the model yourself, what the features are and how
-          they performed, and exactly what happens when a repository is scored. For the scientific evaluation of the
-          model, see{" "}
+          Built for developers: how the system is put together and how to call its API, where the data comes from, how to
+          train the model yourself, what the features are and how they performed, and exactly what happens when a
+          repository is scored. For the scientific evaluation of the model, see{" "}
           <Link href="/docs/ml" className="font-medium text-accent">
             Model evaluation
           </Link>
