@@ -22,13 +22,13 @@ generatorOptions:
 images:
 - name: ghcr.io/esuarken/oss-risk-radar-api
   newName: ghcr.io/esuarken/oss-risk-radar-api
-  newTag: 237bdfe6dceaef7522297ea39644483148aa60fa
+  newTag: a917cec8c7e109f7513d7e62b4b01d8da7bafbb6
 - name: ghcr.io/esuarken/oss-risk-radar-scoring
   newName: ghcr.io/esuarken/oss-risk-radar-scoring
-  newTag: 237bdfe6dceaef7522297ea39644483148aa60fa
+  newTag: a917cec8c7e109f7513d7e62b4b01d8da7bafbb6
 - name: ghcr.io/esuarken/oss-risk-radar-web
   newName: ghcr.io/esuarken/oss-risk-radar-web
-  newTag: 237bdfe6dceaef7522297ea39644483148aa60fa
+  newTag: a917cec8c7e109f7513d7e62b4b01d8da7bafbb6
 
 replacements:
 - source:
