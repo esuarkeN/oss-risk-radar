@@ -1,23 +1,56 @@
+% Titelseite — Deckblatt der Provadis Hochschule
+% (kannX/phs-latex-templates, basiert auf der Universität Ulm
+% Praktikumsbericht-Vorlage von Max Sch., CC BY 4.0).
+% Persönliche Daten stehen in metadata.tex. Der Titel bleibt englisch.
+
 \begin{titlepage}
-  \centering
-  {\Large \thesisUniversity\par}
-  \vspace{0.5cm}
-  {\large \thesisFaculty\par}
-  {\large \thesisProgram\par}
 
-  \vfill
+  % Logo der Provadis Hochschule. Optionales Unternehmenslogo rechts mit:
+  %   \hfill\includegraphics[height=2.06cm]{unternehmen-logo.pdf}
+  \includegraphics[height=2.06cm]{provadis-hochschule.pdf}
 
-  {\Huge\bfseries \thesisTitle\par}
-  \vspace{0.6cm}
-  {\Large \thesisSubtitle\par}
+  \vspace*{1cm}
 
-  \vfill
+  \begin{singlespace}
+    \begin{center}
 
-  \begin{tabular}{ll}
-    Author: & \thesisAuthor \\
-    Matriculation number: & \thesisMatriculationNumber \\
-    Supervisor: & \thesisSupervisor \\
-    Second supervisor: & \thesisSecondSupervisor \\
-    Submission date: & \thesisSubmissionDate \\
+      \normalsize
+      Bachelorarbeit
+
+      \vspace*{2cm}
+
+      \large
+      \textbf{\thesisTitle}
+
+      \vspace*{3cm}
+
+      \normalsize
+      zur Erlangung des akademischen Grades\\
+      `Bachelor of Science' B.Sc.\\
+      im Studiengang `\thesisProgram'
+
+      \vspace*{2cm}
+
+      vorgelegt dem Fachbereich \thesisFaculty\ der\\
+      \thesisUniversity\\
+      von
+
+      \vspace*{1cm}
+
+      \thesisAuthor \\
+      \thesisMatriculationNumber \\
+      \thesisStudyGroup \\
+      \thesisEmail
+
+    \end{center}
+  \end{singlespace}
+
+  \normalsize
+  \vfill % variabler vertikaler Abstand
+  \begin{tabular}{@{}ll}
+    Erstgutachter:              & \thesisSupervisor \\[0.25cm]
+    Zweitgutachter:             & \thesisSecondSupervisor \\[0.25cm]
+    Ende der Bearbeitungsfrist: & \thesisSubmissionDate \\
   \end{tabular}
+
 \end{titlepage}
