@@ -176,33 +176,9 @@ repository memorization.
 
 A single aggregate metric can average a strong subgroup with a weak one. The
 held-out predictions of the deployed \texttt{xgboost-full-history} model are
-therefore re-scored within subgroups that vary in ways relevant to deployment
-(Table~\ref{tab:slice-metrics}).
-
-\begin{table}[ht]
-  \centering
-  \caption{Held-out ROC-AUC and Brier score of \texttt{xgboost-full-history}
-  within subgroups of the test slice. ``Inactive rate'' is the positive rate in
-  the subgroup.}
-  \label{tab:slice-metrics}
-  \begin{tabular}{llrrr}
-    \toprule
-    Dimension & Subgroup & \(n\) & Inactive rate & ROC-AUC \\
-    \midrule
-    Popularity      & high            & 2178 & 0.48 & 0.968 \\
-    Popularity      & medium          & 1398 & 0.66 & 0.945 \\
-    Popularity      & low             & 607  & 0.64 & 0.689 \\
-    \midrule
-    Activity at \(t\) & active@\(t\)   & 1786 & 0.17 & 0.883 \\
-    Activity at \(t\) & quiet@\(t\)    & 2397 & 0.85 & 0.860 \\
-    \midrule
-    History regime  & has-history     & 2320 & 0.30 & 0.917 \\
-    History regime  & cold-start-like & 1863 & 0.88 & 0.872 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-Three findings follow. First, the aggregate ROC-AUC masks a much weaker
+therefore re-scored within subgroups that vary in ways relevant to deployment;
+the full per-subgroup table is given in Appendix~\ref{appendix:eval-tables}
+(Table~\ref{tab:slice-metrics}). Three findings follow. First, the aggregate ROC-AUC masks a much weaker
 obscure-repository subgroup: low-popularity repositories are ranked at only
 \(0.689\), against \(0.968\) for high-popularity ones, so scores for
 low-visibility projects deserve more caution and are exactly where the
@@ -268,28 +244,10 @@ measured against each dataset's own labels, bots appear harmless. This is
 expected but misleading, because the unfiltered model is then scored against a
 partially corrupted target. A cleaner test trains on the bot-contaminated
 \emph{features} while evaluating against the clean, human-filtered \emph{labels}
-(Table~\ref{tab:bot-ablation-crosstest}): the contaminated features are
-consistently worse across all four families, though by a small margin (ROC-AUC
-falls by \(0.0007\)--\(0.0018\); Brier rises by up to \(0.0018\)).
-
-\begin{table}[ht]
-  \centering
-  \caption{Cross-test of the human-actor filter: training on bot-contaminated
-  features versus clean features, both evaluated against the identical clean
-  (human-filtered) label on the held-out slice. A lower ROC-AUC or higher Brier
-  for the contaminated features means the filter helps.}
-  \label{tab:bot-ablation-crosstest}
-  \begin{tabular}{lrrrr}
-    \toprule
-    Model & ROC-AUC (clean) & ROC-AUC (contam.) & \(\Delta\)ROC-AUC & \(\Delta\)Brier \\
-    \midrule
-    \texttt{logistic-regression-full-history} & 0.9379 & 0.9373 & \(-0.0007\) & \(+0.0009\) \\
-    \texttt{xgboost-full-history}             & 0.9529 & 0.9522 & \(-0.0007\) & \(+0.0001\) \\
-    \texttt{logistic-regression-cold-start}   & 0.8889 & 0.8871 & \(-0.0018\) & \(+0.0018\) \\
-    \texttt{xgboost-cold-start}               & 0.9488 & 0.9477 & \(-0.0011\) & \(+0.0018\) \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+(Appendix~\ref{appendix:eval-tables}, Table~\ref{tab:bot-ablation-crosstest}): the
+contaminated features are consistently worse across all four families, though by a
+small margin (ROC-AUC falls by \(0.0007\)--\(0.0018\); Brier rises by up to
+\(0.0018\)).
 
 \textbf{Interpretation.} The filter's justification is construct validity rather
 than discrimination. Its predictive cost when omitted is small, since the
