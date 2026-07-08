@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useDeferredValue, useMemo, useState } from "react";
 
-import type { DependencyFilterState, DependencyRecord, Ecosystem } from "@/lib/types";
+import type { DependencyFilterState, DependencyRecord } from "@/lib/types";
 
 import { RiskBadge } from "@/components/risk-badge";
 import { Badge } from "@/components/ui/badge";
@@ -38,10 +38,6 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
   const [outlookSortDirection, setOutlookSortDirection] = useState<OutlookSortDirection>("asc");
   const deferredSearch = useDeferredValue(filters.search);
 
-  const ecosystems = useMemo(() => {
-    return Array.from(new Set(dependencies.map((dependency) => dependency.ecosystem as Ecosystem))).sort();
-  }, [dependencies]);
-
   const filteredDependencies = useMemo(() => {
     return dependencies.filter((dependency) => {
       const haystack = [
@@ -56,11 +52,10 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
 
       const matchesSearch = haystack.includes(deferredSearch.toLowerCase());
       const matchesBucket = filters.bucket === "all" || dependency.riskProfile?.riskBucket === filters.bucket;
-      const matchesEcosystem = filters.ecosystem === "all" || dependency.ecosystem === filters.ecosystem;
       const matchesDirect = !filters.directOnly || dependency.direct;
       const matchesMapped = !mappedOnly || Boolean(dependency.repository?.fullName);
 
-      return matchesSearch && matchesBucket && matchesEcosystem && matchesDirect && matchesMapped;
+      return matchesSearch && matchesBucket && matchesDirect && matchesMapped;
     });
   }, [deferredSearch, dependencies, filters, mappedOnly]);
 
@@ -98,7 +93,7 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
         <div>
           <h3 className="text-base font-semibold text-foreground">Repository and Dependency Inventory</h3>
           <p className="mt-0.5 text-xs text-muted">
-            Filter by risk, ecosystem, depth, and repository coverage.
+            Filter by risk, depth, and repository coverage.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">
@@ -138,18 +133,6 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
-        <select
-          className="h-9 rounded-md border border-line bg-panelAlt px-3 text-sm text-foreground outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/10"
-          value={filters.ecosystem}
-          onChange={(event) => setFilters((current) => ({ ...current, ecosystem: event.target.value as DependencyFilterState["ecosystem"] }))}
-        >
-          <option value="all">All ecosystems</option>
-          {ecosystems.map((ecosystem) => (
-            <option key={ecosystem} value={ecosystem}>
-              {ecosystem}
-            </option>
-          ))}
-        </select>
         <label className="flex h-9 items-center gap-2 rounded-md border border-line bg-panelAlt px-3 text-sm text-muted">
           <input
             type="checkbox"
@@ -179,7 +162,6 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
           {filters.directOnly ? <Badge tone="neutral">Direct only</Badge> : null}
           {mappedOnly ? <Badge tone="neutral">Mapped repos</Badge> : null}
           {filters.bucket !== "all" ? <Badge tone={filters.bucket}>{filters.bucket}</Badge> : null}
-          {filters.ecosystem !== "all" ? <Badge tone="neutral">{filters.ecosystem}</Badge> : null}
           {filters.search ? <Badge tone="neutral">&ldquo;{filters.search}&rdquo;</Badge> : null}
           <Button type="button" onClick={resetFilters} className="h-auto border-transparent bg-transparent px-0 py-0 text-xs text-accent hover:bg-transparent hover:text-foreground">
             Reset
@@ -234,7 +216,6 @@ export function DependencyTable({ dependencies, selectedDependencyId, onSelectDe
                       <Badge tone={repositoryProfile ? "neutral" : dependency.direct ? "medium" : "neutral"}>
                         {repositoryProfile ? "Repository target" : dependency.direct ? "Direct" : "Transitive"}
                       </Badge>
-                      <Badge tone="neutral">{repositoryProfile ? "repository" : dependency.ecosystem}</Badge>
                       {dependency.parsedFromUploadId ? <Badge tone="neutral">Upload-backed</Badge> : null}
                     </div>
                   </td>

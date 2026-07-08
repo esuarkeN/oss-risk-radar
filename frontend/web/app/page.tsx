@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  CircleDot,
   GitBranch,
   Network,
   ShieldCheck,
@@ -14,6 +13,7 @@ import Link from "next/link";
 
 import { CreateAnalysisForm } from "@/components/landing/create-analysis-form";
 import { ResumeAnalysisCard } from "@/components/landing/resume-analysis-card";
+import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const navLinks = [
@@ -25,7 +25,6 @@ const stats = [
   { value: "43", label: "Maintenance signals per repo" },
   { value: "4", label: "Risk buckets" },
   { value: "12mo", label: "Inactivity outlook" },
-  { value: "npm · PyPI · Go", label: "Supported ecosystems" },
 ];
 
 const features = [
@@ -67,22 +66,13 @@ const features = [
   },
 ];
 
-const supportedEcosystems = [
-  "npm",
-  "PyPI",
-  "Go",
-  "Maven",
-];
-
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col bg-[hsl(var(--background))]">
       {/* Sticky nav */}
       <header className="sticky top-0 z-40 flex h-14 items-center border-b border-[hsl(var(--border))] bg-[hsl(var(--panel)/0.90)] px-6 backdrop-blur-md">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-[hsl(var(--accent))]">
-            <CircleDot className="h-4 w-4 text-white" />
-          </span>
+          <Logo className="h-7 w-7" />
           <span className="text-sm font-bold tracking-tight text-[hsl(var(--foreground))]">
             OSS Risk Radar
           </span>
@@ -135,9 +125,8 @@ export default function HomePage() {
           </h1>
 
           <p className="mx-auto mt-5 max-w-xl text-[1.0625rem] leading-7 text-[hsl(var(--muted))]">
-            OSS Risk Radar surfaces operationally fragile dependencies in your
-            software supply chain — scored by ML, grounded in public signals,
-            built for engineering and security teams.
+            OSS Risk Radar surfaces operationally fragile dependencies —
+            scored by ML and grounded in public maintenance signals.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-xs text-[hsl(var(--muted))]">
@@ -161,7 +150,7 @@ export default function HomePage() {
 
       {/* Stats strip */}
       <div className="mx-6 mb-16 overflow-hidden rounded-xl border border-[hsl(var(--border))] lg:mx-auto lg:max-w-5xl">
-        <div className="grid divide-x divide-[hsl(var(--border))] sm:grid-cols-4">
+        <div className="grid divide-x divide-[hsl(var(--border))] sm:grid-cols-3">
           {stats.map((stat) => (
             <div key={stat.label} className="px-8 py-6 text-center">
               <p className="text-[1.75rem] font-extrabold tracking-tight text-[hsl(var(--foreground))]">
@@ -189,16 +178,6 @@ export default function HomePage() {
             </p>
             <div className="mt-5">
               <CreateAnalysisForm />
-            </div>
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {supportedEcosystems.map((eco) => (
-                <span
-                  key={eco}
-                  className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--panel-alt))] px-2 py-0.5 font-mono text-[11px] text-[hsl(var(--muted))]"
-                >
-                  {eco}
-                </span>
-              ))}
             </div>
           </div>
         </div>

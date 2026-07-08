@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
 
-import { EcosystemBreakdownChart } from "@/components/charts/ecosystem-breakdown-chart";
 import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart";
 import { DependencyTable } from "@/components/dependency-table";
 import { RepositoryMlAnalysisPanel } from "@/components/repository-ml-analysis-panel";
@@ -322,9 +321,8 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
               tone={analysis.summary.scoreAvailabilityCount > 0 ? "success" : "neutral"}
             />
           </div>
-          <div className="grid animate-slide-up gap-5 xl:grid-cols-2" style={{ animationDelay: "200ms" }}>
+          <div className="animate-slide-up" style={{ animationDelay: "200ms" }}>
             <RiskDistributionChart distribution={analysis.summary.riskDistribution} />
-            <EcosystemBreakdownChart breakdown={analysis.summary.ecosystemBreakdown} />
           </div>
         </>
       ) : null}

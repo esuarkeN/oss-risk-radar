@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-labelledby="t">
+  <title id="t">OSS Risk Radar — Bat (echolocation)</title>
+  <!-- echolocation -->
+  <path d="M74 40 A20 20 0 0 1 84 58" fill="none" stroke="#2FE6C8" stroke-width="2" stroke-opacity=".65"/>
+  <path d="M80 32 A30 30 0 0 1 94 56" fill="none" stroke="#2FE6C8" stroke-width="1.7" stroke-opacity=".4"/>
+  <circle cx="90" cy="34" r="2.8" fill="#F6A21E"/>
+  <!-- wings -->
+  <path d="M60 56 L34 46 L42 57 L24 55 L38 68 L50 63 L60 74 L70 63 L82 68 L96 55 L78 57 L86 46 Z" fill="#2FE6C8"/>
+  <!-- head -->
+  <circle cx="60" cy="52" r="7.5" fill="#2FE6C8"/>
+  <!-- ears -->
+  <path d="M53 47 L55 37 L59 46 Z" fill="#2FE6C8"/>
+  <path d="M67 47 L65 37 L61 46 Z" fill="#2FE6C8"/>
+  <!-- eyes -->
+  <circle cx="57" cy="52" r="1.5" fill="#E9F2F0"/>
+  <circle cx="63" cy="52" r="1.5" fill="#E9F2F0"/>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-labelledby="t">
+  <title id="t">OSS Risk Radar — Sentinel (owl)</title>
+  <!-- ear tufts -->
+  <path d="M33 26 L45 41" fill="none" stroke="#2FE6C8" stroke-width="4.2" stroke-linecap="round"/>
+  <path d="M87 26 L75 41" fill="none" stroke="#2FE6C8" stroke-width="4.2" stroke-linecap="round"/>
+  <!-- head -->
+  <circle cx="60" cy="60" r="43" fill="none" stroke="#7C8A9A" stroke-opacity=".5" stroke-width="3.2"/>
+  <!-- left eye: watch ring -->
+  <circle cx="45" cy="55" r="15" fill="none" stroke="#7C8A9A" stroke-opacity=".5" stroke-width="2.4"/>
+  <circle cx="45" cy="55" r="7.5" fill="none" stroke="#7C8A9A" stroke-opacity=".5" stroke-width="1.8"/>
+  <circle cx="45" cy="55" r="2.6" fill="#E9F2F0"/>
+  <!-- right eye: radar -->
+  <circle cx="76" cy="55" r="15" fill="none" stroke="#2FE6C8" stroke-width="2.4"/>
+  <circle cx="76" cy="55" r="7.5" fill="none" stroke="#2FE6C8" stroke-width="1.8"/>
+  <path d="M76 55 L76 40 A15 15 0 0 1 89.5 48.5 Z" fill="#2FE6C8" fill-opacity=".28"/>
+  <circle cx="76" cy="55" r="2.6" fill="#E9F2F0"/>
+  <circle cx="85.6" cy="46" r="2.6" fill="#F6A21E"/>
+  <!-- beak -->
+  <path d="M60 63 L54.5 72 L65.5 72 Z" fill="#2FE6C8"/>
+</svg>

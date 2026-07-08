@@ -1,10 +1,11 @@
 "use client";
 
-import { BookOpen, CircleDot, History, Home, LayoutDashboard, Menu, X } from "lucide-react";
+import { BookOpen, History, Home, LayoutDashboard, Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getLastAnalysis, type LastAnalysis } from "@/lib/last-analysis";
 import { cn } from "@/lib/utils";
@@ -41,9 +42,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
           onClick={onNavClick}
           className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-[7px] bg-[hsl(var(--accent))]">
-            <CircleDot className="h-4 w-4 text-white" />
-          </span>
+          <Logo className="h-7 w-7" />
           <span className="text-sm font-bold tracking-tight text-[hsl(var(--foreground))]">
             OSS Risk Radar
           </span>
@@ -175,9 +174,7 @@ export function AppSidebar() {
           <Menu className="h-4 w-4" />
         </button>
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-[hsl(var(--accent))]">
-            <CircleDot className="h-3.5 w-3.5 text-white" />
-          </span>
+          <Logo className="h-6 w-6" />
           <span className="text-sm font-bold tracking-tight">OSS Risk Radar</span>
         </Link>
         <div className="ml-auto">
