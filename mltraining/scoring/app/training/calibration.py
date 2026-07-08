@@ -17,19 +17,38 @@ class HistogramCalibrator:
     bins: list[CalibrationBinSummary]
 
     def predict(self, predictions: list[float]) -> list[float]:
-        calibrated: list[float] = []
-        for prediction in predictions:
-            calibrated.append(_lookup_bin_rate(self.bins, prediction))
-        return calibrated
+        anchors = _interpolation_anchors(self.bins)
+        return [_interpolated_rate(anchors, prediction) for prediction in predictions]
 
 
-def _lookup_bin_rate(bins: list[CalibrationBinSummary], prediction: float) -> float:
+def _interpolation_anchors(bins: list[CalibrationBinSummary]) -> list[tuple[float, float]]:
+    """Anchor points ``(average_prediction, empirical_rate)`` for piecewise-linear calibration.
+
+    Only populated bins are used as anchors: empty bins carry forward a neighbour's rate,
+    so anchoring on them would reintroduce flat segments. ``empirical_rate`` is already
+    monotonic non-decreasing from ``fit_histogram_calibrator``, so sorting by the raw-score
+    axis yields a monotone mapping.
+    """
+    populated = [(bin_summary.average_prediction, bin_summary.empirical_rate) for bin_summary in bins if bin_summary.count > 0]
+    anchors = populated or [(bin_summary.average_prediction, bin_summary.empirical_rate) for bin_summary in bins]
+    return sorted(anchors)
+
+
+def _interpolated_rate(anchors: list[tuple[float, float]], prediction: float) -> float:
+    if not anchors:
+        return max(0.0, min(1.0, prediction))
     clipped = max(0.0, min(1.0, prediction))
-    for index, bin_summary in enumerate(bins):
-        is_last = index == len(bins) - 1
-        if clipped < bin_summary.upper_bound or is_last:
-            return bin_summary.empirical_rate
-    return bins[-1].empirical_rate
+    if clipped <= anchors[0][0]:
+        return anchors[0][1]
+    if clipped >= anchors[-1][0]:
+        return anchors[-1][1]
+    for (x0, y0), (x1, y1) in zip(anchors, anchors[1:], strict=False):
+        if clipped <= x1:
+            if x1 == x0:
+                return y1
+            weight = (clipped - x0) / (x1 - x0)
+            return y0 + weight * (y1 - y0)
+    return anchors[-1][1]
 
 
 def fit_histogram_calibrator(

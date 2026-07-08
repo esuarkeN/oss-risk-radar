@@ -101,6 +101,28 @@ def _ecosystem_flags(ecosystem: str) -> dict[str, float]:
     }
 
 
+def _expected_signals_for(feature_names: list[str]) -> list[str]:
+    """Input signals whose absence should lower confidence for the given feature set.
+
+    Current-snapshot signals (``EXPECTED_SIGNALS``) always apply. Historical timeline signals
+    only count when the selected feature set actually consumes them, so a cold-start model — or
+    a live repository scored before any gharchive backfill — is not penalised for lacking a
+    history it never uses.
+    """
+    expected = list(EXPECTED_SIGNALS)
+    expected.extend(name for name in PREDICTIVE_HISTORICAL_FEATURE_NAMES if name in feature_names)
+    return expected
+
+
+def compute_signal_completeness(missing_signals: list[str], feature_names: list[str]) -> float:
+    expected = _expected_signals_for(feature_names)
+    if not expected:
+        return 1.0
+    expected_set = set(expected)
+    missing_relevant = sum(1 for signal in missing_signals if signal in expected_set)
+    return round((len(expected) - missing_relevant) / len(expected), 4)
+
+
 def _missing_signals(payload: DependencySignalPayload, feature_names: list[str]) -> list[str]:
     missing: list[str] = []
     repo = payload.repository
@@ -136,7 +158,7 @@ def extract_feature_values(
     selected_feature_names = list(feature_names) if feature_names is not None else feature_names_for_regime(feature_regime)
     repo = payload.repository
     missing = _missing_signals(payload, selected_feature_names)
-    signal_completeness = round((len(EXPECTED_MODEL_SIGNALS) - len(missing)) / len(EXPECTED_MODEL_SIGNALS), 4)
+    signal_completeness = compute_signal_completeness(missing, selected_feature_names)
 
     values = {
         "has_repository_mapping": 1.0 if repo is not None else 0.0,

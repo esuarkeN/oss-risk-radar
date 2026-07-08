@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.modeling import (
+    compute_signal_completeness,
     deserialize_logistic_regression_model,
     deserialize_neural_net_model,
     deserialize_xgboost_model,
@@ -107,10 +108,7 @@ def score_dependency_with_model(
     inactivity_probability = max(0.0, min(1.0, calibrated_probability))
     inactivity_risk_score = round(_clamp(inactivity_probability * 100), 2)
     prediction_margin = abs(inactivity_probability - 0.5) * 2
-    signal_completeness = feature_values.get(
-        "signal_completeness",
-        max(0.0, min(1.0, 1.0 - (len(missing_signals) / max(1, len(artifact.feature_names))))),
-    )
+    signal_completeness = compute_signal_completeness(missing_signals, artifact.feature_names)
     confidence_score = round(max(0.0, min(1.0, signal_completeness * (0.5 + (0.5 * prediction_margin)))), 2)
     security_posture_score, caveats = _scorecard_posture(payload)
 
