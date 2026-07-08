@@ -4,6 +4,12 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Claude Code local state / agent worktrees
+.claude/
+
+# Stray LaTeX build artifact (canonical output is build/thesis.pdf)
+tex/thesis/main.pdf
+
 # Node
 node_modules/
 .next/
