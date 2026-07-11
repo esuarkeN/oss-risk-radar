@@ -23,6 +23,14 @@
   style=ieee,
   sorting=none
 ]{biblatex}
+% Long bibliography URLs are otherwise unbreakable and run into the right margin.
+% xurl permits a break after any character in a URL; the biburl penalties make biblatex
+% actually take those breaks rather than only allowing them at slashes.
+\usepackage{xurl}
+\setcounter{biburllcpenalty}{7000}
+\setcounter{biburlucpenalty}{8000}
+\setcounter{biburlnumpenalty}{7000}
+
 \usepackage[hidelinks]{hyperref}
 \usepackage[nameinlink,noabbrev]{cleveref}
 
@@ -41,6 +49,23 @@
 \newcommand{\su}{\_\allowbreak}
 % Typeset a feature key in monospace (underscores written as \su so the key can wrap).
 \newcommand{\feat}[1]{\texttt{#1}}
+
+% Long snake_case identifiers in running prose cannot be broken. Permit a line break
+% after every underscore, as \su already does inside the feature tables. \allowbreak is
+% not expandable into a PDF string, so it is neutralized for hyperref bookmarks.
+\let\origunderscore\_
+\renewcommand{\_}{\origunderscore\allowbreak}
+\pdfstringdefDisableCommands{\let\allowbreak\empty}
+
+% \texttt cannot break at '.', '-' or '/', so file paths and hyphenated identifiers run
+% into the margin. These mirror \su: the character, followed by a permitted break.
+\newcommand{\sdot}{.\allowbreak}
+\newcommand{\sdash}{-\allowbreak}
+\newcommand{\sslash}{/\allowbreak}
+
+% With those breakpoints available, let TeX stretch interword space a little rather than
+% choosing a slightly overfull line over a loose one.
+\setlength{\emergencystretch}{1.5em}
 
 \addbibresource{references.bib}
 

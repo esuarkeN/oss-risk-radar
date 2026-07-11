@@ -1,28 +1,34 @@
 \chapter{Practical Demonstrator}
 \label{chap:demonstrator}
 
-This chapter demonstrates how the trained inactivity-risk model is applied end to
-end, from a set of dependency repositories to a ranked risk view that supports
-triage. While Chapter~\ref{chap:evaluation} evaluates the model on the held-out
-test set, this chapter shows the artifact operating on a realistic input, as
-required by the demonstration phase of the Design Science Research process
-\cite{hevner2004design,peffers2007design}. The demonstrator is run against the
-deployed OSS Risk Radar instance using the staged model bundle (primary
-full-history artifact \texttt{xgboost-full-history}, version \texttt{0.2.0});
-all figures reported here are real outputs of that deployed artifact and reflect
-the public repository state at the time of analysis.
+Chapter~\ref{chap:evaluation} evaluates the model on a held-out slice drawn from
+the same seed distribution it was trained on. This chapter asks a different and
+harder question: what does the model do when applied to repositories it was never
+sampled to see? Answering it serves the demonstration phase of the Design Science
+Research process \cite{hevner2004design,peffers2007design}, but its scientific
+value here is as an error analysis. An out-of-distribution application exposes
+failure modes that a held-out slice cannot, because the held-out slice inherits
+the seed's composition and therefore its blind spots.
+
+The input is the dependency set of a real project, scored through the deployed
+artifact. Because the staging gate guarantees that the deployed model is the
+evaluated model (Section~\ref{sec:impl-deployment}), the outputs below are
+evidence about the same \texttt{xgboost\sdash full\sdash history} artifact (feature set
+\texttt{feature\sdash set\sdash v4\sdash full\sdash history}) whose metrics Chapter~\ref{chap:evaluation}
+reports, and not about a separately configured system. All figures are real
+outputs and reflect the public repository state on \texttt{2026-07-09}, the date
+of the analysis run.
 
 \section{Example Repository Set}
 \label{sec:demo-mapping}
 
-The unit of analysis is a single repository, and each repository is scored
-independently. Enumerating which repositories a project depends on is the task of
-established software-composition-analysis tooling, such as the OSS Review Toolkit
-\cite{ortAnalyzer}; the artifact treats this dependency inventory as an external
-input rather than resolving dependency graphs itself.
+Consistent with the unit of analysis fixed in Section~\ref{sec:impl-architecture},
+each repository is scored independently and the dependency inventory is taken as an
+external input produced by software-composition-analysis tooling
+\cite{ortAnalyzer}.
 
 For this demonstration the input is the set of dependency repositories of
-\texttt{ArchipelagoMW/Archipelago}, a large and actively developed open-source
+\texttt{ArchipelagoMW\sslash Archipelago}, a large and actively developed open-source
 multi-world game randomizer. Its declared Python dependencies correspond to 30
 source repositories, ranging from widely used infrastructure libraries (for
 example \texttt{flask}, \texttt{jinja2}, \texttt{werkzeug}) to smaller, more
@@ -38,8 +44,15 @@ remaining 29 are absent from the foundation cache and fall back to the cold-star
 regime. This distribution is itself an honest illustration of the cold-start
 coverage limitation highlighted in Chapter~\ref{chap:conclusion}: an arbitrary
 project's dependency repositories are mostly outside the precomputed foundation
-seed and are consequently scored by the weaker cold-start model, a fact the
-confidence layer is designed to surface rather than hide.
+seed. The aggregate held-out gap between the two regimes is small, but
+Section~\ref{sec:results-history-ablation} shows that this understates the cost of
+scoring without reconstructed history: on repositories still active at the
+observation time --- which is what most of the thirty are --- the full-history
+model outranks the cold-start one by \(0.030\) ROC-AUC. Twenty-nine of these
+thirty scores are therefore drawn from the weaker of the two regimes, on precisely
+the population where the difference is largest. A second caveat compounds it: the
+cold-start metrics are measured on seed-distribution repositories while the model
+is applied here to arbitrary submissions.
 
 \section{Risk Ranking Output and Interpretation Guidance}
 \label{sec:demo-ranking}
@@ -48,73 +61,104 @@ The scoring service produces, for each repository, the inactivity-risk score
 (0--100), the discrete action level (\texttt{monitor}, \texttt{review}, or
 \texttt{replace\_candidate}), a confidence value derived from signal completeness
 and prediction decisiveness, and the prediction regime. Of the 30 scored
-repositories, the distribution is one high-risk item (action \texttt{review}),
-five medium-risk items, and 24 low-risk items; all but one are assigned the
-\texttt{monitor} action, so the ranking concentrates analyst attention on a single
-repository rather than diluting it across the whole set. Table~\ref{tab:demo-ranking}
-shows the flagged and medium-risk repositories together with the lowest-risk
+repositories, the risk buckets are two critical, three high, eight medium, and 17
+low; by action level, two repositories are raised to
+\texttt{replace\_candidate}, four to \texttt{review}, and the remaining 24 to
+\texttt{monitor}. The ranking therefore concentrates analyst attention on six of
+thirty repositories rather than diluting it across the whole set.
+Table~\ref{tab:demo-ranking} shows the flagged repositories together with the
 full-history item for contrast; the complete 30-repository ranking is given in
-Appendix~\ref{appendix:demo-full}.
+Appendix~\ref{appendix:demo-full}. Every one of the 30 scores is distinct, which
+reflects the interpolated calibration mapping of
+Section~\ref{sec:impl-models} rather than the flat per-bin lookup it replaced.
 
 \begin{table}[htbp]
   \centering
   \small
-  \caption{Highest-risk dependency repositories of
-  \texttt{ArchipelagoMW/Archipelago} (the \texttt{review} item and the five
-  medium-risk items), with the lowest-risk full-history repository shown for
-  contrast. Risk is the 0--100 inactivity-risk score; ``Conf.'' is the
-  per-prediction confidence; ``Regime'' is full-history (FH) or cold-start (CS).
-  The complete 30-repository ranking is in Appendix~\ref{appendix:demo-full}.}
+  \caption{Flagged dependency repositories of \texttt{ArchipelagoMW/Archipelago}
+  (the two \texttt{replace\_candidate} items and the four \texttt{review} items),
+  with the single full-history repository shown for contrast. Risk is the 0--100
+  inactivity-risk score; ``Conf.'' is the per-prediction confidence; ``Regime'' is
+  full-history (FH) or cold-start (CS). The complete 30-repository ranking is in
+  Appendix~\ref{appendix:demo-full}.}
   \label{tab:demo-ranking}
+  \setlength{\tabcolsep}{4pt}
   \begin{tabular}{llrlrl}
     \toprule
     Package & Source repository & Risk & Action & Conf. & Regime \\
     \midrule
-    bsdiff4           & \texttt{ilanschnell/bsdiff4}        & 77.9 & review  & 0.69 & CS \\
+    bsdiff4      & \texttt{ilanschnell/bsdiff4}       & 92.1 & \texttt{replace\_candidate} & 0.69 & CS \\
+    setproctitle & \texttt{dvarrazzo/py-setproctitle} & 80.4 & \texttt{replace\_candidate} & 0.61 & CS \\
     \midrule
-    cymem             & \texttt{explosion/cymem}            & 46.6 & monitor & 0.81 & CS \\
-    kivymd            & \texttt{kivymd/KivyMD}              & 46.6 & monitor & 0.71 & CS \\
-    pymem             & \texttt{srounet/Pymem}              & 46.6 & monitor & 0.71 & CS \\
-    markupsafe        & \texttt{pallets/markupsafe}         & 46.6 & monitor & 0.81 & CS \\
-    setproctitle      & \texttt{dvarrazzo/py-setproctitle}  & 46.6 & monitor & 0.67 & CS \\
+    jinja2       & \texttt{pallets/jinja}             & 77.1 & review  & 0.77 & CS \\
+    cymem        & \texttt{explosion/cymem}           & 74.9 & review  & 0.75 & CS \\
+    markupsafe   & \texttt{pallets/markupsafe}        & 74.2 & review  & 0.75 & CS \\
+    pymem        & \texttt{srounet/Pymem}             & 54.3 & review  & 0.47 & CS \\
     \midrule
-    flask             & \texttt{pallets/flask}              &  1.7 & monitor & 0.97 & FH \\
+    flask        & \texttt{pallets/flask}             &  9.5 & monitor & 0.91 & FH \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\paragraph{The flagged repository.} The single item that the ranking elevates for
-review is \texttt{bsdiff4} (\texttt{ilanschnell/bsdiff4}), a small binary-diff
-library with a risk score of \(77.9\). Its explanation factors, taken directly
+\paragraph{The highest-ranked repository.} The item the ranking elevates most
+strongly is \texttt{bsdiff4} (\texttt{ilanschnell\sslash bsdiff4}), a small binary-diff
+library, with a risk score of \(92.1\). Its explanation factors, taken directly
 from the scored output, are consistent with the intended semantics of the model:
-the two cold-start ensemble members predict a \(78.7\%\) and \(77.1\%\) inactivity
-risk respectively, the model-agreement factor reports a narrow spread between
-them, and the input-completeness factor records that \(88\%\) of expected signals
-were available before imputation. The score reflects a genuinely quiet
-maintenance profile (a low-popularity repository with no contributor activity in
-the recent window and no detected release cadence), which is exactly the kind of
-small, single-maintainer dependency that a supply-chain reviewer would want
-surfaced. The confidence of \(0.69\) is moderate rather than high, and a caveat
-records that the score was produced by the cold-start model because no
-full-history cache row was available, so the flag is presented as a prompt for
-manual review rather than as a definitive judgement.
+the two cold-start ensemble members predict a \(97.0\%\) and \(87.2\%\) inactivity
+risk respectively, the model-agreement factor reports the spread between them, and
+the input-completeness factor records that \(75\%\) of expected signals were
+available before imputation. The score reflects a genuinely quiet maintenance
+profile --- a low-popularity, single-maintainer repository with no detected release
+cadence --- which is exactly the kind of dependency a supply-chain reviewer would
+want surfaced. The confidence of \(0.69\) is moderate rather than high, and caveats
+record both that the score was produced by the cold-start model, because no
+full-history cache row was available, and that two release-related signals had to
+be imputed. The flag is therefore presented as a prompt for manual review rather
+than as a definitive judgement.
+
+\paragraph{Two instructive false positives.} The ranking also raises
+\texttt{jinja2} (\(77.1\)) and \texttt{markupsafe} (\(74.2\)) to \texttt{review}.
+Both are Pallets projects: widely used, professionally maintained, and in no
+meaningful sense at risk of abandonment. Neither elevation can be blamed on missing
+data --- both were scored with \(100\%\) signal completeness --- so these are
+genuine model errors rather than artifacts of imputation, and they are reported
+here rather than omitted. The explanation is the failure mode that
+Section~\ref{sec:background-metric-pitfalls} anticipates: a mature, feature-complete
+library that has reached a stable API exhibits precisely the observable profile of
+a project winding down --- infrequent commits, long gaps between releases, a small
+active contributor set --- because low activity and low \emph{need} for activity are
+indistinguishable in public metadata. The model was trained on a label that defines
+inactivity as the absence of observable maintenance signals
+(Section~\ref{sec:method-definitions}), so it is behaving exactly as specified;
+what it cannot express is that for \texttt{jinja2} the absence of churn is a sign of
+maturity. This is the strongest practical argument in this thesis for treating the
+score as a prioritization signal rather than a verdict, and for the human review
+step that the action levels are designed to trigger.
 
 \paragraph{A low-risk repository for contrast.} At the opposite end,
-\texttt{flask} (\texttt{pallets/flask}) receives a risk score of \(1.7\) with a
-confidence of \(0.97\). It is the one repository scored in the full-history
-regime, and both full-history ensemble members agree on a \(1.7\%\) inactivity
-risk with \(98\%\) signal completeness. This contrast between a moderate-confidence
-cold-start flag and a high-confidence full-history clearance illustrates why the
-confidence value, not only the risk score, is part of the triage output.
+\texttt{flask} (\texttt{pallets/flask}) receives a risk score of \(9.5\) with a
+confidence of \(0.91\). It is the one repository scored in the full-history regime,
+with complete signal coverage and no imputation, and its two ensemble members agree
+closely (\(5.4\%\) and \(13.5\%\) inactivity risk). That \texttt{flask} is ranked
+low while its sibling projects \texttt{jinja2} and \texttt{markupsafe} are flagged
+is instructive in itself: the three are maintained by the same organization under
+the same release practices, and the difference in their scores tracks the
+availability of reconstructed history rather than any difference in maintenance.
+This contrast between a moderate-confidence cold-start flag and a
+high-confidence full-history clearance illustrates why the confidence value, not
+only the risk score, is part of the triage output --- and it quantifies the
+cold-start coverage gap more sharply than the held-out metrics do.
 
 Interpretation guidance follows the rest of the thesis. The score is a
 prioritization signal, not a trust or security verdict: a low score does not
-certify a repository as secure, and the elevated score for \texttt{bsdiff4}
-indicates thin public maintenance signals rather than a known defect. Low
-confidence or a large number of imputed signals should reduce the decisiveness of
-any action, and cold-start scores in particular are conditional on the reduced
-feature set and on the sampled prevalence to which the model is calibrated
+certify a repository as secure, and an elevated score indicates thin public
+maintenance signals rather than a known defect. Low confidence or a large number of
+imputed signals should reduce the decisiveness of any action, and cold-start scores
+in particular are conditional on the reduced feature set and on the sampled
+prevalence to which the model is calibrated
 (Section~\ref{sec:method-limitations}), so they warrant recalibration before being
 read as absolute deployment probabilities. Used this way, the ranked view converts
-a flat list of 30 repositories into a single reviewable candidate plus a small
-medium-risk cluster, which is the intended practical contribution of the artifact.
+a flat list of 30 repositories into six candidates for review, of which at least
+two --- on the evidence above --- a human reviewer would quickly clear. That is a
+useful reduction of analyst effort, and an honest statement of the artifact's
+precision at this operating point.
