@@ -1,0 +1,287 @@
+{
+  "datasetPath": "/app/tmp/training/snapshots.json",
+  "datasetHash": "2d29a928dac34ea1dab919f87e89386f2e6eac3bda59aee7a625c5ad0873b0d8",
+  "artifactPath": "/app/tmp/training/runs/20260709T205943564713Z-logistic-regression-cold-start-2d29a928dac3.json",
+  "cachedAt": "2026-07-09T20:59:43.564713+00:00",
+  "status": "completed",
+  "modelName": "logistic-regression-cold-start",
+  "modelVersion": "0.4.0",
+  "trainedAt": "2026-07-09T20:57:28.923658+00:00",
+  "datasetSummary": {
+    "totalRows": 50000,
+    "labeledRows": 50000,
+    "unlabeledRows": 0,
+    "earliestObservedAt": "2023-01-01T00:00:00+00:00",
+    "latestObservedAt": "2025-04-01T00:00:00+00:00",
+    "featureNames": [
+      "has_repository_mapping",
+      "is_direct_dependency",
+      "last_push_age_days",
+      "last_release_age_days",
+      "release_cadence_days",
+      "recent_contributors_90d",
+      "contributor_concentration",
+      "open_issue_growth_90d",
+      "pr_response_median_days",
+      "stars_log1p",
+      "forks_log1p",
+      "open_issues_log1p",
+      "ecosystem_npm",
+      "ecosystem_pypi",
+      "ecosystem_go",
+      "ecosystem_maven",
+      "ecosystem_other"
+    ]
+  },
+  "splitSummary": {
+    "trainRows": 37500,
+    "validationRows": 7500,
+    "testRows": 5000
+  },
+  "metrics": {
+    "threshold": 0.4695963006096721,
+    "sampleCount": 5000,
+    "positiveRate": 0.6606,
+    "accuracy": 0.8618,
+    "precision": 0.883441,
+    "recall": 0.91099,
+    "f1Score": 0.897004,
+    "brierScore": 0.099903,
+    "logLoss": 0.313126,
+    "rocAuc": 0.931826,
+    "expectedCalibrationError": 0.043511,
+    "qualityScore": 0.739957
+  },
+  "calibrationBins": [
+    {
+      "lowerBound": 0,
+      "upperBound": 0.1,
+      "count": 861,
+      "averagePrediction": 0.056333,
+      "empiricalRate": 0.017978
+    },
+    {
+      "lowerBound": 0.1,
+      "upperBound": 0.2,
+      "count": 778,
+      "averagePrediction": 0.147367,
+      "empiricalRate": 0.094055
+    },
+    {
+      "lowerBound": 0.2,
+      "upperBound": 0.3,
+      "count": 456,
+      "averagePrediction": 0.246644,
+      "empiricalRate": 0.288154
+    },
+    {
+      "lowerBound": 0.3,
+      "upperBound": 0.4,
+      "count": 349,
+      "averagePrediction": 0.348383,
+      "empiricalRate": 0.403827
+    },
+    {
+      "lowerBound": 0.4,
+      "upperBound": 0.5,
+      "count": 368,
+      "averagePrediction": 0.450512,
+      "empiricalRate": 0.544492
+    },
+    {
+      "lowerBound": 0.5,
+      "upperBound": 0.6,
+      "count": 282,
+      "averagePrediction": 0.550935,
+      "empiricalRate": 0.673255
+    },
+    {
+      "lowerBound": 0.6,
+      "upperBound": 0.7,
+      "count": 261,
+      "averagePrediction": 0.646458,
+      "empiricalRate": 0.77189
+    },
+    {
+      "lowerBound": 0.7,
+      "upperBound": 0.8,
+      "count": 274,
+      "averagePrediction": 0.75231,
+      "empiricalRate": 0.872485
+    },
+    {
+      "lowerBound": 0.8,
+      "upperBound": 0.9,
+      "count": 1057,
+      "averagePrediction": 0.833983,
+      "empiricalRate": 0.872485
+    },
+    {
+      "lowerBound": 0.9,
+      "upperBound": 1,
+      "count": 2814,
+      "averagePrediction": 0.983622,
+      "empiricalRate": 0.988485
+    }
+  ],
+  "modelArtifact": {
+    "modelName": "logistic-regression-cold-start",
+    "modelVersion": "0.4.0",
+    "featureVersion": "feature-set-v4-cold-start",
+    "trainedAt": "2026-07-09T20:57:28.923658+00:00",
+    "threshold": 0.4695963006096721,
+    "algorithm": "logistic_regression",
+    "featureNames": [
+      "has_repository_mapping",
+      "is_direct_dependency",
+      "last_push_age_days",
+      "last_release_age_days",
+      "release_cadence_days",
+      "recent_contributors_90d",
+      "contributor_concentration",
+      "open_issue_growth_90d",
+      "pr_response_median_days",
+      "stars_log1p",
+      "forks_log1p",
+      "open_issues_log1p",
+      "ecosystem_npm",
+      "ecosystem_pypi",
+      "ecosystem_go",
+      "ecosystem_maven",
+      "ecosystem_other"
+    ],
+    "calibrationBins": [
+      {
+        "lowerBound": 0,
+        "upperBound": 0.1,
+        "count": 861,
+        "averagePrediction": 0.056333,
+        "empiricalRate": 0.017978
+      },
+      {
+        "lowerBound": 0.1,
+        "upperBound": 0.2,
+        "count": 778,
+        "averagePrediction": 0.147367,
+        "empiricalRate": 0.094055
+      },
+      {
+        "lowerBound": 0.2,
+        "upperBound": 0.3,
+        "count": 456,
+        "averagePrediction": 0.246644,
+        "empiricalRate": 0.288154
+      },
+      {
+        "lowerBound": 0.3,
+        "upperBound": 0.4,
+        "count": 349,
+        "averagePrediction": 0.348383,
+        "empiricalRate": 0.403827
+      },
+      {
+        "lowerBound": 0.4,
+        "upperBound": 0.5,
+        "count": 368,
+        "averagePrediction": 0.450512,
+        "empiricalRate": 0.544492
+      },
+      {
+        "lowerBound": 0.5,
+        "upperBound": 0.6,
+        "count": 282,
+        "averagePrediction": 0.550935,
+        "empiricalRate": 0.673255
+      },
+      {
+        "lowerBound": 0.6,
+        "upperBound": 0.7,
+        "count": 261,
+        "averagePrediction": 0.646458,
+        "empiricalRate": 0.77189
+      },
+      {
+        "lowerBound": 0.7,
+        "upperBound": 0.8,
+        "count": 274,
+        "averagePrediction": 0.75231,
+        "empiricalRate": 0.872485
+      },
+      {
+        "lowerBound": 0.8,
+        "upperBound": 0.9,
+        "count": 1057,
+        "averagePrediction": 0.833983,
+        "empiricalRate": 0.872485
+      },
+      {
+        "lowerBound": 0.9,
+        "upperBound": 1,
+        "count": 2814,
+        "averagePrediction": 0.983622,
+        "empiricalRate": 0.988485
+      }
+    ],
+    "coefficients": [
+      0,
+      0,
+      1.492347686095105,
+      0.32779214801349404,
+      0.18980235365578293,
+      -0.48258609920452605,
+      -0.26671602828355234,
+      -0.11813060736931338,
+      0.3273919541685164,
+      0.06538877259834876,
+      -0.00249730889298892,
+      -0.7441541645592225,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "intercept": 0.6159596447500757,
+    "standardization": {
+      "means": [
+        1,
+        1,
+        368.12837333333334,
+        228.44954666666666,
+        80.93296,
+        1.4128,
+        0.40178780530666663,
+        0.31773148850666666,
+        67.86037438237334,
+        4.948879531758707,
+        3.55216352103411,
+        2.1549715911232914,
+        0,
+        0,
+        0,
+        0,
+        1
+      ],
+      "scales": [
+        1,
+        1,
+        410.14518808216434,
+        202.04575914330516,
+        101.11413003287457,
+        10.555915695002495,
+        0.45327092909740074,
+        5.659367148923013,
+        317.0482389700793,
+        3.001783723150453,
+        2.4713360114821534,
+        2.074363069847258,
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  },
+  "message": "Trained logistic-regression-cold-start using feature-set-v4-cold-start on a 75%/15%/10% time-aware split with class-balanced inactive labels. Already-archived-at-observation rows are excluded so the model learns pre-inactivity warning indicators."
+}
