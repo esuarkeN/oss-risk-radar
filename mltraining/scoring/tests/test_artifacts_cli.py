@@ -68,4 +68,4 @@ def test_artifact_export_writes_both_model_artifacts(tmp_path, training_snapshot
     assert latest["status"] == "completed"
     assert latest["modelName"] in model_names
     assert latest["datasetHash"]
-    assert latest["modelArtifact"]["featureVersion"] in {"feature-set-v3-full-history", "feature-set-v3-cold-start"}
+    assert latest["modelArtifact"]["featureVersion"] in {"feature-set-v4-full-history", "feature-set-v4-cold-start"}

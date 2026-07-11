@@ -28,22 +28,34 @@ def _safe_divide(numerator: float, denominator: float) -> float:
 
 
 def _roc_auc(predictions: list[float], labels: list[int]) -> float:
-    positives = [(prediction, label) for prediction, label in zip(predictions, labels, strict=True) if label == 1]
-    negatives = [(prediction, label) for prediction, label in zip(predictions, labels, strict=True) if label == 0]
-    if not positives or not negatives:
+    """Area under the ROC curve, as the Mann--Whitney statistic with ties counted as one half.
+
+    Computed from mid-ranks in O(n log n) rather than by enumerating all positive--negative
+    pairs, which is O(P*N) and dominates training time on datasets of this size. The two are
+    exactly equal, tie handling included: summing the mid-ranks of the positives and
+    subtracting their minimum possible rank sum counts each concordant pair once and each tied
+    pair one half.
+    """
+    positive_count = sum(1 for label in labels if label == 1)
+    negative_count = len(labels) - positive_count
+    if positive_count == 0 or negative_count == 0:
         return 0.5
 
-    concordant = 0.0
-    ties = 0.0
-    for positive_prediction, _ in positives:
-        for negative_prediction, _ in negatives:
-            if positive_prediction > negative_prediction:
-                concordant += 1
-            elif positive_prediction == negative_prediction:
-                ties += 1
+    paired = sorted(zip(predictions, labels, strict=True))
+    ranks = [0.0] * len(paired)
+    index = 0
+    while index < len(paired):
+        end = index
+        while end + 1 < len(paired) and paired[end + 1][0] == paired[index][0]:
+            end += 1
+        mid_rank = (index + end) / 2.0 + 1.0
+        for position in range(index, end + 1):
+            ranks[position] = mid_rank
+        index = end + 1
 
-    total_pairs = len(positives) * len(negatives)
-    return (concordant + (0.5 * ties)) / total_pairs
+    positive_rank_sum = sum(rank for rank, (_, label) in zip(ranks, paired, strict=True) if label == 1)
+    minimum_rank_sum = positive_count * (positive_count + 1) / 2.0
+    return (positive_rank_sum - minimum_rank_sum) / (positive_count * negative_count)
 
 
 def expected_calibration_error(predictions: list[float], labels: list[int], bin_count: int = 10) -> float:

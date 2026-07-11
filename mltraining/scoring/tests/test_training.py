@@ -61,7 +61,7 @@ def test_training_pipeline_returns_completed_result(training_snapshots: list[dic
     assert len(result.calibration_bins) == 5
     assert result.artifact is not None
     assert result.model_name == "logistic-regression-full-history"
-    assert result.artifact.feature_version == "feature-set-v3-full-history"
+    assert result.artifact.feature_version == "feature-set-v4-full-history"
     assert result.artifact.model_version == "0.4.0"
     assert len(result.artifact.feature_names) == len(result.artifact.coefficients)
 

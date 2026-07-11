@@ -11,7 +11,7 @@ const REQUIRED_MODEL_NAMES = [
   "logistic-regression-cold-start",
   "xgboost-cold-start",
 ];
-const REQUIRED_FEATURE_VERSIONS = new Set(["feature-set-v3-full-history", "feature-set-v3-cold-start"]);
+const REQUIRED_FEATURE_VERSIONS = new Set(["feature-set-v4-full-history", "feature-set-v4-cold-start"]);
 const DATASET_HASH_HISTORICAL_FEATURES = ["repo_archived_at_obs"];
 
 function parseArgs(argv) {
@@ -230,15 +230,20 @@ function validateRunArtifacts(sourceRunsDir, args, latestRun) {
         continue;
       }
       const featureVersion = run.modelArtifact.featureVersion ?? run.modelArtifact.feature_version;
-      if (args.requiredFeatureVersion && featureVersion !== args.requiredFeatureVersion) {
-        throw new Error(
-          `staged training bundle contains ${run.modelName} with feature version ${featureVersion ?? "unknown"}; expected ${args.requiredFeatureVersion}`
-        );
-      }
-      if (!args.requiredFeatureVersion && !REQUIRED_FEATURE_VERSIONS.has(featureVersion)) {
-        throw new Error(
-          `staged training bundle contains ${run.modelName} with feature version ${featureVersion ?? "unknown"}; expected one of ${[...REQUIRED_FEATURE_VERSIONS].join(", ")}`
-        );
+      // The feature-version check applies to the candidate bundle only. The baseline is the
+      // previously deployed bundle and may legitimately carry an older feature set; enforcing
+      // the current version against it would make a feature-set upgrade impossible to promote.
+      if (!args.skipFeatureVersionCheck) {
+        if (args.requiredFeatureVersion && featureVersion !== args.requiredFeatureVersion) {
+          throw new Error(
+            `staged training bundle contains ${run.modelName} with feature version ${featureVersion ?? "unknown"}; expected ${args.requiredFeatureVersion}`
+          );
+        }
+        if (!args.requiredFeatureVersion && !REQUIRED_FEATURE_VERSIONS.has(featureVersion)) {
+          throw new Error(
+            `staged training bundle contains ${run.modelName} with feature version ${featureVersion ?? "unknown"}; expected one of ${[...REQUIRED_FEATURE_VERSIONS].join(", ")}`
+          );
+        }
       }
       const candidate = { runPath, run };
       const existing = selectedByModel.get(run.modelName);
@@ -478,7 +483,11 @@ function evaluatePromotionGate(candidateArtifacts, args) {
     throw new Error(`promotion baseline is incomplete: ${baselineDir}`);
   }
   const baselineLatest = readJson(baselineLatestPath);
-  const baselineArtifacts = validateRunArtifacts(baselineRunsDir, { ...args, requireBothModels: true }, baselineLatest);
+  const baselineArtifacts = validateRunArtifacts(
+    baselineRunsDir,
+    { ...args, requireBothModels: true, skipFeatureVersionCheck: true },
+    baselineLatest
+  );
   const comparison = {
     generatedAt: new Date().toISOString(),
     candidateSource: relativeRepoPath(resolveRepoPath(args.sourceDir)),

@@ -20,7 +20,7 @@ def test_feature_extraction_endpoint_returns_rows(make_dependency_payload) -> No
 
     assert response.status_code == 200
     body = response.json()
-    assert body["feature_version"] == "feature-set-v3-full-history"
+    assert body["feature_version"] == "feature-set-v4-full-history"
     assert body["rows"][0]["feature_values"]["ecosystem_go"] == 1.0
 
 
@@ -34,7 +34,7 @@ def test_model_scoring_uses_historical_features(make_dependency_payload) -> None
     artifact = {
         "model_name": "logistic-regression-full-history",
         "model_version": "historical-fixture",
-        "feature_version": "feature-set-v3-full-history",
+        "feature_version": "feature-set-v4-full-history",
         "trained_at": "2026-01-01T00:00:00Z",
         "threshold": 0.5,
         "algorithm": "logistic_regression",

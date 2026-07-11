@@ -41,7 +41,9 @@ class DependencySignalPayload(BaseModel):
     direct: bool = True
     repository: RepositorySnapshotInput | None = None
     scorecard: ScorecardSnapshotInput | None = None
-    historical_features: dict[str, float] = Field(default_factory=dict)
+    # Null marks a feature that is undefined rather than zero (e.g. a latency median for a
+    # repository with no pull requests). It is imputed by the model artifact, never read as 0.
+    historical_features: dict[str, float | None] = Field(default_factory=dict)
 
 
 class DependencyBatchRequest(BaseModel):
@@ -157,11 +159,16 @@ class CalibrationBin(BaseModel):
 class StandardizationProfileArtifact(BaseModel):
     means: list[float] = Field(default_factory=list)
     scales: list[float] = Field(default_factory=list)
+    # Imputation medians for undefined features. Empty on artifacts trained before the
+    # v4 feature set, where the runtime falls back to the column mean.
+    medians: list[float] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_lengths(self) -> "StandardizationProfileArtifact":
         if len(self.means) != len(self.scales):
             raise ValueError("standardization means and scales must have the same length")
+        if self.medians and len(self.medians) != len(self.means):
+            raise ValueError("standardization medians must match the means length")
         return self
 
 
@@ -235,6 +242,7 @@ class NeuralNetModelArtifact(BaseModel):
     biases: list[list[float]] = Field(default_factory=list)
     means: list[float] = Field(default_factory=list)
     scales: list[float] = Field(default_factory=list)
+    medians: list[float] = Field(default_factory=list)
     calibration_bins: list[CalibrationBin] = Field(default_factory=list)
 
     @model_validator(mode="after")

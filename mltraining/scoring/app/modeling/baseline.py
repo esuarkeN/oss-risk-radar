@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from statistics import median
 
 
 @dataclass(slots=True)
 class StandardizationProfile:
     means: list[float]
     scales: list[float]
+    # Per-column training medians used to impute undefined (NaN) features. Linear and
+    # neural models cannot consume NaN; the tree model handles it natively and ignores this.
+    medians: list[float] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -35,30 +39,39 @@ def _standardize_matrix(matrix: list[list[float]]) -> tuple[list[list[float]], S
     column_count = len(matrix[0])
     means: list[float] = []
     scales: list[float] = []
+    medians: list[float] = []
     transformed = [[0.0 for _ in range(column_count)] for _ in matrix]
 
     for index in range(column_count):
         column = [row[index] for row in matrix]
-        mean = sum(column) / len(column)
-        variance = sum((value - mean) ** 2 for value in column) / len(column)
+        observed = [value for value in column if not math.isnan(value)]
+        # A column that is undefined everywhere imputes to 0.0; its scale is then 1.0, so it
+        # contributes nothing rather than poisoning the fit.
+        column_median = float(median(observed)) if observed else 0.0
+        imputed = [column_median if math.isnan(value) else value for value in column]
+        mean = sum(imputed) / len(imputed)
+        variance = sum((value - mean) ** 2 for value in imputed) / len(imputed)
         scale = math.sqrt(variance) or 1.0
         means.append(mean)
         scales.append(scale)
-        for row_index, value in enumerate(column):
+        medians.append(column_median)
+        for row_index, value in enumerate(imputed):
             transformed[row_index][index] = (value - mean) / scale
 
-    return transformed, StandardizationProfile(means=means, scales=scales)
+    return transformed, StandardizationProfile(means=means, scales=scales, medians=medians)
 
 
 def _apply_standardization(matrix: list[list[float]], profile: StandardizationProfile) -> list[list[float]]:
     transformed: list[list[float]] = []
     for row in matrix:
-        transformed.append(
-            [
-                (value - profile.means[index]) / profile.scales[index]
-                for index, value in enumerate(row)
-            ]
-        )
+        standardized_row: list[float] = []
+        for index, value in enumerate(row):
+            if math.isnan(value):
+                # Older artifacts predate the median profile; fall back to the column mean,
+                # which standardizes to zero and is the least-informative substitute.
+                value = profile.medians[index] if index < len(profile.medians) else profile.means[index]
+            standardized_row.append((value - profile.means[index]) / profile.scales[index])
+        transformed.append(standardized_row)
     return transformed
 
 

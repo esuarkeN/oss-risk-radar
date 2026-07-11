@@ -123,7 +123,7 @@ class SnapshotFeatureRow:
     ecosystem: str
     observed_at: datetime
     package_version_at_obs: str | None
-    feature_values: dict[str, float]
+    feature_values: dict[str, float | None]
     missing_features: list[str] = field(default_factory=list)
     open_issues_total_at_obs: int = 0
     release_cadence_days: int | None = None

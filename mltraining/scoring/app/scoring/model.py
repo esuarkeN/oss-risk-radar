@@ -117,7 +117,7 @@ def score_dependency_with_model(
     if artifact.feature_version not in {FEATURE_VERSION, FULL_HISTORY_FEATURE_VERSION, COLD_START_FEATURE_VERSION}:
         caveats.append("The stored model was trained on an older feature set, so runtime inference may drift until retrained.")
     if missing_signals:
-        caveats.append("Some model input signals were missing and imputed as neutral zero-valued features.")
+        caveats.append("Some model input signals were unavailable and were imputed from the training-set medians stored with the model artifact.")
 
     direction = "increase" if inactivity_risk_score >= 50 else "decrease"
     explanation_factors = [

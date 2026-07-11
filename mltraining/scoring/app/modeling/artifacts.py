@@ -26,6 +26,7 @@ def serialize_logistic_regression_model(
         standardization=StandardizationProfileArtifact(
             means=list(model.standardization.means),
             scales=list(model.standardization.scales),
+            medians=list(model.standardization.medians),
         ),
         calibration_bins=list(calibration_bins),
     )
@@ -39,6 +40,7 @@ def deserialize_logistic_regression_model(artifact: LogisticRegressionModelArtif
         standardization=StandardizationProfile(
             means=list(artifact.standardization.means),
             scales=list(artifact.standardization.scales),
+            medians=list(artifact.standardization.medians),
         ),
         model_name=artifact.model_name,
         model_version=artifact.model_version,
@@ -110,6 +112,7 @@ def serialize_neural_net_model(
         biases=[list(layer) for layer in model.biases],
         means=list(model.means),
         scales=list(model.scales),
+        medians=list(model.medians),
         calibration_bins=list(calibration_bins),
     )
 
@@ -122,6 +125,7 @@ def deserialize_neural_net_model(artifact: NeuralNetModelArtifact) -> NeuralNetM
         biases=[list(layer) for layer in artifact.biases],
         means=list(artifact.means),
         scales=list(artifact.scales),
+        medians=list(artifact.medians),
         model_name=artifact.model_name,
         model_version=artifact.model_version,
     )

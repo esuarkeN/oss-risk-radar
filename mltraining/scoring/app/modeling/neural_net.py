@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -13,6 +13,7 @@ class NeuralNetModel:
     biases: list[list[float]]          # biases[layer][out_neuron]
     means: list[float]                 # input standardization means
     scales: list[float]                # input standardization scales
+    medians: list[float] = field(default_factory=list)  # imputation medians for undefined features
     model_name: str = "neural-net-full-history"
     model_version: str = "0.1.0"
 
@@ -79,6 +80,12 @@ def fit_neural_net_classifier(
     y = np.array(labels, dtype=np.float64)
     sample_weights = np.array(_balanced_sample_weights(labels), dtype=np.float64)
 
+    # Impute undefined features with the column median before standardizing; a column that
+    # is undefined everywhere imputes to 0.0. Store params for inference-time application.
+    medians = np.nanmedian(X, axis=0)
+    medians = np.where(np.isnan(medians), 0.0, medians)
+    X = np.where(np.isnan(X), medians, X)
+
     # Standardize inputs; store params for inference-time application
     means = X.mean(axis=0)
     stds = X.std(axis=0)
@@ -134,6 +141,7 @@ def fit_neural_net_classifier(
         biases=[b.tolist() for b in biases_np],
         means=means.tolist(),
         scales=stds.tolist(),
+        medians=medians.tolist(),
     )
 
 
@@ -146,6 +154,10 @@ def predict_neural_net_probabilities(model: NeuralNetModel, matrix: list[list[fl
     X = np.array(matrix, dtype=np.float64)
     means = np.array(model.means, dtype=np.float64)
     scales = np.array(model.scales, dtype=np.float64)
+    # Artifacts trained before the v4 feature set carry no medians; the mean standardizes
+    # to zero and is the least-informative substitute.
+    medians = np.array(model.medians, dtype=np.float64) if model.medians else means
+    X = np.where(np.isnan(X), medians, X)
     a = (X - means) / scales
 
     n_layers = len(model.weights)

@@ -19,13 +19,15 @@ def write_jsonl(path: Path, rows: Iterable[Any]) -> None:
     ensure_directory(path.parent)
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
-            handle.write(json.dumps(dataclass_to_dict(row), sort_keys=True))
+            # allow_nan=False: undefined features must be serialized as null, never as the
+            # non-standard NaN token, which downstream Go and TypeScript consumers reject.
+            handle.write(json.dumps(dataclass_to_dict(row), sort_keys=True, allow_nan=False))
             handle.write("\n")
 
 
 def write_json(path: Path, payload: Any) -> None:
     ensure_directory(path.parent)
-    path.write_text(json.dumps(dataclass_to_dict(payload), indent=2, sort_keys=True), encoding="utf-8")
+    path.write_text(json.dumps(dataclass_to_dict(payload), indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
 
 
 def read_json(path: Path) -> Any:

@@ -145,3 +145,117 @@ def test_build_snapshot_features_prefers_first_pr_response_for_response_time() -
     row = build_snapshot_features(snapshot, repository, package, history)
 
     assert row.pr_response_median_days == 1.0
+
+
+def test_silent_repository_censors_ages_and_leaves_latencies_undefined() -> None:
+    """A repository with no observed activity must not look freshly maintained.
+
+    Encoding "never committed" as ``days_since_last_commit = 0`` would make the quietest
+    repositories indistinguishable from ones committed to today, and a latency median of
+    ``0`` would read as an instantaneous response. Ages are censored at the age of the
+    observable record; latencies stay undefined.
+    """
+    observed_at = datetime(2024, 1, 1, tzinfo=UTC)
+    coverage_start = datetime(2023, 1, 1, tzinfo=UTC)
+    repository = RepositoryRecord(
+        repository_id="acme__silent",
+        full_name="acme/silent",
+        url="https://github.com/acme/silent",
+        default_branch="main",
+        created_at=datetime(2020, 1, 1, tzinfo=UTC),
+    )
+    package = PackageRecord(
+        package_id="npm:silent",
+        ecosystem="npm",
+        package_name="silent",
+        selected_version=None,
+        repository_url=repository.url,
+        repository_full_name=repository.full_name,
+        popularity_tier="low",
+        downloads_30d=None,
+        direct_dependents_count=None,
+    )
+    history = RepositoryHistory(
+        repository_full_name=repository.full_name,
+        coverage_start=coverage_start,
+        coverage_end=datetime(2025, 1, 2, tzinfo=UTC),
+    )
+    snapshot = ObservationSnapshot(
+        snapshot_id="acme__silent:2024-01-01",
+        repository_id=repository.repository_id,
+        package_id=package.package_id,
+        ecosystem=package.ecosystem,
+        observed_at=observed_at,
+        feature_window_start=datetime(2023, 1, 1, tzinfo=UTC),
+        previous_window_start=datetime(2022, 1, 1, tzinfo=UTC),
+        label_window_end=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+
+    row = build_snapshot_features(snapshot, repository, package, history)
+
+    # Censored at the later of repository creation and archive coverage start.
+    censored_days = (observed_at - coverage_start).days
+    assert row.feature_values["days_since_last_commit"] == float(censored_days)
+    assert row.feature_values["days_since_last_release"] == float(censored_days)
+    assert row.feature_values["days_since_last_commit"] > 0.0
+
+    # Latency medians are undefined, not "instantaneous".
+    for name in ("issue_first_response_median_days_365d", "issue_resolution_median_days_365d",
+                 "pr_response_median_days_365d", "pr_merge_latency_median_days_365d"):
+        assert row.feature_values[name] is None, name
+
+    # The absence of activity reaches the model explicitly.
+    assert row.feature_values["has_issue_activity_365d"] == 0.0
+    assert row.feature_values["has_pr_activity_365d"] == 0.0
+    assert "days_since_last_commit" in row.missing_features
+
+
+def test_repository_with_no_observable_record_leaves_ages_undefined() -> None:
+    """No record before t means the ages are undefined, not zero.
+
+    A censoring bound only exists if some period before the observation date was actually
+    observed. When archive coverage begins after t, nothing could have been seen, so
+    ``days_since_last_commit`` must not collapse to 0 -- which would encode the repository
+    as having committed on the observation date.
+    """
+    observed_at = datetime(2023, 1, 1, tzinfo=UTC)
+    repository = RepositoryRecord(
+        repository_id="acme__late",
+        full_name="acme/late",
+        url="https://github.com/acme/late",
+        default_branch="main",
+        created_at=None,
+    )
+    package = PackageRecord(
+        package_id="npm:late",
+        ecosystem="npm",
+        package_name="late",
+        selected_version=None,
+        repository_url=repository.url,
+        repository_full_name=repository.full_name,
+        popularity_tier="low",
+        downloads_30d=None,
+        direct_dependents_count=None,
+    )
+    history = RepositoryHistory(
+        repository_full_name=repository.full_name,
+        # First observed event is a year after the observation date.
+        coverage_start=datetime(2024, 1, 1, tzinfo=UTC),
+        coverage_end=datetime(2025, 1, 2, tzinfo=UTC),
+    )
+    snapshot = ObservationSnapshot(
+        snapshot_id="acme__late:2023-01-01",
+        repository_id=repository.repository_id,
+        package_id=package.package_id,
+        ecosystem=package.ecosystem,
+        observed_at=observed_at,
+        feature_window_start=datetime(2022, 1, 1, tzinfo=UTC),
+        previous_window_start=datetime(2021, 1, 1, tzinfo=UTC),
+        label_window_end=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+
+    row = build_snapshot_features(snapshot, repository, package, history)
+
+    assert row.feature_values["days_since_last_commit"] is None
+    assert row.feature_values["days_since_last_release"] is None
+    assert row.feature_values["commits_365d"] == 0.0

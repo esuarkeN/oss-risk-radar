@@ -308,7 +308,9 @@ class DatasetBuilder:
                             "open_issue_growth_90d": feature_row.feature_values["issue_backlog_growth_90d"],
                             "pr_response_median_days": feature_row.pr_response_median_days,
                         },
-                        "historical_features": feature_row.feature_values,
+                        "historical_features": {
+                            key: value for key, value in feature_row.feature_values.items() if value is not None
+                        },
                     },
                     "label_inactive_12m": None if label_row is None else label_row.label_inactive_12m,
                     "sampling": {
@@ -586,9 +588,11 @@ class DatasetBuilder:
         return value.replace(year=year, month=month, day=day)
 
     def _none_if_missing(self, feature_row: SnapshotFeatureRow, feature_name: str) -> int | None:
-        if feature_name in feature_row.missing_features:
-            return None
-        return int(feature_row.feature_values.get(feature_name, 0))
+        # Age features carry a right-censored upper bound when the underlying event was never
+        # observed, so the value stays usable; the missing_features entry still records that the
+        # event was unobserved, which is what drives signal completeness and confidence.
+        value = feature_row.feature_values.get(feature_name)
+        return None if value is None else int(value)
 
     def _load_packages(self) -> dict[str, PackageRecord]:
         rows = read_jsonl(self.paths.packages)
@@ -680,8 +684,13 @@ def _build_repository_feature_cache(
             "repositoryUrl": repository.url,
             "observedAt": feature_row.observed_at.isoformat(),
             "source": "gharchive",
+            # Undefined features are omitted rather than emitted as null or zero. Consumers
+            # read an absent key as "undefined" and impute it; a zero would read as the best
+            # possible value (instant response, freshly pushed).
             "featureValues": {
-                key: value for key, value in feature_row.feature_values.items() if key not in excluded_runtime_features
+                key: value
+                for key, value in feature_row.feature_values.items()
+                if key not in excluded_runtime_features and value is not None
             },
             "missingFeatures": [key for key in feature_row.missing_features if key not in excluded_runtime_features],
         }
@@ -799,7 +808,7 @@ def _snapshot_feature_row_from_dict(payload: dict[str, Any]) -> SnapshotFeatureR
         ecosystem=str(payload["ecosystem"]),
         observed_at=parse_datetime(payload.get("observed_at")) or datetime.now(UTC),
         package_version_at_obs=payload.get("package_version_at_obs"),
-        feature_values={str(key): float(value) for key, value in payload.get("feature_values", {}).items()},
+        feature_values={str(key): (None if value is None else float(value)) for key, value in payload.get("feature_values", {}).items()},
         missing_features=[str(item) for item in payload.get("missing_features", [])],
         open_issues_total_at_obs=int(payload.get("open_issues_total_at_obs", 0)),
         release_cadence_days=payload.get("release_cadence_days"),

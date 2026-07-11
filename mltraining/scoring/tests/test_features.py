@@ -48,7 +48,7 @@ def test_build_feature_row_keeps_model_input_metadata(make_dependency_payload) -
     assert row.feature_values["ecosystem_pypi"] == 1.0
     assert row.feature_values["pr_response_median_days_365d"] == 3.0
     assert FEATURE_VERSION == FULL_HISTORY_FEATURE_VERSION
-    assert COLD_START_FEATURE_VERSION == "feature-set-v3-cold-start"
+    assert COLD_START_FEATURE_VERSION == "feature-set-v4-cold-start"
 
 
 def test_cold_start_feature_values_do_not_require_historical_signals(make_dependency_payload) -> None:

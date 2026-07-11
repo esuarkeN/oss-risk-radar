@@ -42,6 +42,8 @@ HISTORICAL_FEATURE_NAMES = [
     "repo_archived_at_obs",
     "has_recent_release_flag",
     "has_recent_pr_merge_flag",
+    "has_issue_activity_365d",
+    "has_pr_activity_365d",
     "activity_drop_365d_vs_prev_365d",
     "contributors_drop_365d_vs_prev_365d",
     "release_gap_risk",
@@ -51,6 +53,22 @@ HISTORICAL_FEATURE_NAMES = [
     "stale_issue_share_at_obs",
     "pr_response_median_days_365d",
     "pr_merge_latency_median_days_365d",
+]
+
+# Latency medians are undefined -- not zero -- when the repository had no issue or
+# pull-request activity in the window. Encoding them as 0.0 would mean "responded
+# instantly", the best possible value, for repositories that in fact did nothing.
+# They are emitted as null and imputed downstream; the companion has_*_activity
+# flags carry the "no events at all" signal explicitly.
+NULLABLE_FEATURE_NAMES = [
+    "issue_first_response_median_days_365d",
+    "issue_resolution_median_days_365d",
+    "pr_response_median_days_365d",
+    "pr_merge_latency_median_days_365d",
+    # Undefined when nothing at all was observable before the observation date, so there is
+    # no window over which the event could have been missed and no bound to censor against.
+    "days_since_last_commit",
+    "days_since_last_release",
 ]
 
 
@@ -75,6 +93,20 @@ def build_snapshot_features(
     commits_365d = sum(item.count for item in human_commits if window_365 < item.occurred_at <= observed_at)
     commits_prev_365d = sum(item.count for item in human_commits if previous_window_365 < item.occurred_at <= window_365)
     active_commit_months_365d = len({item.occurred_at.strftime("%Y-%m") for item in human_commits if window_365 < item.occurred_at <= observed_at})
+
+    # Age of the observable record: the later of repository creation and the start of archive
+    # coverage. When no commit or release is ever observed but the record does span some time
+    # before t, the true "days since" is right-censored at this bound rather than zero.
+    # When the record begins at or after t there is nothing to censor against -- nothing was
+    # observable before t -- so the age is undefined and must not collapse to zero, which would
+    # read as "committed on the observation date".
+    censoring_start = max(
+        (value for value in (history.coverage_start, repository.created_at) if value is not None),
+        default=None,
+    )
+    censored_age_days: int | None = None
+    if censoring_start is not None and censoring_start < observed_at:
+        censored_age_days = _age_days(observed_at, censoring_start) or None
 
     last_commit = max((item.occurred_at for item in human_commits if item.occurred_at <= observed_at), default=None)
     days_since_last_commit = _age_days(observed_at, last_commit)
@@ -162,6 +194,14 @@ def build_snapshot_features(
     if pr_merge_latency_median_days is None:
         missing_features.append("pr_merge_latency_median_days_365d")
 
+    # Explicit "anything happened at all" signals for the year before t. Without these the
+    # absence of issue or pull-request activity could only reach the model disguised as a
+    # zero-valued latency, which reads as maximum responsiveness.
+    issues_365d = sum(1 for issue in history.issues.values() if window_365 < issue.created_at <= observed_at)
+    prs_365d = sum(1 for pr in history.pull_requests.values() if window_365 < pr.created_at <= observed_at)
+    has_issue_activity_365d = 1.0 if issues_365d > 0 else 0.0
+    has_pr_activity_365d = 1.0 if prs_365d > 0 else 0.0
+
     if history.coverage_start is None or history.coverage_start > window_365:
         missing_features.append("history_coverage_before_observation")
 
@@ -170,7 +210,7 @@ def build_snapshot_features(
         "commits_90d": float(commits_90d),
         "commits_365d": float(commits_365d),
         "active_commit_months_365d": float(active_commit_months_365d),
-        "days_since_last_commit": float(days_since_last_commit or 0),
+        "days_since_last_commit": days_since_last_commit if days_since_last_commit is not None else censored_age_days,
         "contributors_90d": float(contributors_90d),
         "contributors_365d": float(contributors_365d),
         "new_contributors_365d": float(new_contributors_365d),
@@ -189,7 +229,7 @@ def build_snapshot_features(
         "pr_merge_ratio_90d": round(pr_merge_ratio_90d, 6),
         "stale_open_prs_count_at_obs": float(stale_open_prs),
         "releases_365d": float(releases_365d),
-        "days_since_last_release": float(days_since_last_release or 0),
+        "days_since_last_release": days_since_last_release if days_since_last_release is not None else censored_age_days,
         "versions_published_365d": float(versions_published_365d),
         "package_age_days": float(package_age_days or 0),
         "repo_age_days": float(repo_age_days or 0),
@@ -200,18 +240,20 @@ def build_snapshot_features(
         "repo_archived_at_obs": repo_archived_at_obs,
         "has_recent_release_flag": has_recent_release_flag,
         "has_recent_pr_merge_flag": has_recent_pr_merge_flag,
+        "has_issue_activity_365d": has_issue_activity_365d,
+        "has_pr_activity_365d": has_pr_activity_365d,
         "activity_drop_365d_vs_prev_365d": round(activity_drop, 6),
         "contributors_drop_365d_vs_prev_365d": round(contributors_drop, 6),
         "release_gap_risk": round(release_gap_risk, 6),
         "concentration_risk_score": round(concentration_risk_score, 6),
-        "issue_first_response_median_days_365d": float(issue_first_response_median_days or 0),
-        "issue_resolution_median_days_365d": float(issue_resolution_median_days or 0),
+        "issue_first_response_median_days_365d": issue_first_response_median_days,
+        "issue_resolution_median_days_365d": issue_resolution_median_days,
         "stale_issue_share_at_obs": round(stale_issue_share, 6),
-        "pr_response_median_days_365d": float(pr_response_median_days or 0),
-        "pr_merge_latency_median_days_365d": float(pr_merge_latency_median_days or 0),
+        "pr_response_median_days_365d": pr_response_median_days,
+        "pr_merge_latency_median_days_365d": pr_merge_latency_median_days,
     }
 
-    ordered_values = {name: float(feature_values[name]) for name in HISTORICAL_FEATURE_NAMES}
+    ordered_values = {name: _optional_float(feature_values[name]) for name in HISTORICAL_FEATURE_NAMES}
     return SnapshotFeatureRow(
         snapshot_id=snapshot.snapshot_id,
         repository_id=snapshot.repository_id,
@@ -246,6 +288,10 @@ def _commit_counts_by_actor(commits, start, end) -> dict[str, int]:
 
 def _open_issue_count_at(history: RepositoryHistory, observed_at) -> int:
     return sum(1 for issue in history.issues.values() if issue.created_at <= observed_at and (issue.closed_at is None or issue.closed_at > observed_at))
+
+
+def _optional_float(value) -> float | None:
+    return None if value is None else float(value)
 
 
 def _age_days(observed_at, value) -> int | None:

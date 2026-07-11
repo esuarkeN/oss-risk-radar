@@ -4,15 +4,21 @@ import math
 from datetime import UTC, datetime
 
 from app.schemas.score import DependencySignalPayload, ExtractedFeatureRow
-from app.training.maintenance_dataset.features import HISTORICAL_FEATURE_NAMES
+from app.training.maintenance_dataset.features import HISTORICAL_FEATURE_NAMES, NULLABLE_FEATURE_NAMES
 
 FEATURE_REGIME_FULL_HISTORY = "full-history"
 FEATURE_REGIME_COLD_START = "cold-start"
-FULL_HISTORY_FEATURE_VERSION = "feature-set-v3-full-history"
-COLD_START_FEATURE_VERSION = "feature-set-v3-cold-start"
+FULL_HISTORY_FEATURE_VERSION = "feature-set-v4-full-history"
+COLD_START_FEATURE_VERSION = "feature-set-v4-cold-start"
 FEATURE_VERSION = FULL_HISTORY_FEATURE_VERSION
 HISTORICAL_DIAGNOSTIC_FEATURE_NAMES = [
+    # Exported for inspection but never a model input: already-archived rows are excluded from
+    # fitting, so this flag must not become a shortcut label.
     "repo_archived_at_obs",
+    # Constant zero under the reproducible offline build, which carries no repository
+    # creation date. A zero-variance column contributes nothing and would misleadingly appear
+    # in the feature reference as though it informed the model.
+    "repo_age_days",
 ]
 PREDICTIVE_HISTORICAL_FEATURE_NAMES = [
     name for name in HISTORICAL_FEATURE_NAMES if name not in set(HISTORICAL_DIAGNOSTIC_FEATURE_NAMES)
@@ -143,7 +149,7 @@ def _missing_signals(payload: DependencySignalPayload, feature_names: list[str])
                 missing.append(name)
 
     for name in PREDICTIVE_HISTORICAL_FEATURE_NAMES:
-        if name in feature_names and name not in payload.historical_features:
+        if name in feature_names and payload.historical_features.get(name) is None:
             missing.append(name)
 
     return sorted(set(missing))
@@ -164,24 +170,36 @@ def extract_feature_values(
         "has_repository_mapping": 1.0 if repo is not None else 0.0,
         "is_direct_dependency": 1.0 if payload.direct else 0.0,
         "repo_archived": 1.0 if repo is not None and repo.archived else 0.0,
-        "last_push_age_days": float(repo.last_push_age_days or 0) if repo is not None else 0.0,
-        "last_release_age_days": float(repo.last_release_age_days or 0) if repo is not None else 0.0,
-        "release_cadence_days": float(repo.release_cadence_days or 0) if repo is not None else 0.0,
+        # Age and latency signals are undefined, not zero, when absent: a zero would read as
+        # "pushed today" / "responds instantly". They are emitted as NaN and imputed by the
+        # model artifact, which stores the training-set medians.
+        "last_push_age_days": _nullable(repo.last_push_age_days) if repo is not None else math.nan,
+        "last_release_age_days": _nullable(repo.last_release_age_days) if repo is not None else math.nan,
+        "release_cadence_days": _nullable(repo.release_cadence_days) if repo is not None else math.nan,
         "recent_contributors_90d": float(repo.recent_contributors_90d or 0) if repo is not None else 0.0,
         "contributor_concentration": float(repo.contributor_concentration or 0) if repo is not None else 0.0,
         "open_issue_growth_90d": float(repo.open_issue_growth_90d or 0) if repo is not None else 0.0,
-        "pr_response_median_days": float(repo.pr_response_median_days or 0) if repo is not None else 0.0,
+        "pr_response_median_days": _nullable(repo.pr_response_median_days) if repo is not None else math.nan,
         "stars_log1p": math.log1p(repo.stars) if repo is not None else 0.0,
         "forks_log1p": math.log1p(repo.forks) if repo is not None else 0.0,
         "open_issues_log1p": math.log1p(repo.open_issues) if repo is not None else 0.0,
         "signal_completeness": signal_completeness,
     }
     values.update(_ecosystem_flags(payload.ecosystem))
+    nullable = set(NULLABLE_FEATURE_NAMES)
     for name in HISTORICAL_FEATURE_NAMES:
-        values[name] = float(payload.historical_features.get(name, 0.0))
+        raw = payload.historical_features.get(name)
+        if raw is None:
+            values[name] = math.nan if name in nullable else 0.0
+        else:
+            values[name] = float(raw)
 
     ordered_values = {name: float(values.get(name, 0.0)) for name in selected_feature_names}
     return ordered_values, missing
+
+
+def _nullable(value: float | None) -> float:
+    return math.nan if value is None else float(value)
 
 
 def build_feature_row(
