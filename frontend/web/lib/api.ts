@@ -5,7 +5,6 @@ import type {
   DependencyRecord,
   GetAnalysisResponse,
   GetDependenciesResponse,
-  GetDependencyResponse,
   GetLatestTrainingRunResponse,
   GetTrainingEffectsResponse,
   GetTrainingDatasetSummaryResponse,
@@ -64,11 +63,6 @@ export async function getAnalysis(analysisId: string): Promise<AnalysisRecord> {
 export async function getDependencies(analysisId: string): Promise<DependencyRecord[]> {
   const response = await request<GetDependenciesResponse>(`/analyses/${analysisId}/dependencies`);
   return response.dependencies;
-}
-
-export async function getDependency(dependencyId: string): Promise<DependencyRecord> {
-  const response = await request<GetDependencyResponse>(`/dependencies/${dependencyId}`);
-  return response.dependency;
 }
 
 export async function getTrainingDatasetSummary(): Promise<TrainingDatasetSummary> {

@@ -5,10 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, DatabaseZap, RefreshCw, ShieldCheck } from "lucide-react";
 
-import { RiskDistributionChart } from "@/components/charts/risk-distribution-chart";
-import { DependencyTable } from "@/components/dependency-table";
 import { RepositoryMlAnalysisPanel } from "@/components/repository-ml-analysis-panel";
-import { SummaryCard } from "@/components/summary-card";
 import { useToast } from "@/components/toast-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -171,8 +168,6 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
 
   const analysisStatusActive = ACTIVE_STATUSES.has(analysis.status);
   const canRerunAnalysis = analysis.submission.kind === "repository_url" && !analysisStatusActive;
-  const isRepositoryAnalysis = analysis.submission.kind === "repository_url";
-  const multipleSubjects = dependencies.length > 1;
 
   async function handleRerunAnalysis() {
     if (!analysis || !canRerunAnalysis) {
@@ -274,58 +269,6 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
           {analysisStatusActive ? "Scoring in progress — the risk verdict will appear here." : "No scorable subject in this analysis yet."}
         </Card>
       )}
-
-      {/* Package picker — only when the analysis covers more than one subject */}
-      {multipleSubjects ? (
-        <div className="animate-slide-up space-y-2" style={{ animationDelay: "120ms" }}>
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted">
-              {isRepositoryAnalysis ? "Repository & resolved packages" : "Packages in this analysis"}
-            </h2>
-            <p className="text-xs text-muted">Select any row to see its risk verdict above.</p>
-          </div>
-          <DependencyTable
-            dependencies={dependencies}
-            selectedDependencyId={selectedDependency?.id}
-            onSelectDependency={setSelectedDependencyId}
-          />
-        </div>
-      ) : null}
-
-      {/* Portfolio context — counts and distributions, only useful with multiple packages */}
-      {multipleSubjects ? (
-        <>
-          <div className="grid animate-slide-up gap-3 md:grid-cols-2 xl:grid-cols-4" style={{ animationDelay: "160ms" }}>
-            <SummaryCard
-              label={isRepositoryAnalysis ? "Profiles" : "Dependencies"}
-              value={analysis.summary.dependencyCount}
-              caption={isRepositoryAnalysis ? "Repository scored in this analysis." : "Repositories in this analysis."}
-              tone="neutral"
-            />
-            <SummaryCard
-              label="High Risk"
-              value={analysis.summary.highRiskCount}
-              caption="Currently in the high or critical inactivity buckets."
-              tone={analysis.summary.highRiskCount > 0 ? "danger" : "neutral"}
-            />
-            <SummaryCard
-              label="Mapped Repos"
-              value={analysis.summary.mappedRepositoryCount}
-              caption="Packages linked to a source repository."
-              tone="neutral"
-            />
-            <SummaryCard
-              label="Scored"
-              value={analysis.summary.scoreAvailabilityCount}
-              caption="Packages with a current score and explanation."
-              tone={analysis.summary.scoreAvailabilityCount > 0 ? "success" : "neutral"}
-            />
-          </div>
-          <div className="animate-slide-up" style={{ animationDelay: "200ms" }}>
-            <RiskDistributionChart distribution={analysis.summary.riskDistribution} />
-          </div>
-        </>
-      ) : null}
 
       {/* Uploaded artifacts */}
       {analysis.uploads?.length ? (

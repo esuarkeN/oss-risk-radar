@@ -91,7 +91,7 @@ export default function ArchitecturePage() {
             <span className="text-foreground">api worker:</span> a poller picks up the job, enriches each repository from public sources, and resolves the feature vector.
           </li>
           <li>
-            <span className="text-foreground">api → scoring:</span> features go to the scoring service, which returns a calibrated probability plus confidence and evidence.
+            <span className="text-foreground">api → scoring:</span> features go to the scoring service, which returns a calibrated probability plus evidence support and explanation factors.
           </li>
           <li>
             <span className="text-foreground">api → store:</span> results are persisted and the job flips to <code className="rounded bg-panelAlt px-1 py-0.5 font-mono text-[12px]">completed</code>.

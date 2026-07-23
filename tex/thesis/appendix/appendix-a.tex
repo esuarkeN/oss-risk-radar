@@ -223,6 +223,8 @@ This section gives the exact rules summarized in Section~\ref{sec:method-undefin
 
 \paragraph{Why it matters.} Before this correction, an undefined latency was stored as \(0.0\). Since \(0\) days is the best possible response time, roughly half of the dataset encoded ``this project has no issues or pull requests at all'' as ``this project responds instantaneously''. The variable was consequently a strong predictor of inactivity with an inverted meaning, and the feature attributions of Section~\ref{sec:results-attribution} reflected data availability rather than maintenance behaviour. The same defect made \texttt{days\_since\_last\_commit} non-monotonic, which in turn depressed the trivial recency baseline against which the learned models are compared (Section~\ref{sec:results-baselines}).
 
+\paragraph{Offline-build consequences.} Because the reported dataset is built through the reproducible offline path (Section~\ref{sec:method-offline-metadata}), the repository creation date, archival timestamp, and fork flag are never populated, and three consequences follow. First, \texttt{repo\_age\_days} is identically zero and is therefore excluded from the model vector and from any age analysis. Second, \texttt{repo\_archived\_at\_obs} is identically zero, so the archival condition of the maintenance label never fires (Section~\ref{sec:method-definitions}) and the rule excluding already-archived rows from fitting removes none. Third, build-time fork exclusion is inert, though the seed is generated with a non-fork filter so forks are already absent. Populating these attributes would require live enrichment of every seed repository and is noted as future work in Chapter~\ref{chap:conclusion}.
+
 \section{Implementation Detail}
 \label{appendix:impl-detail}
 
@@ -344,7 +346,13 @@ The scoring service is a FastAPI application under \texttt{mltraining\sslash sco
 
 For each dependency, the service builds the feature vector in the artifact's feature order, imputing undefined signals from the training-set medians stored with the artifact (Section~\ref{sec:method-undefined-features}) and recording which signals were missing. It deserializes the artifact according to its model family, computes the raw probability, and applies the stored calibrator to obtain the calibrated inactivity probability. This probability is scaled to a 0--100 inactivity-risk score, and a complementary 12-month maintenance-outlook score is derived as its inverse. The service assigns a discrete risk bucket and an action level from the score, where the action level is one of \texttt{monitor}, \texttt{review}, or \texttt{replace\_candidate}, so that the continuous score maps onto the triage actions used in the demonstrator.
 
-The service keeps the inactivity prediction and the security posture strictly separate, exactly as required by the methodology. The OpenSSF Scorecard signal is summarized into a parallel security-posture score and is never fed into the predictive feature vector \cite{zahan2022scorecard}. A confidence value is computed from the completeness of the available input signals and the decisiveness of the prediction, and explicit caveats are attached when calibration bins are missing, when the artifact's feature version is unexpected, or when input signals had to be imputed. Finally, the service returns human-readable explanation factors and evidence items so that an analyst can see which signals shaped the score rather than only the number itself.
+The service keeps the inactivity prediction and the security posture strictly separate, exactly as required by the methodology. The OpenSSF Scorecard signal is summarized into a parallel security-posture score and is never fed into the predictive feature vector \cite{zahan2022scorecard}.
+
+Each score is accompanied by an \emph{evidence-support} value \(s \in [0,1]\). It is deliberately not a statistical confidence interval or a probability that the prediction is correct: the artifact ships no coefficient covariance, so no closed-form predictive variance is available. Instead, \(s\) is an operational measure of how much observable evidence backs the individual score, computed as the geometric mean of three per-repository quantities,
+\[
+  s = \left( c \cdot d \cdot b \right)^{1/3},
+\]
+where \(c\) is signal coverage (the share of expected maintenance signals actually observed before imputation, or the model's \texttt{signal\_completeness} feature when present), \(d\) is the in-distribution share (the fraction of observed evidential features lying within \(2\sigma\) of the training mean), and \(b = n / (n + 30)\) maps the number of validation samples \(n\) backing the matched calibration bin onto \([0,1]\). The geometric mean makes a single weak component collapse the result. The decision margin to the threshold is reported separately and is not part of \(s\). Explicit caveats are attached when calibration bins are missing, when the artifact's feature version is unexpected, or when input signals had to be imputed. Finally, the service returns human-readable explanation factors and evidence items so that an analyst can see which signals shaped the score rather than only the number itself.
 
 \subsection{Backend Orchestration Service}
 \label{sec:impl-backend}
@@ -567,29 +575,64 @@ The reported full-history run uses dataset hash:
 and exports the model artifact:
 
 \begin{verbatim}
-runs/20260709T205727480957Z-xgboost-full-history-2d29a928dac3.json
+deployment/training/runs/
+  20260709T205727480957Z-xgboost-full-history-2d29a928dac3.json
 \end{verbatim}
 
-The corresponding source revision is archived at the commit referenced in the artifact citation \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline.
+The reported held-out metrics are those recorded in this staged run file, which is the authoritative record of the reported experiment. The corresponding source revision --- containing this dataset, the staged run artifacts, and the training notebook --- is archived at commit \texttt{f5e688e} \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline. The training notebook at this revision reproduces the same pipeline when re-executed against the archived dataset; its stored cell outputs correspond to an earlier exploratory run, so the run file above rather than the notebook outputs should be treated as the reference for the reported figures.
+
+\section{Label-Definition Sensitivity}
+\label{appendix:label-sensitivity}
+
+Table~\ref{tab:label-sensitivity} reports the robustness check of
+Section~\ref{sec:results-label-sensitivity}: the held-out evaluation repeated under
+one-of-four, two-of-four (primary), and three-of-four variants of the maintenance
+rule. All \(50{,}000\) snapshots are re-labeled from the same stored future-window
+signals, and the full-history XGBoost model is re-trained per variant on the
+identical time-aware split; the recency baseline is evaluated on the rows with a
+defined last-commit date, as elsewhere. The two-of-four row reproduces the reported
+headline figures, which confirms that the re-labeling harness matches the primary
+pipeline.
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \caption{Sensitivity of the held-out evaluation to the maintenance-rule
+  threshold. ``Inactive rate'' is the positive-class share of the test slice;
+  AUROC columns are ROC-AUC on that slice for the full-history XGBoost model and
+  the days-since-last-commit recency baseline.}
+  \label{tab:label-sensitivity}
+  \begin{tabular}{lrrr}
+    \toprule
+    Maintenance rule & Inactive rate & XGBoost AUROC & Recency AUROC \\
+    \midrule
+    1-of-4 (permissive) & 0.581 & 0.961 & 0.965 \\
+    2-of-4 (primary)    & 0.661 & 0.958 & 0.957 \\
+    3-of-4 (strict)     & 0.746 & 0.959 & 0.940 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \section{Full Demonstrator Ranking}
 \label{appendix:demo-full}
 
 Table~\ref{tab:demo-ranking-full} lists the complete ranked inactivity-risk view for all 30 dependency repositories of \texttt{ArchipelagoMW\sslash Archipelago} produced by the deployed model in the demonstrator (Chapter~\ref{chap:demonstrator}); the body reports the flagged and medium-risk subset in Table~\ref{tab:demo-ranking}.
 
+The explanation factors of the highest-ranked repository, \texttt{bsdiff4} (\texttt{ilanschnell\sslash bsdiff4}, risk \(92.1\); Section~\ref{sec:demo-ranking}), taken directly from the scored output, illustrate the intended semantics: the two cold-start ensemble members predict \(97.0\%\) and \(87.2\%\) inactivity risk, the model-agreement factor reports the spread between them, and the input-completeness factor records that \(75\%\) of expected signals were available before imputation. The moderate evidence support of \(0.69\) and the caveats attached to the score --- that it came from the cold-start model, no full-history cache row being available, and that two release-related signals were imputed --- are what present the flag as a prompt for manual review rather than a definitive judgement.
+
 \begin{table}[htbp]
   \centering
   \small
   \caption{Complete ranked inactivity-risk view for the dependency repositories of
   \texttt{ArchipelagoMW/Archipelago}, as produced by the deployed model. Risk is
-  the 0--100 inactivity-risk score; ``Conf.'' is the per-prediction confidence;
+  the 0--100 inactivity-risk score; ``Supp.'' is the per-prediction evidence support;
   ``Regime'' is full-history (FH) or cold-start (CS).}
   \label{tab:demo-ranking-full}
   \footnotesize
   \setlength{\tabcolsep}{3.5pt}
   \begin{tabular}{llrlrl}
     \toprule
-    Package & Source repository & Risk & Action & Conf. & Regime \\
+    Package & Source repository & Risk & Action & Supp. & Regime \\
     \midrule
     bsdiff4 & \texttt{ilanschnell/bsdiff4} & 92.1 & \texttt{replace\_candidate} & 0.69 & CS \\
     setproctitle & \texttt{dvarrazzo/py-setproctitle} & 80.4 & \texttt{replace\_candidate} & 0.61 & CS \\
@@ -677,3 +720,14 @@ This section collects the detailed evaluation tables whose findings are reported
     \bottomrule
   \end{tabular}
 \end{table}
+
+\subsection{Human-Actor Filter Ablation}
+\label{appendix:bot-ablation}
+
+This subsection expands the ablation summarized in Section~\ref{sec:results-bot-ablation}. The full 5{,}000-repository dataset was rebuilt with the human-actor filter disabled through a single build flag, with every other setting identical, yielding 50{,}000 snapshots that align one-to-one with the filtered build. Three effects are examined.
+
+\paragraph{Label corruption.} Disabling the filter flips 357 of 50{,}000 labelled snapshots (\(0.71\%\)) from inactive to active, and \emph{none} in the opposite direction. The effect is strictly one-directional: a bot commit or merge inside the future window can satisfy the two-of-four maintenance rule, so an otherwise dormant repository is relabelled as maintained, whereas bots never make an active repository look inactive. Omitting the filter would therefore bias the target by systematically \emph{masking} inactivity, which is the error direction that matters most for a risk signal.
+
+\paragraph{Feature inflation.} On the observation-time side, bots inflate the activity features substantially: with the filter disabled, \texttt{commits\_365d} changes on 7{,}858 of 50{,}000 snapshots (\(15.7\%\)) by a mean of \(+938\) commits, though the median change is only \(+80\), so the mean is driven by a small number of heavily automated repositories. \texttt{commits\_90d} rises by a mean of \(+388\) and \texttt{contributors\_365d} by \(+1.4\) distinct contributors, while pull-request \emph{count} features are unaffected because they are not actor-filtered. A small number of bot-driven repositories would thus dominate the activity signal.
+
+\paragraph{Predictive effect.} A naive comparison, in which each model is scored against the labels of the dataset it was trained on, would show bots to be nearly harmless --- but it is misleading, because the unfiltered model is then scored against a partially corrupted target. A cleaner test trains on the bot-contaminated \emph{features} while evaluating against the clean, human-filtered \emph{labels} (Table~\ref{tab:bot-ablation-crosstest}): the contaminated features are consistently worse across all four families, though by a small margin (ROC-AUC falls by \(0.0006\)--\(0.0011\); Brier rises by up to \(0.0010\)).

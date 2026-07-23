@@ -198,7 +198,7 @@ export function RepositoryDirectory() {
                     </button>
                   </th>
                   <th className="px-4 py-3">Risk grade</th>
-                  <th className="px-4 py-3">Confidence</th>
+                  <th className="px-4 py-3">Evidence support</th>
                   <th className="px-4 py-3">Scope</th>
                 </tr>
               </thead>
@@ -306,7 +306,7 @@ export function RepositoryDirectory() {
                   <tr key={dependency.key} className="border-b border-line/60 align-top transition-colors hover:bg-panelAlt/60">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-foreground">{dependency.packageName}</p>
-                      <p className="mt-1 text-xs text-muted">{dependency.packageVersion} / {dependency.ecosystem} / {formatConfidence(dependency.confidence)} confidence</p>
+                      <p className="mt-1 text-xs text-muted">{dependency.packageVersion} / {dependency.ecosystem} / {formatConfidence(dependency.confidence)} evidence support</p>
                     </td>
                     <td className="px-4 py-3 text-muted">{dependency.repositoryName ?? "Unmapped"}</td>
                     <td className="px-4 py-3 font-semibold text-foreground">{formatOutlookScore(dependency.outlook12m)}</td>

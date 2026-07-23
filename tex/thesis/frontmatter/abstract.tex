@@ -20,14 +20,16 @@ repository-disjoint split (\(0.950\)). This aggregate figure is, however, a poor
 measure of what the model contributes: a trivial rule that ranks repositories by
 days since their last commit reaches \(0.957\) on the same rows, against
 \(0.974\) for the model. The learned model earns its complexity on the
-repositories that are still active at the observation time --- the only ones for
-which an early warning has any decision value --- where it attains \(0.905\)
+repositories that are still active at the observation time --- the subgroup for
+which an early warning is most decision-relevant --- where it attains \(0.905\)
 against \(0.844\) for the best trivial rule. The thesis therefore reports both a
 null result on the aggregate comparison and a positive result on early decline. A
 human-actor filter is validated by ablation, and security-practice signals are
 kept as parallel triage context rather than as predictors of inactivity. A
 practical demonstrator applies the deployed model per repository to the
-dependency repositories of a real project, producing a calibrated,
-confidence-aware, and evidence-backed ranked triage view.
-The score is positioned as a decision-support signal for prioritizing dependency
-review, not as a verdict on abandonment.
+dependency repositories of a real project, producing a ranked triage view in
+which each repository's calibrated score is accompanied by an operational
+evidence-support measure. The demonstrator shows how the score can be integrated
+into a dependency-triage workflow rather than establishing that it improves
+triage decisions. The score is positioned as a decision-support signal for
+prioritizing dependency review, not as a verdict on abandonment.

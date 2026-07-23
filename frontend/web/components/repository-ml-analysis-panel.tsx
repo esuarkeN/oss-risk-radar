@@ -238,13 +238,13 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
           </div>
         </div>
 
-        {/* Beat 2 — prediction confidence */}
+        {/* Beat 2 — evidence support */}
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <SectionHeading
               icon={<ShieldQuestion className="size-4" aria-hidden="true" />}
               eyebrow="How much to trust this score"
-              title="Prediction confidence"
+              title="Evidence support"
             />
             {confidence ? (
               <div className="text-right">
@@ -261,11 +261,11 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
                 <ConfidenceBar key={component.key} component={component} />
               ))}
               <p className="text-[11px] leading-5 text-muted">
-                Confidence combines these per-repository factors — it reflects the evidence available for <em>this</em> repo, not the model&apos;s overall accuracy.
+                Evidence support combines these per-repository factors — it reflects the evidence available for <em>this</em> repo, not statistical confidence or the model&apos;s overall accuracy.
               </p>
             </div>
           ) : (
-            <p className="text-sm text-muted">Run a completed training artifact to compute per-prediction confidence.</p>
+            <p className="text-sm text-muted">Run a completed training artifact to compute per-prediction evidence support.</p>
           )}
         </div>
 

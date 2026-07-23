@@ -13,7 +13,7 @@ const steps = [
   },
   {
     title: "Resolve the feature vector",
-    body: "The observed signals are turned into the model's features. Any signal that couldn't be resolved is imputed to the training-cohort average and flagged as missing — it then contributes no evidence and lowers confidence.",
+    body: "The observed signals are turned into the model's features. Any signal that couldn't be resolved is imputed to the training-cohort average and flagged as missing — it then contributes no evidence and lowers evidence support.",
   },
   {
     title: "Pick the regime",
@@ -24,8 +24,8 @@ const steps = [
     body: "The model outputs a raw probability, which is mapped through the calibration curve learned on held-out data so the number reflects observed real-world rates rather than a raw model output.",
   },
   {
-    title: "Confidence, margin, and bucket",
-    body: "Alongside the probability you get a per-repository confidence (coverage, in-distribution fit, evidence support), a margin (how decisive the call is), a risk bucket, and an action level (monitor / review / replace candidate) with the evidence behind it.",
+    title: "Evidence support, margin, and bucket",
+    body: "Alongside the probability you get a per-repository evidence-support value (coverage, in-distribution fit, calibration support), a margin (how decisive the call is), a risk bucket, and an action level (monitor / review / replace candidate) with the evidence behind it.",
   },
 ];
 
@@ -64,7 +64,7 @@ export default function ScoringRunbookPage() {
         <h2 className="text-lg font-semibold tracking-tight text-foreground">Reading the result</h2>
         <ul className="max-w-3xl space-y-2 text-sm leading-6 text-muted">
           <li>A <strong className="text-foreground">high score is not proof of abandonment</strong>, and a low score is not proof of safety — it is decision support for triage, not a verdict.</li>
-          <li>Missing data is shown explicitly and lowers confidence rather than being hidden.</li>
+          <li>Missing data is shown explicitly and lowers evidence support rather than being hidden.</li>
           <li>Popularity is weak context, not primary evidence.</li>
         </ul>
         <p className="max-w-3xl text-sm leading-7 text-muted">
@@ -74,7 +74,7 @@ export default function ScoringRunbookPage() {
           </Link>{" "}
           and{" "}
           <Link href="/docs/confidence" className="font-medium text-accent">
-            Trust &amp; confidence
+            Trust &amp; evidence support
           </Link>
           .
         </p>

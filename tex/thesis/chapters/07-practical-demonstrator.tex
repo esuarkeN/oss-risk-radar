@@ -59,8 +59,9 @@ is applied here to arbitrary submissions.
 
 The scoring service produces, for each repository, the inactivity-risk score
 (0--100), the discrete action level (\texttt{monitor}, \texttt{review}, or
-\texttt{replace\_candidate}), a confidence value derived from signal completeness
-and prediction decisiveness, and the prediction regime. Of the 30 scored
+\texttt{replace\_candidate}), an evidence-support value combining signal
+completeness, in-distribution fit, and calibration support
+(Appendix~\ref{sec:impl-scoring-service}), and the prediction regime. Of the 30 scored
 repositories, the risk buckets are two critical, three high, eight medium, and 17
 low; by action level, two repositories are raised to
 \texttt{replace\_candidate}, four to \texttt{review}, and the remaining 24 to
@@ -78,14 +79,14 @@ Section~\ref{sec:impl-models} rather than the flat per-bin lookup it replaced.
   \caption{Flagged dependency repositories of \texttt{ArchipelagoMW/Archipelago}
   (the two \texttt{replace\_candidate} items and the four \texttt{review} items),
   with the single full-history repository shown for contrast. Risk is the 0--100
-  inactivity-risk score; ``Conf.'' is the per-prediction confidence; ``Regime'' is
+  inactivity-risk score; ``Supp.'' is the per-prediction evidence support; ``Regime'' is
   full-history (FH) or cold-start (CS). The complete 30-repository ranking is in
   Appendix~\ref{appendix:demo-full}.}
   \label{tab:demo-ranking}
   \setlength{\tabcolsep}{4pt}
   \begin{tabular}{llrlrl}
     \toprule
-    Package & Source repository & Risk & Action & Conf. & Regime \\
+    Package & Source repository & Risk & Action & Supp. & Regime \\
     \midrule
     bsdiff4      & \texttt{ilanschnell/bsdiff4}       & 92.1 & \texttt{replace\_candidate} & 0.69 & CS \\
     setproctitle & \texttt{dvarrazzo/py-setproctitle} & 80.4 & \texttt{replace\_candidate} & 0.61 & CS \\
@@ -102,19 +103,13 @@ Section~\ref{sec:impl-models} rather than the flat per-bin lookup it replaced.
 
 \paragraph{The highest-ranked repository.} The item the ranking elevates most
 strongly is \texttt{bsdiff4} (\texttt{ilanschnell\sslash bsdiff4}), a small binary-diff
-library, with a risk score of \(92.1\). Its explanation factors, taken directly
-from the scored output, are consistent with the intended semantics of the model:
-the two cold-start ensemble members predict a \(97.0\%\) and \(87.2\%\) inactivity
-risk respectively, the model-agreement factor reports the spread between them, and
-the input-completeness factor records that \(75\%\) of expected signals were
-available before imputation. The score reflects a genuinely quiet maintenance
-profile --- a low-popularity, single-maintainer repository with no detected release
-cadence --- which is exactly the kind of dependency a supply-chain reviewer would
-want surfaced. The confidence of \(0.69\) is moderate rather than high, and caveats
-record both that the score was produced by the cold-start model, because no
-full-history cache row was available, and that two release-related signals had to
-be imputed. The flag is therefore presented as a prompt for manual review rather
-than as a definitive judgement.
+library, with a risk score of \(92.1\). The score reflects a genuinely quiet
+maintenance profile --- a low-popularity, single-maintainer repository with no
+detected release cadence --- which is exactly the kind of dependency a supply-chain
+reviewer would want surfaced, and its moderate evidence support of \(0.69\) and cold-start
+caveats present the flag as a prompt for manual review rather than a definitive
+judgement (the underlying explanation factors are given in
+Appendix~\ref{appendix:demo-full}).
 
 \paragraph{Two instructive false positives.} The ranking also raises
 \texttt{jinja2} (\(77.1\)) and \texttt{markupsafe} (\(74.2\)) to \texttt{review}.
@@ -136,23 +131,23 @@ score as a prioritization signal rather than a verdict, and for the human review
 step that the action levels are designed to trigger.
 
 \paragraph{A low-risk repository for contrast.} At the opposite end,
-\texttt{flask} (\texttt{pallets/flask}) receives a risk score of \(9.5\) with a
-confidence of \(0.91\). It is the one repository scored in the full-history regime,
+\texttt{flask} (\texttt{pallets/flask}) receives a risk score of \(9.5\) with an
+evidence support of \(0.91\). It is the one repository scored in the full-history regime,
 with complete signal coverage and no imputation, and its two ensemble members agree
 closely (\(5.4\%\) and \(13.5\%\) inactivity risk). That \texttt{flask} is ranked
 low while its sibling projects \texttt{jinja2} and \texttt{markupsafe} are flagged
 is instructive in itself: the three are maintained by the same organization under
 the same release practices, and the difference in their scores tracks the
 availability of reconstructed history rather than any difference in maintenance.
-This contrast between a moderate-confidence cold-start flag and a
-high-confidence full-history clearance illustrates why the confidence value, not
+This contrast between a moderate-support cold-start flag and a
+high-support full-history clearance illustrates why the evidence-support value, not
 only the risk score, is part of the triage output --- and it quantifies the
 cold-start coverage gap more sharply than the held-out metrics do.
 
 Interpretation guidance follows the rest of the thesis. The score is a
 prioritization signal, not a trust or security verdict: a low score does not
 certify a repository as secure, and an elevated score indicates thin public
-maintenance signals rather than a known defect. Low confidence or a large number of
+maintenance signals rather than a known defect. Low evidence support or a large number of
 imputed signals should reduce the decisiveness of any action, and cold-start scores
 in particular are conditional on the reduced feature set and on the sampled
 prevalence to which the model is calibrated

@@ -1,6 +1,6 @@
 % Thesis metadata — fill these in. Consumed by frontmatter/titlepage.tex.
 % German Provadis deckblatt with an English thesis title.
-\newcommand{\thesisTitle}{OSS Risk Radar: Risk Assessment for Open Source Dependencies}
+\newcommand{\thesisTitle}{Predicting Open-Source Dependency Inactivity Risk for Secure Software Supply Chains}
 
 % Persönliche Daten
 \newcommand{\thesisAuthor}{Eric Krause}
@@ -18,3 +18,11 @@
 \newcommand{\thesisSupervisor}{Prof. Dr. Lamya Abdullah}
 \newcommand{\thesisSecondSupervisor}{Dr. Peter Manshausen}
 \newcommand{\thesisSubmissionDate}{29.07.2026}
+
+% PDF document metadata (hyperref is loaded in settings.tex, before this file).
+\hypersetup{
+  pdftitle={\thesisTitle},
+  pdfauthor={\thesisAuthor},
+  pdfsubject={Bachelor Thesis},
+  pdfkeywords={open source, dependency inactivity, maintenance risk, machine learning, software supply chain}
+}

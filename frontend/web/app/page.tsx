@@ -49,8 +49,8 @@ const features = [
   {
     icon: Search,
     color: "text-warning bg-warning/10",
-    title: "Regime & Confidence",
-    body: "Every score shows whether it used full-history or cold-start signals plus a confidence value, so low-signal cases stay visible.",
+    title: "Regime & evidence support",
+    body: "Every score shows whether it used full-history or cold-start signals plus an evidence-support value, so low-signal cases stay visible.",
   },
   {
     icon: BarChart3,

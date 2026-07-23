@@ -9,7 +9,7 @@ const reliability = [
   },
   {
     title: "Obscure / low-signal repositories",
-    body: "Weaker: with little public activity there is less evidence, so treat these scores more cautiously — the per-repository confidence will usually reflect this.",
+    body: "Weaker: with little public activity there is less evidence, so treat these scores more cautiously — the per-repository evidence support will usually reflect this.",
   },
   {
     title: "Cold-start (no reconstructed history)",
@@ -68,8 +68,8 @@ export default function PerformancePage() {
       <Card className="space-y-3">
         <h2 className="text-lg font-semibold tracking-tight text-foreground">What this means when you score a repo</h2>
         <ul className="max-w-3xl space-y-2 text-sm leading-6 text-muted">
-          <li>Read the probability together with the <Link href="/docs/confidence" className="font-medium text-accent">confidence and margin</Link> — a confident, decisive score is far more actionable than a borderline one with low coverage.</li>
-          <li>Low confidence usually means missing or unusual signals, not that the repo is fine — gather more evidence before acting.</li>
+          <li>Read the probability together with the <Link href="/docs/confidence" className="font-medium text-accent">evidence support and margin</Link> — a well-supported, decisive score is far more actionable than a borderline one with low coverage.</li>
+          <li>Low evidence support usually means missing or unusual signals, not that the repo is fine — gather more evidence before acting.</li>
           <li>Use it to prioritize review, not to auto-reject dependencies. It is conservative triage support.</li>
         </ul>
       </Card>

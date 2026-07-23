@@ -8,7 +8,7 @@ const flow = [
   { label: "Dataset", body: "Leakage-controlled labeled snapshots", href: "/docs/dataset" },
   { label: "Training", body: "Fit, calibrate, evaluate, promote", href: "/docs/training" },
   { label: "Scoring", body: "Enrich → features → model → calibrate", href: "/docs/scoring" },
-  { label: "Interpret", body: "Probability + confidence + evidence", href: "/docs/performance" },
+  { label: "Interpret", body: "Probability + evidence support + explanations", href: "/docs/performance" },
 ];
 
 const entries = [
@@ -45,7 +45,7 @@ const entries = [
   {
     href: "/docs/scoring",
     title: "How scoring a repo works",
-    body: "Step by step, what happens between hitting analyze and seeing a probability, confidence, and evidence.",
+    body: "Step by step, what happens between hitting analyze and seeing a probability, evidence support, and explanations.",
   },
   {
     href: "/docs/performance",

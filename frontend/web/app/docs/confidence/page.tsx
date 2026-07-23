@@ -10,7 +10,7 @@ const confidenceFactors = [
     body: "Share of observed signals that sit within the normal range the model was trained on, rather than an extreme it never saw.",
   },
   {
-    title: "Evidence support",
+    title: "Calibration support",
     body: "How many past examples backed the band this prediction falls in — more support means a steadier estimate.",
   },
 ];
@@ -25,8 +25,9 @@ export default function ConfidencePage() {
         </h1>
         <p className="mt-1 max-w-3xl text-sm leading-7 text-muted">
           Overall model performance is the same for every repository. To say how much to trust an <em>individual</em>{" "}
-          score, each prediction also carries a confidence built from three repository-specific factors — one weak
-          factor pulls the whole thing down.
+          score, each prediction also carries an <span className="font-semibold text-foreground">evidence-support</span>{" "}
+          value built from three repository-specific factors — one weak factor pulls the whole thing down. It measures
+          how much observable signal backs the score, not statistical confidence.
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
@@ -39,8 +40,8 @@ export default function ConfidencePage() {
       </div>
       <p className="max-w-3xl text-sm leading-7 text-muted">
         A separate <span className="font-semibold text-foreground">margin</span> shows how decisive a call is — how far
-        the score sits from the boundary between buckets — kept apart from confidence because a confident score can
-        still land close to the line.
+        the score sits from the boundary between buckets — kept apart from evidence support because a well-supported
+        score can still land close to the line.
       </p>
     </Card>
   );

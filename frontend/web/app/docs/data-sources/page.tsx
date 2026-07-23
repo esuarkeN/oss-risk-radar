@@ -82,7 +82,7 @@ export default function DataSourcesPage() {
           <li>Every signal carries its source and observation time, so a score can be traced back to the evidence.</li>
           <li>
             A signal that can&apos;t be resolved is filled with the training-cohort average and flagged as missing — it
-            adds no evidence and lowers confidence rather than silently guessing.
+            adds no evidence and lowers evidence support rather than silently guessing.
           </li>
           <li>Bot accounts are excluded from commit and contributor counts so automation doesn&apos;t look like maintenance.</li>
         </ul>

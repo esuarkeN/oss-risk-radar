@@ -10,8 +10,8 @@ export const productGlossary: InfoChipItem[] = [
     description: "Every analysis keeps the source of its signals visible so reviewers can trace what came from GitHub, Scorecard, uploads, or demo data."
   },
   {
-    label: "Confidence",
-    description: "Confidence measures signal coverage, not certainty about the real world. Missing or stale data lowers it."
+    label: "Evidence support",
+    description: "Evidence support measures how much observable signal backs this score (coverage, in-distribution fit, calibration support) — not statistical confidence or certainty about the real world. Missing or stale data lowers it."
   },
   {
     label: "Training base",
