@@ -70,7 +70,7 @@ class RiskProfileResponse(BaseModel):
     inactivity_risk_score: float = Field(ge=0, le=100)
     maintenance_outlook_12m_score: float = Field(ge=0, le=100)
     security_posture_score: float = Field(ge=0, le=100)
-    confidence_score: float = Field(ge=0, le=1)
+    evidence_support: float = Field(ge=0, le=1)
     risk_bucket: Literal["low", "medium", "high", "critical"]
     action_level: Literal["monitor", "review", "replace_candidate"]
     caveats: list[str]

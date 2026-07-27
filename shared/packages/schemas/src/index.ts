@@ -67,7 +67,7 @@ export interface RiskProfile {
   inactivityRiskScore: number;
   maintenanceOutlook12mScore: number;
   securityPostureScore: number;
-  confidenceScore: number;
+  evidenceSupport: number;
   riskBucket: RiskBucket;
   actionLevel: ActionLevel;
   scoringMethod?: "model" | "model_ensemble" | string;
@@ -92,7 +92,7 @@ export interface ModelRiskProfile {
   inactivityRiskScore: number;
   maintenanceOutlook12mScore: number;
   securityPostureScore: number;
-  confidenceScore: number;
+  evidenceSupport: number;
   riskBucket: RiskBucket;
   actionLevel: ActionLevel;
 }

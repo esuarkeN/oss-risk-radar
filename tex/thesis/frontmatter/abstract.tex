@@ -9,23 +9,26 @@ becomes inactive within a twelve-month horizon, and how the resulting risk score
 can support risk-based dependency triage. Following a Design Science Research
 approach, the work develops and evaluates OSS Risk Radar, an artifact that
 constructs a leakage-controlled historical dataset from GH Archive event data
-and public package metadata, engineers observation-time activity, responsiveness,
-and contributor-concentration features, and trains calibrated inactivity-risk
-models.
+and public package metadata, engineers observation-time features describing
+activity, responsiveness, and how narrowly a project's work rests on individual
+contributors, and trains calibrated inactivity-risk models.
 
 On a repository foundation dataset of 5{,}000 projects and 50{,}000 quarterly
 observation snapshots, a gradient-boosted model reaches a held-out ROC-AUC of
-\(0.958\) with a Brier score of \(0.078\), and its skill largely persists under a
-repository-disjoint split (\(0.950\)). This aggregate figure is, however, a poor
+\(0.958\) --- the probability that an inactive repository is ranked above an
+active one --- with a Brier score of \(0.078\), and its skill largely persists
+under a repository-disjoint split (\(0.950\)). This aggregate figure is, however, a poor
 measure of what the model contributes: a trivial rule that ranks repositories by
 days since their last commit reaches \(0.957\) on the same rows, against
 \(0.974\) for the model. The learned model earns its complexity on the
 repositories that are still active at the observation time --- the subgroup for
 which an early warning is most decision-relevant --- where it attains \(0.905\)
 against \(0.844\) for the best trivial rule. The thesis therefore reports both a
-null result on the aggregate comparison and a positive result on early decline. A
-human-actor filter is validated by ablation, and security-practice signals are
-kept as parallel triage context rather than as predictors of inactivity. A
+null result on the aggregate comparison and a positive result on early decline.
+Excluding bot accounts from the commit and contributor signals is shown to be
+worth its cost by retraining the model on the unfiltered signals and comparing
+both against the same clean labels, and security-practice signals are kept as
+parallel triage context rather than as predictors of inactivity. A
 practical demonstrator applies the deployed model per repository to the
 dependency repositories of a real project, producing a ranked triage view in
 which each repository's calibrated score is accompanied by an operational

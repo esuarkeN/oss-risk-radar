@@ -27,7 +27,7 @@ func (fakeRouterScorer) ScoreModel(_ context.Context, _ string, dependencies []a
 			InactivityRiskScore:        65,
 			MaintenanceOutlook12MScore: 35,
 			SecurityPostureScore:       52,
-			ConfidenceScore:            0.73,
+			EvidenceSupport:            0.73,
 			RiskBucket:                 "high",
 			ActionLevel:                "review",
 		}

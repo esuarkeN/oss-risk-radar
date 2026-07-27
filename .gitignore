@@ -42,9 +42,13 @@ postgres-data/
 # Local scratch space
 tmp/
 
-# LaTeX build output
+# LaTeX build output. build/thesis.pdf (scripts/build.ps1) is tracked and contains no
+# signature. The submission build (scripts/build.ps1 -Submission) binds in the signed
+# Steckbrief and is never tracked, because this repository is public.
 tex/thesis/build/*
 !tex/thesis/build/thesis.pdf
+tex/thesis/build/thesis-submission.pdf
+tex/thesis/thesis.pdf
 tex/thesis/**/*.aux
 tex/thesis/**/*.bbl
 tex/thesis/**/*.bcf
@@ -62,3 +66,8 @@ tex/thesis/**/*.out
 tex/thesis/**/*.run.xml
 tex/thesis/**/*.synctex.gz
 tex/thesis/**/*.toc
+
+# Signed Telekom Steckbrief bound into the thesis front matter. Carries a personal
+# signature; this repository is public, so the file stays local. main.tex guards the
+# \includepdf so the thesis still builds without it.
+tex/thesis/frontmatter/steckbrief.pdf

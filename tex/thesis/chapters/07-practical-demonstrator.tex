@@ -10,12 +10,12 @@ value here is as an error analysis. An out-of-distribution application exposes
 failure modes that a held-out slice cannot, because the held-out slice inherits
 the seed's composition and therefore its blind spots.
 
-The input is the dependency set of a real project, scored through the deployed
-artifact. Because the staging gate guarantees that the deployed model is the
-evaluated model (Section~\ref{sec:impl-deployment}), the outputs below are
-evidence about the same \texttt{xgboost\sdash full\sdash history} artifact (feature set
-\texttt{feature\sdash set\sdash v4\sdash full\sdash history}) whose metrics Chapter~\ref{chap:evaluation}
-reports, and not about a separately configured system. All figures are real
+The input is the dependency set of a real project. The outputs below come from the
+same \texttt{xgboost\sdash full\sdash history} model (feature set
+\texttt{feature\sdash set\sdash v4\sdash full\sdash history}) whose metrics
+Chapter~\ref{chap:evaluation} reports, not from a separately configured system;
+the staging gate of Section~\ref{sec:impl-deployment} is what makes that
+identity checkable rather than merely asserted. All figures are real
 outputs and reflect the public repository state on \texttt{2026-07-09}, the date
 of the analysis run.
 
@@ -32,10 +32,16 @@ For this demonstration the input is the set of dependency repositories of
 multi-world game randomizer. Its declared Python dependencies correspond to 30
 source repositories, ranging from widely used infrastructure libraries (for
 example \texttt{flask}, \texttt{jinja2}, \texttt{werkzeug}) to smaller, more
-specialized packages. This project was chosen because that mixture is expected to
+specialized packages. To be precise about what is and is not being done here: the
+resolution of that dependency list is not part of the artifact, and no dependency
+graph is computed. The list is taken as given from the project's own declared
+dependencies, and each of the 30 repositories is then scored \emph{individually},
+exactly as any single submitted repository would be. What the demonstrator adds is
+the ordering of those thirty independent scores into one ranked view; nothing in
+it models relationships between the dependencies. This project was chosen because that mixture is expected to
 produce a non-trivial triage view rather than a uniformly low-risk one.
 
-Each repository is scored through the deployed analysis workflow, which enriches
+Each repository is scored through the same analysis workflow, which enriches
 live repository metadata and applies the staged model ensemble. The two prediction
 regimes of Section~\ref{sec:method-prediction-regimes} appear directly in this
 run: one repository (\texttt{flask}) is present in the staged repository feature
@@ -61,7 +67,10 @@ The scoring service produces, for each repository, the inactivity-risk score
 (0--100), the discrete action level (\texttt{monitor}, \texttt{review}, or
 \texttt{replace\_candidate}), an evidence-support value combining signal
 completeness, in-distribution fit, and calibration support
-(Appendix~\ref{sec:impl-scoring-service}), and the prediction regime. Of the 30 scored
+(Appendix~\ref{sec:impl-scoring-service}), the prediction regime, and --- as a
+separate field that no part of the inactivity model reads --- the security-posture
+score derived from the repository's OpenSSF Scorecard record
+(Section~\ref{sec:method-research-design}). Of the 30 scored
 repositories, the risk buckets are two critical, three high, eight medium, and 17
 low; by action level, two repositories are raised to
 \texttt{replace\_candidate}, four to \texttt{review}, and the remaining 24 to
@@ -139,20 +148,25 @@ low while its sibling projects \texttt{jinja2} and \texttt{markupsafe} are flagg
 is instructive in itself: the three are maintained by the same organization under
 the same release practices, and the difference in their scores tracks the
 availability of reconstructed history rather than any difference in maintenance.
-This contrast between a moderate-support cold-start flag and a
-high-support full-history clearance illustrates why the evidence-support value, not
-only the risk score, is part of the triage output --- and it quantifies the
-cold-start coverage gap more sharply than the held-out metrics do.
+Three sibling projects, one scored with history and two without, and the two
+without are the ones flagged. That is why the evidence-support value is part of
+the triage output rather than the risk score alone: it is what tells the analyst
+that the difference between \(9.5\) and \(77.1\) here reflects how much was known
+about each repository, not how differently they are maintained.
 
-Interpretation guidance follows the rest of the thesis. The score is a
+Interpretation guidance follows from the rest of the thesis. The score is a
 prioritization signal, not a trust or security verdict: a low score does not
 certify a repository as secure, and an elevated score indicates thin public
-maintenance signals rather than a known defect. Low evidence support or a large number of
-imputed signals should reduce the decisiveness of any action, and cold-start scores
-in particular are conditional on the reduced feature set and on the sampled
-prevalence to which the model is calibrated
-(Section~\ref{sec:method-limitations}), so they warrant recalibration before being
-read as absolute deployment probabilities. Used this way, the ranked view converts
+maintenance signals rather than a known defect. Two conditions should make a
+reader trust a given score less. The first is low evidence support, or many
+imputed signals, both of which mean the score rests on incomplete input. The
+second applies to cold-start scores specifically: they are produced from the
+reduced feature set, and their probabilities are calibrated against this
+dataset's inflated inactive rate of \(0.661\) rather than against the far lower
+rate of a real dependency population (Section~\ref{sec:method-limitations}). A
+cold-start score is therefore dependable as a \emph{ranking} but overstates the
+absolute probability of inactivity, and would need recalibration against the
+target population before being read as one. Used this way, the ranked view converts
 a flat list of 30 repositories into six candidates for review, of which at least
 two --- on the evidence above --- a human reviewer would quickly clear. That is a
 useful reduction of analyst effort, and an honest statement of the artifact's

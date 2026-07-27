@@ -401,7 +401,7 @@ components:
         - inactivity_risk_score
         - maintenance_outlook_12m_score
         - security_posture_score
-        - confidence_score
+        - evidence_support
         - risk_bucket
         - action_level
         - caveats
@@ -421,7 +421,7 @@ components:
           type: number
           minimum: 0
           maximum: 100
-        confidence_score:
+        evidence_support:
           type: number
           minimum: 0
           maximum: 1

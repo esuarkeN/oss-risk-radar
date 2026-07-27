@@ -170,7 +170,7 @@ type ModelRiskProfile struct {
 	InactivityRiskScore        float64     `json:"inactivityRiskScore"`
 	MaintenanceOutlook12MScore float64     `json:"maintenanceOutlook12mScore"`
 	SecurityPostureScore       float64     `json:"securityPostureScore"`
-	ConfidenceScore            float64     `json:"confidenceScore"`
+	EvidenceSupport            float64     `json:"evidenceSupport"`
 	RiskBucket                 RiskBucket  `json:"riskBucket"`
 	ActionLevel                ActionLevel `json:"actionLevel"`
 }
@@ -179,7 +179,7 @@ type RiskProfile struct {
 	InactivityRiskScore        float64             `json:"inactivityRiskScore"`
 	MaintenanceOutlook12MScore float64             `json:"maintenanceOutlook12mScore"`
 	SecurityPostureScore       float64             `json:"securityPostureScore"`
-	ConfidenceScore            float64             `json:"confidenceScore"`
+	EvidenceSupport            float64             `json:"evidenceSupport"`
 	RiskBucket                 RiskBucket          `json:"riskBucket"`
 	ActionLevel                ActionLevel         `json:"actionLevel"`
 	ScoringMethod              string              `json:"scoringMethod,omitempty"`

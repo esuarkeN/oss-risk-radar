@@ -259,7 +259,7 @@ export function AnalysisDashboard({ analysisId }: AnalysisDashboardProps) {
         </div>
       </section>
 
-      {/* PRIMARY — the answer: inactivity probability, confidence, and why */}
+      {/* PRIMARY — the answer: inactivity probability, evidence support, and why */}
       {selectedDependency?.repository ? (
         <RepositoryMlAnalysisPanel dependency={selectedDependency} />
       ) : selectedDependency ? (

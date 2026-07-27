@@ -109,7 +109,7 @@ def score_dependency_with_model(
     inactivity_risk_score = round(_clamp(inactivity_probability * 100), 2)
     prediction_margin = abs(inactivity_probability - 0.5) * 2
     signal_completeness = compute_signal_completeness(missing_signals, artifact.feature_names)
-    confidence_score = round(max(0.0, min(1.0, signal_completeness * (0.5 + (0.5 * prediction_margin)))), 2)
+    evidence_support = round(max(0.0, min(1.0, signal_completeness * (0.5 + (0.5 * prediction_margin)))), 2)
     security_posture_score, caveats = _scorecard_posture(payload)
 
     if not artifact.calibration_bins:
@@ -147,7 +147,7 @@ def score_dependency_with_model(
             inactivity_risk_score=inactivity_risk_score,
             maintenance_outlook_12m_score=_maintenance_outlook_12m_score(inactivity_risk_score),
             security_posture_score=security_posture_score,
-            confidence_score=confidence_score,
+            evidence_support=evidence_support,
             risk_bucket=_risk_bucket(inactivity_risk_score),
             action_level=_action_level(inactivity_risk_score),
             caveats=sorted(set(caveats)),

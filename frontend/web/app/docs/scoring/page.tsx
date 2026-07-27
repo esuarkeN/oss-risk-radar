@@ -73,7 +73,7 @@ export default function ScoringRunbookPage() {
             Training results explained
           </Link>{" "}
           and{" "}
-          <Link href="/docs/confidence" className="font-medium text-accent">
+          <Link href="/docs/evidence-support" className="font-medium text-accent">
             Trust &amp; evidence support
           </Link>
           .

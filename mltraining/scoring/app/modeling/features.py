@@ -108,7 +108,7 @@ def _ecosystem_flags(ecosystem: str) -> dict[str, float]:
 
 
 def _expected_signals_for(feature_names: list[str]) -> list[str]:
-    """Input signals whose absence should lower confidence for the given feature set.
+    """Input signals whose absence should lower evidence support for the given feature set.
 
     Current-snapshot signals (``EXPECTED_SIGNALS``) always apply. Historical timeline signals
     only count when the selected feature set actually consumes them, so a cold-start model — or

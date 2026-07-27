@@ -12,11 +12,42 @@
 
 \begin{document}
 
-\pagenumbering{Roman}
+% Provadis "Anforderungen" §3.2.3: front matter in small roman numerals, the body
+% in arabic, the back matter in capital roman. §3.2.2 fixes the order of the
+% Verzeichnisse: contents, figures, glossary, tables, abbreviations.
+\pagenumbering{roman}
 \input{frontmatter/titlepage}
+
+% Signed Telekom Steckbrief ("Profile for compiling a research paper"), required for
+% every protection class including OPEN and, per the JG19 BT-Info Q&A, to be bound
+% into the thesis itself. It sits where the Sperrvermerk would, directly after the
+% Deckblatt.
+%
+% It is included ONLY in the submission build, because the file carries a personal
+% signature and this repository is public:
+%
+%   scripts/build.ps1               -> build/thesis.pdf             (no Steckbrief, tracked)
+%   scripts/build.ps1 -Submission   -> build/thesis-submission.pdf  (with it, local only)
+%
+% Both the source PDF and the submission output are gitignored.
+\ifdefined\WITHSTECKBRIEF
+  \IfFileExists{frontmatter/steckbrief.pdf}{%
+    \includepdf[
+      pages=-,
+      scale=0.92,
+      pagecommand={\thispagestyle{plain}%
+        \addcontentsline{toc}{chapter}{Security Profile (Steckbrief)}}
+    ]{frontmatter/steckbrief.pdf}%
+  }{%
+    \PackageWarningNoLine{thesis}{Submission build requested but
+      frontmatter/steckbrief.pdf is missing - the Steckbrief page is NOT included}%
+  }
+\fi
+
 \input{frontmatter/abstract}
 \tableofcontents
 \listoffigures
+\input{glossary}
 \listoftables
 \input{abbreviations}
 
@@ -32,6 +63,10 @@
 \input{chapters/07-practical-demonstrator}
 \input{chapters/08-threats-to-validity}
 \input{chapters/09-conclusion}
+
+% Everything after the body text is numbered in capital roman (§3.2.3).
+\cleardoublepage
+\pagenumbering{Roman}
 
 \printbibliography
 \appendix

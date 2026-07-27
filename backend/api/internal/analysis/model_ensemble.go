@@ -131,7 +131,7 @@ func ensembleRiskProfile(
 	inactivityRiskScore := averageRiskValue(modelProfiles, func(profile RiskProfile) float64 { return profile.InactivityRiskScore })
 	maintenanceOutlookScore := averageRiskValue(modelProfiles, func(profile RiskProfile) float64 { return profile.MaintenanceOutlook12MScore })
 	securityPostureScore := averageRiskValue(modelProfiles, func(profile RiskProfile) float64 { return profile.SecurityPostureScore })
-	confidenceScore := averageRiskValue(modelProfiles, func(profile RiskProfile) float64 { return profile.ConfidenceScore })
+	evidenceSupport := averageRiskValue(modelProfiles, func(profile RiskProfile) float64 { return profile.EvidenceSupport })
 
 	caveats := []string{fmt.Sprintf("Multi-model score averages %s.", strings.Join(modelNames, ", "))}
 	for _, profile := range modelProfiles {
@@ -166,7 +166,7 @@ func ensembleRiskProfile(
 		InactivityRiskScore:        roundRiskValue(inactivityRiskScore),
 		MaintenanceOutlook12MScore: roundRiskValue(maintenanceOutlookScore),
 		SecurityPostureScore:       roundRiskValue(securityPostureScore),
-		ConfidenceScore:            roundRiskValue(confidenceScore),
+		EvidenceSupport:            roundRiskValue(evidenceSupport),
 		RiskBucket:                 riskBucketForScore(inactivityRiskScore),
 		ActionLevel:                actionLevelForScore(inactivityRiskScore),
 		ScoringMethod:              "model_ensemble",
@@ -211,7 +211,7 @@ func modelRiskProfileFrom(run TrainingRunArtifact, profile RiskProfile) ModelRis
 		InactivityRiskScore:        profile.InactivityRiskScore,
 		MaintenanceOutlook12MScore: profile.MaintenanceOutlook12MScore,
 		SecurityPostureScore:       profile.SecurityPostureScore,
-		ConfidenceScore:            profile.ConfidenceScore,
+		EvidenceSupport:            profile.EvidenceSupport,
 		RiskBucket:                 profile.RiskBucket,
 		ActionLevel:                profile.ActionLevel,
 	}

@@ -123,7 +123,7 @@ type scoreResult struct {
 		InactivityRiskScore        float64  `json:"inactivity_risk_score"`
 		MaintenanceOutlook12MScore float64  `json:"maintenance_outlook_12m_score"`
 		SecurityPostureScore       float64  `json:"security_posture_score"`
-		ConfidenceScore            float64  `json:"confidence_score"`
+		EvidenceSupport            float64  `json:"evidence_support"`
 		RiskBucket                 string   `json:"risk_bucket"`
 		ActionLevel                string   `json:"action_level"`
 		Caveats                    []string `json:"caveats"`
@@ -256,7 +256,7 @@ func (c *Client) score(ctx context.Context, path string, payload scoreRequest) (
 			InactivityRiskScore:        result.RiskProfile.InactivityRiskScore,
 			MaintenanceOutlook12MScore: result.RiskProfile.MaintenanceOutlook12MScore,
 			SecurityPostureScore:       result.RiskProfile.SecurityPostureScore,
-			ConfidenceScore:            result.RiskProfile.ConfidenceScore,
+			EvidenceSupport:            result.RiskProfile.EvidenceSupport,
 			RiskBucket:                 analysis.RiskBucket(result.RiskProfile.RiskBucket),
 			ActionLevel:                analysis.ActionLevel(result.RiskProfile.ActionLevel),
 			Caveats:                    result.RiskProfile.Caveats,

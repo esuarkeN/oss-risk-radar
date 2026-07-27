@@ -191,15 +191,15 @@ The remaining 17 model inputs are \emph{current-snapshot} features (Table~\ref{t
 \section{Foundation Seed Composition}
 \label{sec:appendix-seed-composition}
 
-The foundation seed is generated from the GitHub search API over public, non-fork repositories with a license object and at least 100 stars, drawn across active, dormant, and archived strata. The strata are sampling provenance only and never enter the supervised label (Section~\ref{sec:method-data-sources}). Table~\ref{tab:appendix-seed-strata} contrasts the target frame with the seed as actually built. Two strata could not be filled from the search frame, and a fallback stratum supplied the shortfall with active repositories, which is why the realized seed is majority-active despite a frame designed to oversample inactivity.
+The foundation seed is generated from the GitHub search API over public, non-fork repositories with a license object and at least 100 stars, drawn separately from three sampling buckets: active, dormant, and archived repositories. The buckets are sampling provenance only and never enter the supervised label (Section~\ref{sec:method-data-sources}). Table~\ref{tab:appendix-seed-strata} contrasts the target frame with the seed as actually built. Two buckets returned fewer repositories than requested --- the GitHub search frame simply did not contain enough matching dormant and low-star active projects --- and a fallback bucket made up the missing count with active repositories instead. That is why the realized seed is majority-active despite a frame designed to oversample inactivity.
 
 \begin{table}[htbp]
 \centering
-\caption{Foundation seed strata: target frame versus realized seed (5{,}000 repositories).}
+\caption{Foundation seed buckets: target frame versus realized seed (5{,}000 repositories).}
 \label{tab:appendix-seed-strata}
 \begin{tabular}{lrrrr}
 \toprule
-Stratum & Target & Realized & Target share & Realized share \\
+Sampling bucket & Target & Realized & Target share & Realized share \\
 \midrule
 Active   & 2{,}250 & 2{,}601 & 45.0\% & 52.0\% \\
 Dormant  & 1{,}750 & 1{,}399 & 35.0\% & 28.0\% \\
@@ -210,7 +210,7 @@ Total    & 5{,}000 & 5{,}000 & 100\% & 100\% \\
 \end{tabular}
 \end{table}
 
-The realized active count includes a 506-repository fallback stratum that was used to reach the target size after the \texttt{active\sdash foundation} stratum returned 845 of 1{,}000 requested repositories and the \texttt{dormant\sdash foundation} stratum returned 649 of 1{,}000.
+The realized active count includes a 506-repository fallback bucket that was used to reach the target size after the \texttt{active\sdash foundation} bucket returned 845 of 1{,}000 requested repositories and the \texttt{dormant\sdash foundation} bucket returned 649 of 1{,}000.
 
 \section{Undefined Feature Handling}
 \label{sec:appendix-undefined-features}
@@ -223,7 +223,20 @@ This section gives the exact rules summarized in Section~\ref{sec:method-undefin
 
 \paragraph{Why it matters.} Before this correction, an undefined latency was stored as \(0.0\). Since \(0\) days is the best possible response time, roughly half of the dataset encoded ``this project has no issues or pull requests at all'' as ``this project responds instantaneously''. The variable was consequently a strong predictor of inactivity with an inverted meaning, and the feature attributions of Section~\ref{sec:results-attribution} reflected data availability rather than maintenance behaviour. The same defect made \texttt{days\_since\_last\_commit} non-monotonic, which in turn depressed the trivial recency baseline against which the learned models are compared (Section~\ref{sec:results-baselines}).
 
-\paragraph{Offline-build consequences.} Because the reported dataset is built through the reproducible offline path (Section~\ref{sec:method-offline-metadata}), the repository creation date, archival timestamp, and fork flag are never populated, and three consequences follow. First, \texttt{repo\_age\_days} is identically zero and is therefore excluded from the model vector and from any age analysis. Second, \texttt{repo\_archived\_at\_obs} is identically zero, so the archival condition of the maintenance label never fires (Section~\ref{sec:method-definitions}) and the rule excluding already-archived rows from fitting removes none. Third, build-time fork exclusion is inert, though the seed is generated with a non-fork filter so forks are already absent. Populating these attributes would require live enrichment of every seed repository and is noted as future work in Chapter~\ref{chap:conclusion}.
+\paragraph{Offline-build consequences.} Because the reported dataset is built through the reproducible offline path (Section~\ref{sec:method-offline-metadata}), the repository creation date, archival timestamp, and fork flag are never populated, and three consequences follow. First, \texttt{repo\_age\_days} is identically zero and is therefore excluded from the model vector and from any age analysis. Second, \texttt{repo\_archived\_at\_obs} is identically zero, so the archival condition of the maintenance rule never fires (Section~\ref{sec:method-definitions}) and the rule excluding already-archived rows from fitting removes none. Third, build-time fork exclusion is inert, though the seed is generated with a non-fork filter so forks are already absent. Populating these attributes would require live enrichment of every seed repository and is noted as future work in Chapter~\ref{chap:conclusion}.
+
+\paragraph{Zero-variance inputs in the reported dataset.} A related consequence deserves to be stated explicitly, because it qualifies the feature counts used throughout this thesis. The foundation seed is repository-first: it is drawn from GitHub search rather than from a package registry, and the offline build performs no deps.dev lookup. The package-derived inputs of the feature vector therefore have nothing to vary over, and take the same value in all \(50{,}000\) rows. Ten of the \(60\) model inputs are constant in this way:
+
+\begin{itemize}
+  \item the five ecosystem indicators, since every row carries the same repository-first provenance (\texttt{ecosystem\_other} is \(1\), the other four \(0\));
+  \item \texttt{is\_direct\_dependency} and \texttt{has\_repository\_mapping}, both identically \(1\), because a seed repository is by construction a resolved, directly named project;
+  \item \texttt{dependency\_count\_at\_obs}, identically \(0\);
+  \item \texttt{versions\_published\_365d} and \texttt{has\_recent\_release\_flag}, identically \(1\).
+\end{itemize}
+
+\texttt{package\_age\_days} is near-degenerate for the same reason, taking only two distinct values. The effective feature vector of the reported run is therefore closer to \(50\) informative inputs than to \(60\), and the cold-start vector correspondingly closer to \(9\) than to \(17\).
+
+This does not affect the reported metrics. A feature with no variance cannot split a tree, so the gradient-boosted models assign it zero gain and ignore it, and a constant column standardizes to zero for the linear and neural models; the constants are inert rather than misleading. Two things do follow. First, the counts ``60'' and ``17'' should be read as the size of the implemented vector, not as the number of signals the reported evaluation actually had available. Second, it explains an otherwise puzzling absence in the feature attribution of Section~\ref{sec:results-attribution}: no package- or ecosystem-derived variable appears among the influential features, not because ecosystem is uninformative in general, but because this dataset contains no variation in it to learn from. Testing whether ecosystem carries signal would require a package-first sampling frame and is left to future work (Chapter~\ref{chap:conclusion}).
 
 \section{Implementation Detail}
 \label{appendix:impl-detail}
@@ -426,7 +439,7 @@ The historical dataset builder creates its dataset through the sequence of inter
 \textbf{Step} & \textbf{Description} \\
 \hline
 1 & Load repository candidates from the foundation seed. \\
-2 & Use the seed strata to obtain a mixture of active, dormant, and archived repository histories. \\
+2 & Use the seed buckets to obtain a mixture of active, dormant, and archived repository histories. \\
 3 & Resolve repository identities from explicit seed fields or package metadata where required. \\
 4 & Enrich stable repository metadata through GitHub. \\
 5 & Parse GH Archive event files into normalized repository histories. \\
@@ -462,7 +475,8 @@ rate of the slice is
 \end{equation}
 reported as the \emph{inactive 12m rate}.
 
-\paragraph{Ranking.} ROC-AUC is computed as the Mann--Whitney statistic over all
+\paragraph{Ranking.} ROC-AUC (equivalently \(\mathrm{AUROC}\), the notation used
+in the equation below) is computed as the Mann--Whitney statistic over all
 positive--negative pairs, that is, the probability that a random inactive
 repository is scored above a random active one, with ties counted as one half:
 \begin{equation}
@@ -579,7 +593,7 @@ deployment/training/runs/
   20260709T205727480957Z-xgboost-full-history-2d29a928dac3.json
 \end{verbatim}
 
-The reported held-out metrics are those recorded in this staged run file, which is the authoritative record of the reported experiment. The corresponding source revision --- containing this dataset, the staged run artifacts, and the training notebook --- is archived at commit \texttt{f5e688e} \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline. The training notebook at this revision reproduces the same pipeline when re-executed against the archived dataset; its stored cell outputs correspond to an earlier exploratory run, so the run file above rather than the notebook outputs should be treated as the reference for the reported figures.
+The reported held-out metrics are those recorded in this staged run file, which is the authoritative record of the reported experiment. The corresponding source revision --- containing this dataset, the staged run artifacts, and the training notebook --- is archived at commit \texttt{f5e688e} \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline. Re-executing the training notebook against this archived dataset reproduces the reported figures (for example, held-out ROC-AUC \(0.958\) and the active-at-\(t\) subset result of Chapter~\ref{chap:evaluation}). One caveat applies to the hash above: it is the value recorded by the staged run at training time, whereas the dataset file committed at \texttt{f5e688e} was re-serialized afterwards and therefore carries a different content hash (\texttt{f71b9f7a\ldots}); the two files are equivalent in content and yield identical metrics, so the recorded hash identifies the run while the committed file reproduces it.
 
 \section{Label-Definition Sensitivity}
 \label{appendix:label-sensitivity}
@@ -721,10 +735,8 @@ This section collects the detailed evaluation tables whose findings are reported
   \end{tabular}
 \end{table}
 
-\subsection{Human-Actor Filter Ablation}
 \label{appendix:bot-ablation}
-
-This subsection expands the ablation summarized in Section~\ref{sec:results-bot-ablation}. The full 5{,}000-repository dataset was rebuilt with the human-actor filter disabled through a single build flag, with every other setting identical, yielding 50{,}000 snapshots that align one-to-one with the filtered build. Three effects are examined.
+This section expands the ablation summarized in Section~\ref{sec:results-bot-ablation}. The full 5{,}000-repository dataset was rebuilt with the human-actor filter disabled through a single build flag, with every other setting identical, yielding 50{,}000 snapshots that align one-to-one with the filtered build. Three effects are examined.
 
 \paragraph{Label corruption.} Disabling the filter flips 357 of 50{,}000 labelled snapshots (\(0.71\%\)) from inactive to active, and \emph{none} in the opposite direction. The effect is strictly one-directional: a bot commit or merge inside the future window can satisfy the two-of-four maintenance rule, so an otherwise dormant repository is relabelled as maintained, whereas bots never make an active repository look inactive. Omitting the filter would therefore bias the target by systematically \emph{masking} inactivity, which is the error direction that matters most for a risk signal.
 

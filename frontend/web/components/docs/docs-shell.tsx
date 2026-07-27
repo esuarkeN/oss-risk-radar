@@ -42,7 +42,7 @@ const sections: { title: string; items: DocsNavItem[] }[] = [
     items: [
       { href: "/docs/scoring", label: "How scoring a repo works" },
       { href: "/docs/performance", label: "Training results explained" },
-      { href: "/docs/confidence", label: "Trust & evidence support" },
+      { href: "/docs/evidence-support", label: "Trust & evidence support" },
     ],
   },
   {

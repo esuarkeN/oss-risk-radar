@@ -207,7 +207,7 @@ export interface RepositoryFeatureStat {
 /**
  * Resolve each model feature for a repository and express it as a z-score against the training
  * distribution. Requires only a standardization profile, so it works for any artifact (logistic
- * or tree) and underpins both the logistic impact decomposition and the per-prediction confidence.
+ * or tree) and underpins both the logistic impact decomposition and the per-prediction evidence support.
  */
 export function repositoryFeatureStats(
   dependency: DependencyRecord,

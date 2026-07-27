@@ -6,10 +6,10 @@ import {
 import type { TrainingRunModelArtifact } from "@/lib/types";
 
 /**
- * Per-prediction confidence for a single repository score.
+ * Per-prediction evidence support for a single repository score.
  *
  * The model artifact does not ship a coefficient covariance matrix, so a closed-form
- * predictive variance is not available. Instead we build a transparent confidence from
+ * predictive variance is not available. Instead we build a transparent evidence-support value from
  * three quantities that ARE computable per repository, and combine them with a geometric
  * mean so a single weak component genuinely drags the result down:
  *
@@ -23,7 +23,7 @@ import type { TrainingRunModelArtifact } from "@/lib/types";
  * These are epistemic ("how much do we trust THIS score") and deliberately distinct from
  * `marginToThreshold`, which is the decision margin ("how close is the call").
  */
-export const CONFIDENCE_CONSTANTS = {
+export const EVIDENCE_SUPPORT_CONSTANTS = {
   /** |z| at or below this counts a feature as in-distribution. */
   IN_DISTRIBUTION_Z: 2,
   /** k in count / (count + k); a bin reaches 0.5 support at k samples. */
@@ -34,10 +34,10 @@ export const CONFIDENCE_CONSTANTS = {
   MARGIN_BORDERLINE: 0.05,
 } as const;
 
-export type ConfidenceComponentKey = "coverage" | "in_distribution" | "calibration_support";
+export type EvidenceSupportComponentKey = "coverage" | "in_distribution" | "calibration_support";
 
-export interface ConfidenceComponent {
-  key: ConfidenceComponentKey;
+export interface EvidenceSupportComponent {
+  key: EvidenceSupportComponentKey;
   label: string;
   /** Normalized 0..1 score, or null when the component is not applicable. */
   value: number | null;
@@ -46,10 +46,10 @@ export interface ConfidenceComponent {
 
 export type MarginLabel = "Decisive" | "Moderate" | "Borderline";
 
-export interface PredictionConfidence {
+export interface PredictionEvidenceSupport {
   /** Geometric mean of the applicable components, 0..1. */
   rollup: number;
-  components: ConfidenceComponent[];
+  components: EvidenceSupportComponent[];
   marginToThreshold: number;
   marginLabel: MarginLabel;
   observedFeatureCount: number;
@@ -59,15 +59,15 @@ export interface PredictionConfidence {
   calibrationBinCount: number | null;
 }
 
-/** Minimal per-feature input the confidence needs, satisfied by both impacts and feature stats. */
-interface ConfidenceFeature {
+/** Minimal per-feature input the evidence-support computation needs, satisfied by both impacts and feature stats. */
+interface EvidenceSupportFeature {
   feature: string;
   observed: boolean;
   standardizedValue: number;
 }
 
-export interface PredictionConfidenceInput {
-  features: ConfidenceFeature[];
+export interface PredictionEvidenceSupportInput {
+  features: EvidenceSupportFeature[];
   /** Model probability used to locate the calibration band (pre-calibration). */
   rawProbability: number;
   calibratedProbability: number;
@@ -98,14 +98,14 @@ function geometricMean(values: number[]) {
   return product ** (1 / values.length);
 }
 
-/** Build confidence from a logistic impact decomposition. */
-export function confidenceFromAnalysis(
+/** Build evidence support from a logistic impact decomposition. */
+export function evidenceSupportFromAnalysis(
   analysis: RepositoryModelAnalysis,
   artifact: TrainingRunModelArtifact,
-): PredictionConfidence {
+): PredictionEvidenceSupport {
   const signalCompleteness =
     analysis.impacts.find((impact) => impact.feature === "signal_completeness")?.value ?? null;
-  return predictionConfidence({
+  return predictionEvidenceSupport({
     features: analysis.impacts.map((impact) => ({
       feature: impact.feature,
       observed: impact.observed,
@@ -119,14 +119,14 @@ export function confidenceFromAnalysis(
   });
 }
 
-/** Build confidence from bare feature stats (e.g. a tree model with no coefficient layer). */
-export function confidenceFromStats(
+/** Build evidence support from bare feature stats (e.g. a tree model with no coefficient layer). */
+export function evidenceSupportFromStats(
   stats: RepositoryFeatureStat[],
   probability: number,
   artifact: TrainingRunModelArtifact,
-): PredictionConfidence {
+): PredictionEvidenceSupport {
   const signalCompleteness = stats.find((stat) => stat.feature === "signal_completeness")?.value ?? null;
-  return predictionConfidence({
+  return predictionEvidenceSupport({
     features: stats.map((stat) => ({
       feature: stat.feature,
       observed: stat.observed,
@@ -140,7 +140,7 @@ export function confidenceFromStats(
   });
 }
 
-export function predictionConfidence(input: PredictionConfidenceInput): PredictionConfidence {
+export function predictionEvidenceSupport(input: PredictionEvidenceSupportInput): PredictionEvidenceSupport {
   const { features, artifact } = input;
   const evidential = features.filter((feature) => !NON_EVIDENTIAL_FEATURES.has(feature.feature));
   const evidentialFeatureCount = evidential.length;
@@ -157,7 +157,7 @@ export function predictionConfidence(input: PredictionConfidenceInput): Predicti
 
   // 2. In-distribution — over observed evidential features only (imputed ones have meaningless z-scores).
   const inDistributionFeatures = observedEvidential.filter(
-    (feature) => Math.abs(feature.standardizedValue) <= CONFIDENCE_CONSTANTS.IN_DISTRIBUTION_Z,
+    (feature) => Math.abs(feature.standardizedValue) <= EVIDENCE_SUPPORT_CONSTANTS.IN_DISTRIBUTION_Z,
   );
   const inDistributionFeatureCount = inDistributionFeatures.length;
   const inDistribution = observedFeatureCount ? inDistributionFeatureCount / observedFeatureCount : 0;
@@ -167,10 +167,10 @@ export function predictionConfidence(input: PredictionConfidenceInput): Predicti
   const calibrationBinCount = bin ? bin.count : null;
   const calibrationSupport =
     bin != null
-      ? bin.count / (bin.count + CONFIDENCE_CONSTANTS.CALIBRATION_HALF_SATURATION)
+      ? bin.count / (bin.count + EVIDENCE_SUPPORT_CONSTANTS.CALIBRATION_HALF_SATURATION)
       : null;
 
-  const components: ConfidenceComponent[] = [
+  const components: EvidenceSupportComponent[] = [
     {
       key: "coverage",
       label: "Data coverage",
@@ -182,7 +182,7 @@ export function predictionConfidence(input: PredictionConfidenceInput): Predicti
       label: "In-distribution fit",
       value: observedFeatureCount ? inDistribution : null,
       detail: observedFeatureCount
-        ? `${inDistributionFeatureCount}/${observedFeatureCount} observed features sit within ${CONFIDENCE_CONSTANTS.IN_DISTRIBUTION_Z}σ of what the model trained on.`
+        ? `${inDistributionFeatureCount}/${observedFeatureCount} observed features sit within ${EVIDENCE_SUPPORT_CONSTANTS.IN_DISTRIBUTION_Z}σ of what the model trained on.`
         : "No observed evidential signals to compare against the training distribution.",
     },
     {
@@ -203,9 +203,9 @@ export function predictionConfidence(input: PredictionConfidenceInput): Predicti
 
   const marginToThreshold = Math.abs(input.calibratedProbability - input.threshold);
   const marginLabel: MarginLabel =
-    marginToThreshold >= CONFIDENCE_CONSTANTS.MARGIN_DECISIVE
+    marginToThreshold >= EVIDENCE_SUPPORT_CONSTANTS.MARGIN_DECISIVE
       ? "Decisive"
-      : marginToThreshold <= CONFIDENCE_CONSTANTS.MARGIN_BORDERLINE
+      : marginToThreshold <= EVIDENCE_SUPPORT_CONSTANTS.MARGIN_BORDERLINE
         ? "Borderline"
         : "Moderate";
 

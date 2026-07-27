@@ -1,5 +1,9 @@
 param(
-  [switch]$Watch
+  [switch]$Watch,
+  # Bind the signed Steckbrief into the front matter and write a separate,
+  # gitignored output. Use this for the copy that is handed in; the plain build
+  # stays free of the signature so it can live in the public repository.
+  [switch]$Submission
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,6 +11,20 @@ $ErrorActionPreference = "Stop"
 $ThesisRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $BuildDir = Join-Path $ThesisRoot "build"
 $MainFile = Join-Path $ThesisRoot "main.tex"
+
+if ($Submission) {
+  $JobName = "thesis-submission"
+  $PreTex = '\def\WITHSTECKBRIEF{}'
+  $TexArg = "$PreTex\input{main.tex}"
+  $Steckbrief = Join-Path $ThesisRoot "frontmatter\steckbrief.pdf"
+  if (-not (Test-Path $Steckbrief)) {
+    Write-Warning "frontmatter\steckbrief.pdf not found - the submission build will be produced WITHOUT the Steckbrief page."
+  }
+} else {
+  $JobName = "thesis"
+  $PreTex = ""
+  $TexArg = $MainFile
+}
 
 New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 
@@ -35,8 +53,14 @@ try {
       $watchArgs += "-pvc"
     }
 
-    & latexmk @watchArgs -pdf -interaction=nonstopmode -halt-on-error `
-      -jobname=thesis -outdir="$BuildDir" "$MainFile"
+    $preArgs = @()
+    if ($PreTex) { $preArgs += "-usepretex=$PreTex" }
+
+    # NB the -jobname argument must be quoted: PowerShell does not expand a variable
+    # in a token it parses as a parameter name, so -jobname=$JobName would be passed
+    # through literally.
+    & latexmk @watchArgs @preArgs -pdf -interaction=nonstopmode -halt-on-error `
+      "-jobname=$JobName" -outdir="$BuildDir" "$MainFile"
     if ($LASTEXITCODE -eq 0) {
       exit 0
     }
@@ -56,10 +80,10 @@ try {
       Write-Error "pdflatex was found, but biber is missing. Install biber or add it to PATH."
     }
 
-    & pdflatex -interaction=batchmode -halt-on-error -jobname=thesis -output-directory="$BuildDir" "$MainFile"
-    & biber --input-directory "$BuildDir" --output-directory "$BuildDir" thesis
-    & pdflatex -interaction=batchmode -halt-on-error -jobname=thesis -output-directory="$BuildDir" "$MainFile"
-    & pdflatex -interaction=batchmode -halt-on-error -jobname=thesis -output-directory="$BuildDir" "$MainFile"
+    & pdflatex -interaction=batchmode -halt-on-error "-jobname=$JobName" -output-directory="$BuildDir" "$TexArg"
+    & biber --input-directory "$BuildDir" --output-directory "$BuildDir" $JobName
+    & pdflatex -interaction=batchmode -halt-on-error "-jobname=$JobName" -output-directory="$BuildDir" "$TexArg"
+    & pdflatex -interaction=batchmode -halt-on-error "-jobname=$JobName" -output-directory="$BuildDir" "$TexArg"
     exit $LASTEXITCODE
   }
 

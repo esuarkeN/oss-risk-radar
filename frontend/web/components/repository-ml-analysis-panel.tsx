@@ -12,7 +12,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { featureDocByKey } from "@/lib/feature-catalog";
 import { useCountUp } from "@/lib/use-count-up";
 import { formatTrainingRate, selectCoefficientArtifact, selectScoringArtifact } from "@/lib/ml-evaluation";
-import { confidenceFromAnalysis, confidenceFromStats, type ConfidenceComponent } from "@/lib/ml-prediction-confidence";
+import { evidenceSupportFromAnalysis, evidenceSupportFromStats, type EvidenceSupportComponent } from "@/lib/ml-evidence-support";
 import { NON_EVIDENTIAL_FEATURES, repositoryFeatureStats, repositoryModelAnalysis, type RepositoryVariableImpact } from "@/lib/ml-repository-analysis";
 import type { DependencyRecord } from "@/lib/types";
 import { useMlEvaluationState } from "@/lib/use-ml-evaluation-state";
@@ -90,7 +90,7 @@ function scoreBarColor(value: number | null) {
   return "hsl(var(--danger))";
 }
 
-function ConfidenceBar({ component }: { component: ConfidenceComponent }) {
+function EvidenceSupportBar({ component }: { component: EvidenceSupportComponent }) {
   const pct = component.value;
   return (
     <div>
@@ -170,12 +170,12 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
     const score = match?.inactivityRiskScore ?? dependency?.riskProfile?.inactivityRiskScore;
     return score != null ? score / 100 : null;
   }, [fallbackArtifact, dependency?.riskProfile]);
-  const confidence = useMemo(() => {
+  const evidenceSupport = useMemo(() => {
     if (modelAnalysis && logisticArtifact) {
-      return confidenceFromAnalysis(modelAnalysis, logisticArtifact);
+      return evidenceSupportFromAnalysis(modelAnalysis, logisticArtifact);
     }
     if (fallbackStats && fallbackArtifact && fallbackProbability != null) {
-      return confidenceFromStats(fallbackStats, fallbackProbability, fallbackArtifact);
+      return evidenceSupportFromStats(fallbackStats, fallbackProbability, fallbackArtifact);
     }
     return null;
   }, [modelAnalysis, logisticArtifact, fallbackStats, fallbackArtifact, fallbackProbability]);
@@ -183,7 +183,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
   const probabilityValue = modelAnalysis?.calibratedProbability ?? fallbackProbability ?? null;
   // Count-up animations must run before any early return to keep hook order stable.
   const animatedProbability = useCountUp(probabilityValue ?? 0);
-  const animatedConfidence = useCountUp(confidence?.rollup ?? 0);
+  const animatedEvidenceSupport = useCountUp(evidenceSupport?.rollup ?? 0);
 
   if (!dependency?.repository) {
     return null;
@@ -207,7 +207,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">{dependency.repository.fullName}</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge tone={modelResults.length || modelAnalysis || confidence ? "low" : "neutral"}>{modelResults.length ? "Analysis scored" : modelAnalysis || confidence ? "Model ready" : loading ? "Loading" : "No artifact"}</Badge>
+            <Badge tone={modelResults.length || modelAnalysis || evidenceSupport ? "low" : "neutral"}>{modelResults.length ? "Analysis scored" : modelAnalysis || evidenceSupport ? "Model ready" : loading ? "Loading" : "No artifact"}</Badge>
             <Badge tone="neutral">ML maintenance model</Badge>
           </div>
         </div>
@@ -221,12 +221,12 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
                 {probabilityValue != null ? formatTrainingRate(animatedProbability) : "Pending"}
               </p>
             </div>
-            {confidence ? (
+            {evidenceSupport ? (
               <div className="flex flex-col items-end gap-1.5">
-                <Badge tone={confidence.marginLabel === "Decisive" ? "low" : confidence.marginLabel === "Borderline" ? "medium" : "neutral"}>
-                  {confidence.marginLabel}
+                <Badge tone={evidenceSupport.marginLabel === "Decisive" ? "low" : evidenceSupport.marginLabel === "Borderline" ? "medium" : "neutral"}>
+                  {evidenceSupport.marginLabel}
                 </Badge>
-                <span className="text-[11px] text-muted">{formatTrainingRate(confidence.marginToThreshold)} margin</span>
+                <span className="text-[11px] text-muted">{formatTrainingRate(evidenceSupport.marginToThreshold)} margin</span>
               </div>
             ) : null}
           </div>
@@ -246,19 +246,19 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
               eyebrow="How much to trust this score"
               title="Evidence support"
             />
-            {confidence ? (
+            {evidenceSupport ? (
               <div className="text-right">
-                <p className="text-2xl font-semibold tracking-tight tabular-nums" style={{ color: scoreBarColor(confidence.rollup) }}>
-                  {formatPercent(animatedConfidence)}
+                <p className="text-2xl font-semibold tracking-tight tabular-nums" style={{ color: scoreBarColor(evidenceSupport.rollup) }}>
+                  {formatPercent(animatedEvidenceSupport)}
                 </p>
-                <Badge tone={scoreTone(confidence.rollup)}>{confidence.rollup >= 0.66 ? "Solid" : confidence.rollup >= 0.33 ? "Limited" : "Weak"}</Badge>
+                <Badge tone={scoreTone(evidenceSupport.rollup)}>{evidenceSupport.rollup >= 0.66 ? "Solid" : evidenceSupport.rollup >= 0.33 ? "Limited" : "Weak"}</Badge>
               </div>
             ) : null}
           </div>
-          {confidence ? (
+          {evidenceSupport ? (
             <div className="space-y-3.5">
-              {confidence.components.map((component) => (
-                <ConfidenceBar key={component.key} component={component} />
+              {evidenceSupport.components.map((component) => (
+                <EvidenceSupportBar key={component.key} component={component} />
               ))}
               <p className="text-[11px] leading-5 text-muted">
                 Evidence support combines these per-repository factors — it reflects the evidence available for <em>this</em> repo, not statistical confidence or the model&apos;s overall accuracy.
@@ -295,7 +295,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
               )}
             </div>
             <p className="mt-3 text-xs leading-5 text-muted">
-              These were imputed to the cohort average, so they contribute no evidence and cap the confidence above.
+              These were imputed to the cohort average, so they contribute no evidence and cap the evidence support above.
             </p>
           </div>
         ) : null}
@@ -377,7 +377,7 @@ export function RepositoryMlAnalysisPanel({ dependency }: { dependency: Dependen
             <TriangleAlert className="size-5 text-[hsl(var(--warning))]" aria-hidden="true" />
             <p className="font-medium text-foreground">Per-signal breakdown isn&apos;t available for this score</p>
             <p className="max-w-sm text-xs leading-5">
-              This repository&apos;s score doesn&apos;t expose a per-signal breakdown. The probability, confidence, and
+              This repository&apos;s score doesn&apos;t expose a per-signal breakdown. The probability, evidence support, and
               data-quality summary on the left still apply.
             </p>
           </div>

@@ -1,7 +1,14 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[english]{babel}
-\usepackage{lmodern}
+% Provadis "Anforderungen" §3.2.4 prescribes Times New Roman 12, Arial 11 or
+% Verdana 10 for the running text. mathptmx supplies a Times clone for text and
+% maths, helvet the matching sans. The typewriter face deliberately stays Latin
+% Modern rather than Courier: Courier is far wider and would overflow the narrow
+% feature-reference table columns that carry long snake_case identifiers.
+\usepackage{mathptmx}
+\usepackage[scaled=0.90]{helvet}
+\renewcommand{\ttdefault}{lmtt}
 \usepackage{microtype}
 \usepackage{csquotes}
 \usepackage{geometry}
@@ -20,6 +27,8 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,decorations.pathreplacing,calc}
 \usepackage[nohyperlinks]{acronym}
+% Used to bind the signed Telekom Steckbrief into the front matter (see main.tex).
+\usepackage{pdfpages}
 \usepackage[
   backend=biber,
   style=ieee,
@@ -36,11 +45,12 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage[nameinlink,noabbrev]{cleveref}
 
+% Provadis "Anforderungen" §3.2.4: links und oben je 3cm, rechts und unten je 2cm.
 \geometry{
   left=30mm,
-  right=25mm,
-  top=25mm,
-  bottom=30mm
+  right=20mm,
+  top=30mm,
+  bottom=20mm
 }
 
 \onehalfspacing

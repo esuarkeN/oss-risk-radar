@@ -95,15 +95,16 @@ signal (Section~\ref{sec:method-model-training}). Two such rules are evaluated o
 the same held-out slice: ranking by days since the last human commit, and ranking
 by negated annual commit volume.
 
-The result is sobering, and it is the most important quantitative finding of this
-thesis. The recency rule attains ROC-AUC \(0.957\) and an F1 score of \(0.918\),
-which is not merely competitive with the deployed \texttt{xgboost\sdash full\sdash history}
-model but nominally exceeds its F1 of \(0.916\). The comparison is not quite
+The result is unfavourable to the learned model, and it is the most important
+quantitative finding of this thesis. The recency rule attains ROC-AUC \(0.957\)
+and an F1 score of \(0.918\), which is not merely competitive with
+\texttt{xgboost\sdash full\sdash history} but nominally exceeds its F1 of
+\(0.916\). The comparison is not quite
 like-for-like: \texttt{days\_since\_last\_commit} is undefined for the \(444\)
 test rows whose repositories have no observable record before the observation date
 (Section~\ref{sec:method-undefined-features}), so the baseline is scored on
 \(4{,}556\) rows while the model is scored on all \(5{,}000\). Re-scoring the
-deployed model on exactly those \(4{,}556\) rows raises it to ROC-AUC \(0.974\)
+model on exactly those \(4{,}556\) rows raises it to ROC-AUC \(0.974\)
 against the baseline's \(0.957\). The model therefore does outrank the trivial
 rule, but by \(0.017\) ROC-AUC rather than by the wide margin that an aggregate
 comparison against a weaker baseline would suggest. The commit-volume rule is
@@ -118,20 +119,31 @@ Second, this is exactly the situation the active-at-\(t\) evaluation was designe
 to expose (Section~\ref{sec:method-evaluation-strategy}). Among repositories that
 are already quiet at \(t\), predicting continued inactivity is close to trivial,
 and both the model and the recency rule do it well; the aggregate metric is
-dominated by that easy majority. The decision-relevant question is what happens on
-the repositories that are still active, and there the picture separates
-sharply, as Section~\ref{sec:results-slices} shows.
+dominated by that easy majority. Restricting the comparison to the \(1{,}794\)
+repositories that are still active at the observation date reverses the verdict
+immediately: the model reaches ROC-AUC \(0.905\) against \(0.844\) for the best
+trivial rule, a margin of \(0.061\) rather than \(0.017\). The next section takes
+that subset as its subject.
 
-\subsection{How Much Is Reconstructed History Worth?}
+\subsection{Early Warning: Removing the Already-Inactive Repositories}
 \label{sec:results-history-ablation}
 
-The same instrument answers the feature-availability question posed in
-Section~\ref{sec:method-prediction-regimes}. Comparing the two gradient-boosted
-models isolates the contribution of the 43 reconstructed historical features,
-since the cold-start model differs from the full-history model only by their
-absence. Table~\ref{tab:history-ablation} reports every arm on identical rows:
-where the recency signal is undefined the row is dropped from \emph{all} arms
-rather than imputed for the models alone.
+The preceding comparison is compressed by an easy majority, so the natural next
+question --- and the one on which the practical value of the artifact rests --- is
+how the models behave once the repositories that had already fallen silent by
+\(t\) are removed. What remains is the population an early-warning signal is
+actually for: projects that still look healthy at the observation date, some of
+which decline over the following year. Their inactive rate is \(0.225\), against
+\(0.661\) in the test set as a whole.
+
+Restricting to that subset also answers the feature-availability question posed in
+Section~\ref{sec:method-prediction-regimes}, since comparing the two
+gradient-boosted models isolates the contribution of the 43 reconstructed
+historical features: the cold-start model differs from the full-history model only
+by their absence. Table~\ref{tab:history-ablation} reports every arm on identical
+rows, on the whole recency-defined slice and on the active-at-\(t\) subset. Where
+the recency signal is undefined the row is dropped from \emph{all} arms rather
+than imputed for the models alone.
 
 \begin{table}[htbp]
   \centering
@@ -155,16 +167,28 @@ times its aggregate value, and the snapshot features \(0.083\). The ordering of
 the three feature sets --- one signal, seventeen, sixty --- is strictly monotone
 where early warning matters and almost flat where it does not.
 
-This is the third independent appearance of one property of the data. The learned
-model beats the trivial rule by \(0.017\) in aggregate against \(0.061\) on
-active-at-\(t\); reconstructed history by \(0.005\) against \(0.030\); the
-snapshot feature set by \(0.013\) against \(0.083\). Each aggregate comparison is
-compressed by the same cause: a slice in which two thirds of repositories are
-already quiet rewards a predictor for restating the present, so any additional
-information --- more features, more history, a learned decision boundary --- is
-visible only once that easy majority is removed. The aggregate ROC-AUC of this
-dataset measures activity persistence more than predictive skill, and no design
-decision in this thesis should be judged against it.
+Three separate comparisons therefore point the same way. The learned model beats
+the trivial rule by \(0.017\) in aggregate against \(0.061\) on active-at-\(t\);
+reconstructed history is worth \(0.005\) against \(0.030\); the snapshot feature
+set \(0.013\) against \(0.083\). Every aggregate figure is compressed by the same
+cause. A test set in which two thirds of repositories are already quiet rewards a
+predictor for restating the present, so any additional information --- more
+features, more history, a learned decision boundary --- becomes visible only once
+that easy majority is removed. The aggregate ROC-AUC of this dataset measures
+activity persistence more than predictive skill, and no design decision in this
+thesis should be judged against it.
+
+This is the central empirical result of the thesis, and it is a split one. On the
+aggregate comparison the answer to the research question is negative: a
+sixty-feature calibrated model does not meaningfully outrank a rule that sorts
+repositories by their last commit date, and reporting the headline \(0.958\)
+without that comparison would overstate the contribution. On the population where
+an early warning could change a decision, the answer is positive: the model
+separates outcomes at \(0.905\) against \(0.844\), the margin holds under a
+repository-clustered bootstrap (Section~\ref{sec:validity-conclusion}), and the
+ordering of the three feature sets is strictly monotone. Both halves are reported,
+because reporting only the first would understate the artifact and reporting only
+the second would overstate it.
 
 \section{Calibration and Threshold Selection}
 \label{sec:results-calibration}
@@ -204,19 +228,53 @@ Feature attribution is read from the logistic-regression model, which is retaine
 precisely for its transparent coefficients (Section~\ref{sec:results-performance}).
 Because the inputs are standardized, the coefficient magnitudes are directly
 comparable, and their signs indicate the direction of the association with
-inactivity. The strongest inactivity-\emph{lowering} signal is the breadth of
-sustained development (\texttt{active\_commit\_months\_365d}, standardized
-coefficient \(-0.79\)), followed by recent maintainer integration
-(\texttt{has\_recent\_pr\_merge\_flag}, \(-0.39\)) and the presence of any issue
-activity at all (\texttt{has\_issue\_activity\_365d}, \(-0.26\)). The strongest
-inactivity-\emph{raising} signals are the two staleness measures, days since the
-last push and days since the last commit (each \(+0.56\)). These directions match
-the intended semantics of the features (Appendix~\ref{appendix:feature-reference}).
+inactivity. Figure~\ref{fig:attribution} shows the leading coefficients.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=3.0cm,y=0.66cm]
+  % axis
+  \draw[->] (-1.0,-7.7) -- (0.80,-7.7) node[right]{\footnotesize coef.};
+  \foreach \x/\lab in {-0.8/-0.8, -0.4/-0.4, 0/0, 0.4/0.4}
+    \draw (\x,-7.6) -- (\x,-7.8) node[below]{\footnotesize \lab};
+  \draw[dashed,black!45] (0,-7.6) -- (0,0.4);
+  % bars: name / value / row
+  \foreach \name/\val/\row in {%
+    {active\_commit\_months\_365d}/-0.79/0,
+    {open\_issues\_log1p}/-0.41/-1,
+    {has\_recent\_pr\_merge\_flag}/-0.39/-2,
+    {has\_issue\_activity\_365d}/-0.26/-3,
+    {stars\_log1p}/0.25/-4,
+    {days\_since\_last\_commit}/0.56/-5,
+    {days\_since\_last\_push}/0.56/-6}
+  {
+    \fill[black!\ifdim\val pt<0pt 30\else 62\fi] (0,\row-0.24) rectangle (\val,\row+0.24);
+    \node[anchor=east,font=\scriptsize\ttfamily] at (-1.20,\row) {\name};
+    \node[font=\scriptsize,anchor=\ifdim\val pt<0pt east\else west\fi]
+      at (\val,\row) {\ \val\ };
+  }
+  \node[font=\footnotesize,anchor=east] at (-0.06,0.75) {lowers inactivity risk};
+  \node[font=\footnotesize,anchor=west] at (0.06,0.75) {raises it};
+\end{tikzpicture}
+\caption[Standardized logistic-regression coefficients]{Standardized
+logistic-regression coefficients for the seven strongest features. Because the
+inputs are standardized the magnitudes are comparable; a negative coefficient
+means the feature is associated with a \emph{lower} probability of inactivity. The
+two shaded groups behave as intended --- sustained development lowers risk,
+staleness raises it --- while \texttt{open\_issues\_log1p} and
+\texttt{stars\_log1p} carry counter-intuitive signs discussed below.}
+\label{fig:attribution}
+\end{figure}
+
+The picture is largely as the feature semantics intend
+(Appendix~\ref{appendix:feature-reference}): the breadth of sustained development
+is the strongest inactivity-lowering signal, followed by recent maintainer
+integration and the presence of any issue activity at all, while the two staleness
+measures are the strongest inactivity-raising ones.
 
 Two coefficients resist that reading. A larger open-issue backlog is associated
-with \emph{lower} inactivity (\texttt{open\_issues\_log1p}, \(-0.41\)), and a
-larger star count with \emph{higher} inactivity (\texttt{stars\_log1p},
-\(+0.25\)). Both are plausibly confounded rather than causal: an open backlog
+with \emph{lower} inactivity, and a larger star count with \emph{higher}
+inactivity. Both are plausibly confounded rather than causal: an open backlog
 presupposes a user base that files issues, and popularity is correlated with
 project age within the sampled frame. These coefficients are therefore used to
 explain \emph{direction} for a given repository, while ranking performance is
@@ -307,12 +365,7 @@ suggest (Section~\ref{sec:results-performance}).
 \subsection{Error Analysis}
 \label{sec:results-error-analysis}
 
-The comparison against explicit trivial baselines is now part of the reported
-results (Section~\ref{sec:results-baselines} and the slice analysis above); the
-systematic formative case review that motivated the feature-set revision
-(Section~\ref{sec:method-iterative-development}) remains a complementary
-qualitative analysis and is noted as a remaining item in
-Chapter~\ref{chap:conclusion}. The quantitative results identify two residual
+The quantitative results identify two residual
 weaknesses. The dominant one is low-visibility repositories with sparse public
 signals, which the evidence-support layer is intended to flag rather than hide, although
 whether low evidence support reliably coincides with larger prediction error is asserted
@@ -341,23 +394,22 @@ sweep over each individual cut-off is left to future work.
 \section{Ablation: The Human-Actor Filter}
 \label{sec:results-bot-ablation}
 
-Commit- and contributor-based features and the maintenance label are computed from
+Commit- and contributor-based features and the inactivity label are computed from
 human actors only; automated (bot) accounts are excluded
 (Section~\ref{sec:method-feature-engineering}). Because this design choice could
-plausibly be omitted, it is tested by rebuilding the full 5{,}000-repository dataset
-with the filter disabled through a single build flag, every other setting identical.
-The ablation shows three effects, reported in full in
-Appendix~\ref{appendix:bot-ablation}. First, disabling the filter corrupts the label
-one-directionally: 357 of 50{,}000 snapshots (\(0.71\%\)) flip from inactive to
-active and none the other way, because a bot commit or merge in the future window can
-satisfy the maintenance rule and mask an otherwise dormant repository. Second, it
-inflates the observation-time activity features on a bot-heavy minority of
-repositories (for instance \texttt{commits\_365d} changes on \(15.7\%\) of
-snapshots). Third, its predictive cost is small but consistent: trained on
-contaminated features and evaluated against the clean label, every model family loses
-\(0.0006\)--\(0.0011\) ROC-AUC (Table~\ref{tab:bot-ablation-crosstest}).
+plausibly be omitted, it was tested by rebuilding the full 5{,}000-repository
+dataset with the filter disabled through a single build flag, every other setting
+identical, and comparing both builds against the same clean labels.
 
-The filter's justification is therefore construct validity rather than
-discrimination: its predictive cost when omitted is minor, but it removes a
-one-directional label bias --- the masking of inactivity --- that a headline metric
-computed on the corrupted data would not reveal. The human-actor filter is retained.
+The outcome is that the filter earns its place on construct-validity grounds
+rather than on discrimination. Its predictive cost when omitted is minor --- every
+model family loses only \(0.0006\)--\(0.0011\) ROC-AUC --- but omitting it corrupts
+the label in one direction only: \(357\) of \(50{,}000\) snapshots (\(0.71\%\))
+flip from inactive to active and none the other way, because a bot commit or merge
+inside the future window can satisfy the maintenance rule and mask an otherwise
+dormant repository. Bots can make a dead project look maintained; they cannot make
+a live one look dead. That asymmetry is invisible to a headline metric computed on
+the corrupted data, and it runs in the direction that matters most for a risk
+signal, so the filter is retained. The three measured effects --- label
+corruption, feature inflation, and the cross-tested predictive cost --- are
+reported in full in Appendix~\ref{appendix:bot-ablation}.

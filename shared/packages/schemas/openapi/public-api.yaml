@@ -490,12 +490,12 @@ components:
         staleIssueShare: { type: number }
     RiskProfile:
       type: object
-      required: [inactivityRiskScore, maintenanceOutlook12mScore, securityPostureScore, confidenceScore, riskBucket, actionLevel, caveats, missingSignals, explanationFactors, evidence]
+      required: [inactivityRiskScore, maintenanceOutlook12mScore, securityPostureScore, evidenceSupport, riskBucket, actionLevel, caveats, missingSignals, explanationFactors, evidence]
       properties:
         inactivityRiskScore: { type: number }
         maintenanceOutlook12mScore: { type: number }
         securityPostureScore: { type: number }
-        confidenceScore: { type: number }
+        evidenceSupport: { type: number }
         riskBucket:
           type: string
           enum: [low, medium, high, critical]

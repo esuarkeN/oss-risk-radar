@@ -1,0 +1,128 @@
+\chapter*{Glossary}
+\addcontentsline{toc}{chapter}{Glossary}
+\label{chap:glossary}
+
+This glossary explains the recurring technical terms of the thesis. Terms from
+machine-learning practice are defined in the sense in which they are standard in
+that literature; where this thesis defines a term of its own, the entry says so.
+The formal equations for the evaluation metrics are given in
+Appendix~\ref{sec:method-metric-definitions}.
+
+{\renewcommand{\arraystretch}{1.35}
+\begin{longtable}{p{0.27\textwidth} p{0.66\textwidth}}
+\hline
+\textbf{Term} & \textbf{Definition} \\
+\hline
+\endfirsthead
+\multicolumn{2}{l}{\small\itshape Glossary --- continued from previous page} \\
+\hline
+\textbf{Term} & \textbf{Definition} \\
+\hline
+\endhead
+
+Ablation &
+An experiment that removes or disables one component of a system and retrains it,
+so that the difference in results measures what that component actually
+contributed. Used here for the human-actor filter
+(Section~\ref{sec:results-bot-ablation}) and for feature availability
+(Section~\ref{sec:method-prediction-regimes}). \\
+
+Brier score &
+A measure of how accurate predicted \emph{probabilities} are: the mean squared
+difference between the predicted probability and the observed outcome. Lower is
+better. \\
+
+Calibration &
+Whether predicted probabilities match reality in the long run --- if the model
+says \(0.8\) for a group of repositories, roughly \(80\%\) of them should in fact
+become inactive. Distinct from discrimination: a model can rank correctly and
+still be badly calibrated. \\
+
+Cold-start &
+The standard machine-learning term for having to make a prediction about an entity
+for which no history is available. Here it names the model that uses only the 17
+current-snapshot features, and applies to any repository absent from the
+precomputed feature cache. \\
+
+Discrimination &
+Whether the model puts the repositories that became inactive above those that did
+not, irrespective of the absolute probabilities. Measured by ROC-AUC. \\
+
+Expected calibration error (ECE) &
+A single number summarizing miscalibration: predictions are grouped into
+probability bins and the average gap between each bin's predicted probability and
+its observed outcome frequency is reported. \\
+
+F1 score &
+The harmonic mean of precision and recall at a chosen decision threshold, i.e.\ a
+single number balancing how many flagged repositories were really inactive against
+how many inactive repositories were flagged. Unlike ROC-AUC it depends on the
+threshold. \\
+
+Full-history &
+The counterpart to cold-start: the model that additionally uses the 43 features
+reconstructed from the event history before the observation date. \\
+
+Held-out test set &
+The rows set aside before training and used neither for fitting the model nor for
+calibrating its probabilities, so that the reported metrics describe performance
+on data the model has never seen. \\
+
+Human-actor filter &
+A filter of this thesis that excludes bot accounts from commit- and
+contributor-derived signals and from the label, so that automated activity cannot
+be mistaken for maintenance (Section~\ref{sec:method-feature-engineering}). \\
+
+Inactivity label &
+The prediction target: \(1\) if the repository is \emph{not} maintained during the
+twelve months after the observation date, \(0\) otherwise
+(Section~\ref{sec:method-definitions}). \\
+
+Leakage &
+The error of letting information that would not have been available at prediction
+time influence the model, which inflates measured performance. Prevented here by
+the temporal boundary at the observation date
+(Section~\ref{sec:method-leakage-prevention}). \\
+
+Observation snapshot &
+One row of the dataset: a single repository described as it appeared at one
+observation date, together with the label derived from the following twelve
+months. \\
+
+Prediction regime &
+The term used in this thesis for which of the two nested feature sets a model was
+trained on --- full-history or cold-start. \\
+
+Reconstructed proxy &
+A feature that measures the same underlying construct as an established metric but
+is computed by this thesis from GH Archive event data under its own rules, and is
+therefore not that metric. The responsiveness features are reconstructed proxies
+for, not implementations of, the corresponding CHAOSS metrics
+(Section~\ref{sec:related-responsiveness}). \\
+
+Right-censored &
+A value that is known only as a lower bound. If a repository has no observed
+commit, ``days since last commit'' has no exact value but is at least the length
+of the observable record, and is encoded at that bound rather than as zero
+(Section~\ref{sec:method-feature-engineering}). \\
+
+ROC-AUC &
+Area under the receiver operating characteristic curve: the probability that a
+randomly chosen inactive repository is scored above a randomly chosen active one.
+\(0.5\) is a coin flip, \(1.0\) a perfect ranking. \\
+
+Slice evaluation &
+Re-computing the metrics separately within meaningful subgroups of the test set
+(for example by popularity, or restricted to repositories still active at the
+observation date), so that strong performance on a large subgroup cannot hide weak
+performance on a smaller one. \\
+
+Two-of-four maintenance rule &
+This thesis's own operational definition of maintenance: a repository counts as
+maintained in the twelve-month window if at least two of four activity checks are
+satisfied (Section~\ref{sec:method-definitions}). It is a design choice of this
+work, not an established external standard, and its sensitivity is tested in
+Section~\ref{sec:results-label-sensitivity}. \\
+\hline
+\end{longtable}
+}

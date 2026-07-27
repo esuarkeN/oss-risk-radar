@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { formatConfidence, formatDate, formatOutlookScore, formatRiskScore } from "@/lib/format";
+import { formatEvidenceSupport, formatDate, formatOutlookScore, formatRiskScore } from "@/lib/format";
 import {
   repositoryActivityStatus,
   repositoryAgeDays,
@@ -244,7 +244,7 @@ export function RepositoryDirectory() {
                           {isTrainingBase ? `${Math.round((repository.inactiveRate ?? 0) * 100)}% inactive` : `${formatRiskScore(repository.avgRisk)} risk`}
                         </p>
                       </td>
-                      <td className="px-4 py-3 text-foreground">{formatConfidence(repository.avgConfidence)}</td>
+                      <td className="px-4 py-3 text-foreground">{formatEvidenceSupport(repository.avgEvidenceSupport)}</td>
                       <td className="px-4 py-3 text-muted">
                         <p>{repository.packageCount} packages</p>
                         <p className="mt-1 text-xs">
@@ -306,7 +306,7 @@ export function RepositoryDirectory() {
                   <tr key={dependency.key} className="border-b border-line/60 align-top transition-colors hover:bg-panelAlt/60">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-foreground">{dependency.packageName}</p>
-                      <p className="mt-1 text-xs text-muted">{dependency.packageVersion} / {dependency.ecosystem} / {formatConfidence(dependency.confidence)} evidence support</p>
+                      <p className="mt-1 text-xs text-muted">{dependency.packageVersion} / {dependency.ecosystem} / {formatEvidenceSupport(dependency.evidenceSupport)} evidence support</p>
                     </td>
                     <td className="px-4 py-3 text-muted">{dependency.repositoryName ?? "Unmapped"}</td>
                     <td className="px-4 py-3 font-semibold text-foreground">{formatOutlookScore(dependency.outlook12m)}</td>

@@ -20,7 +20,7 @@ type fakeScorer struct{}
 func (fakeScorer) Score(_ context.Context, _ string, dependencies []analysis.DependencyRecord) (map[string]analysis.RiskProfile, error) {
 	result := make(map[string]analysis.RiskProfile, len(dependencies))
 	for _, dependency := range dependencies {
-		result[dependency.ID] = analysis.RiskProfile{InactivityRiskScore: 42, MaintenanceOutlook12MScore: 58, SecurityPostureScore: 71, ConfidenceScore: 0.82, RiskBucket: analysis.RiskBucket("medium"), ActionLevel: analysis.ActionLevel("monitor")}
+		result[dependency.ID] = analysis.RiskProfile{InactivityRiskScore: 42, MaintenanceOutlook12MScore: 58, SecurityPostureScore: 71, EvidenceSupport: 0.82, RiskBucket: analysis.RiskBucket("medium"), ActionLevel: analysis.ActionLevel("monitor")}
 	}
 	return result, nil
 }
@@ -47,7 +47,7 @@ func (validatingScorecardScorer) Score(_ context.Context, _ string, dependencies
 				}
 			}
 		}
-		result[dependency.ID] = analysis.RiskProfile{InactivityRiskScore: 42, MaintenanceOutlook12MScore: 58, SecurityPostureScore: 71, ConfidenceScore: 0.82, RiskBucket: analysis.RiskBucket("medium"), ActionLevel: analysis.ActionLevel("monitor")}
+		result[dependency.ID] = analysis.RiskProfile{InactivityRiskScore: 42, MaintenanceOutlook12MScore: 58, SecurityPostureScore: 71, EvidenceSupport: 0.82, RiskBucket: analysis.RiskBucket("medium"), ActionLevel: analysis.ActionLevel("monitor")}
 	}
 	return result, nil
 }
@@ -82,7 +82,7 @@ func (f *fakeModelScorer) ScoreModel(_ context.Context, _ string, dependencies [
 			InactivityRiskScore:        11,
 			MaintenanceOutlook12MScore: 89,
 			SecurityPostureScore:       83,
-			ConfidenceScore:            0.91,
+			EvidenceSupport:            0.91,
 			RiskBucket:                 analysis.RiskBucket("low"),
 			ActionLevel:                analysis.ActionLevel("monitor"),
 		}
@@ -226,7 +226,7 @@ func TestCreateOrReuseAnalysisReturnsCompletedRepositoryMatch(t *testing.T) {
 					InactivityRiskScore:        22,
 					MaintenanceOutlook12MScore: 78,
 					SecurityPostureScore:       81,
-					ConfidenceScore:            0.89,
+					EvidenceSupport:            0.89,
 					RiskBucket:                 analysis.RiskBucket("low"),
 					ActionLevel:                analysis.ActionLevel("monitor"),
 				},
@@ -309,7 +309,7 @@ func TestCreateOrReuseAnalysisCreatesFreshRepositoryAnalysisWhenCachedResultLack
 					InactivityRiskScore:        22,
 					MaintenanceOutlook12MScore: 78,
 					SecurityPostureScore:       81,
-					ConfidenceScore:            0.89,
+					EvidenceSupport:            0.89,
 					RiskBucket:                 analysis.RiskBucket("low"),
 					ActionLevel:                analysis.ActionLevel("monitor"),
 					ScoringMethod:              "legacy_unstaged",
@@ -396,7 +396,7 @@ func TestCreateOrReuseAnalysisReusesRepositoryAnalysisWithCurrentStagedModels(t 
 					InactivityRiskScore:        11,
 					MaintenanceOutlook12MScore: 89,
 					SecurityPostureScore:       83,
-					ConfidenceScore:            0.91,
+					EvidenceSupport:            0.91,
 					RiskBucket:                 analysis.RiskBucket("low"),
 					ActionLevel:                analysis.ActionLevel("monitor"),
 					ScoringMethod:              "model_ensemble",
@@ -948,7 +948,7 @@ func currentModelResultsFixture() []analysis.ModelRiskProfile {
 			InactivityRiskScore:        11,
 			MaintenanceOutlook12MScore: 89,
 			SecurityPostureScore:       83,
-			ConfidenceScore:            0.91,
+			EvidenceSupport:            0.91,
 			RiskBucket:                 analysis.RiskBucket("low"),
 			ActionLevel:                analysis.ActionLevel("monitor"),
 		},
@@ -961,7 +961,7 @@ func currentModelResultsFixture() []analysis.ModelRiskProfile {
 			InactivityRiskScore:        11,
 			MaintenanceOutlook12MScore: 89,
 			SecurityPostureScore:       83,
-			ConfidenceScore:            0.91,
+			EvidenceSupport:            0.91,
 			RiskBucket:                 analysis.RiskBucket("low"),
 			ActionLevel:                analysis.ActionLevel("monitor"),
 		},

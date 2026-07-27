@@ -14,7 +14,7 @@ export function formatOutlookScore(value: number) {
   return `${Math.round(value)}%`;
 }
 
-export function formatConfidence(value: number) {
+export function formatEvidenceSupport(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 

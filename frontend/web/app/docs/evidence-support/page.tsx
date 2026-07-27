@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 
-const confidenceFactors = [
+const evidenceSupportFactors = [
   {
     title: "Data coverage",
     body: "Share of expected maintenance signals actually observed; missing ones are filled with the training-cohort average and add no evidence.",
@@ -15,7 +15,7 @@ const confidenceFactors = [
   },
 ];
 
-export default function ConfidencePage() {
+export default function EvidenceSupportPage() {
   return (
     <Card className="animate-slide-up space-y-4">
       <div>
@@ -31,7 +31,7 @@ export default function ConfidencePage() {
         </p>
       </div>
       <div className="grid gap-4 md:grid-cols-3">
-        {confidenceFactors.map((factor) => (
+        {evidenceSupportFactors.map((factor) => (
           <div key={factor.title} className="rounded-xl border border-line bg-panelAlt p-4">
             <p className="text-sm font-semibold text-foreground">{factor.title}</p>
             <p className="mt-1.5 text-sm leading-6 text-muted">{factor.body}</p>

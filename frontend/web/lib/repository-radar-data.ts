@@ -29,7 +29,7 @@ export interface RepositoryRollup {
   avgOutlook12m: number;
   avgRisk: number;
   avgSecurity: number;
-  avgConfidence: number;
+  avgEvidenceSupport: number;
   scorecardScore?: number;
   recentContributors90d?: number;
 }
@@ -58,7 +58,7 @@ export interface DependencyRankingRow {
   repositoryName?: string;
   outlook12m: number;
   risk: number;
-  confidence: number;
+  evidenceSupport: number;
 }
 
 export const timeframeOptions = [90, 180, 365] as const;
@@ -206,7 +206,7 @@ export function useRepositoryRadarData(): RepositoryRadarData {
         const outlookValues = items.map((item) => item.riskProfile?.maintenanceOutlook12mScore ?? 0);
         const riskValues = items.map((item) => item.riskProfile?.inactivityRiskScore ?? 0);
         const securityValues = items.map((item) => item.riskProfile?.securityPostureScore ?? 0);
-        const confidenceValues = items.map((item) => item.riskProfile?.confidenceScore ?? 0);
+        const evidenceSupportValues = items.map((item) => item.riskProfile?.evidenceSupport ?? 0);
         const scorecardValues = items
           .map((item) => item.scorecard?.score)
           .filter((value): value is number => typeof value === "number");
@@ -225,7 +225,7 @@ export function useRepositoryRadarData(): RepositoryRadarData {
           avgOutlook12m: average(outlookValues),
           avgRisk: average(riskValues),
           avgSecurity: average(securityValues),
-          avgConfidence: average(confidenceValues),
+          avgEvidenceSupport: average(evidenceSupportValues),
           scorecardScore: scorecardValues.length ? average(scorecardValues) : undefined,
           recentContributors90d: repository?.recentContributors90d,
         } satisfies RepositoryRollup;
@@ -256,7 +256,7 @@ export function useRepositoryRadarData(): RepositoryRadarData {
         avgOutlook12m: Math.max(0, 100 - inactiveRate * 100),
         avgRisk: inactiveRate * 100,
         avgSecurity: 0,
-        avgConfidence: Math.round(Math.min(100, Math.max(35, 45 + labeledCoverage * 45))),
+        avgEvidenceSupport: Math.round(Math.min(100, Math.max(35, 45 + labeledCoverage * 45))),
         recentContributors90d: repository.recentContributors90d,
       } satisfies RepositoryRollup;
     });
@@ -334,7 +334,7 @@ export function useRepositoryRadarData(): RepositoryRadarData {
         repositoryName: dependency.repository?.fullName,
         outlook12m: dependency.riskProfile?.maintenanceOutlook12mScore ?? 0,
         risk: dependency.riskProfile?.inactivityRiskScore ?? 0,
-        confidence: dependency.riskProfile?.confidenceScore ?? 0,
+        evidenceSupport: dependency.riskProfile?.evidenceSupport ?? 0,
       }))
       .sort((left, right) => {
         if (left.outlook12m !== right.outlook12m) {

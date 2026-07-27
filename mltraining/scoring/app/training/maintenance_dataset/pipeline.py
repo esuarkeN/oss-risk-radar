@@ -590,7 +590,7 @@ class DatasetBuilder:
     def _none_if_missing(self, feature_row: SnapshotFeatureRow, feature_name: str) -> int | None:
         # Age features carry a right-censored upper bound when the underlying event was never
         # observed, so the value stays usable; the missing_features entry still records that the
-        # event was unobserved, which is what drives signal completeness and confidence.
+        # event was unobserved, which is what drives signal completeness and evidence support.
         value = feature_row.feature_values.get(feature_name)
         return None if value is None else int(value)
 

@@ -199,7 +199,7 @@ export function selectCoefficientArtifact(
 }
 
 /**
- * Pick any usable scoring artifact (logistic OR tree) for the confidence/coverage view. Used as a
+ * Pick any usable scoring artifact (logistic OR tree) for the evidence-support/coverage view. Used as a
  * fallback when no logistic artifact exists: a tree model still has a standardization profile and
  * calibration bins, so coverage, in-distribution fit, and calibration support remain computable
  * even though the per-feature coefficient impact chart does not apply.
