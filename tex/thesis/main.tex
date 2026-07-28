@@ -24,13 +24,15 @@
 % Deckblatt.
 %
 % It is included ONLY in the submission build, because the file carries a personal
-% signature and this repository is public:
+% signature and this repository is public. \SUBMISSIONBUILD also switches the title
+% page and the declaration from the redacted metadata to the personal data in
+% metadata-private.tex:
 %
-%   scripts/build.ps1               -> build/thesis.pdf             (no Steckbrief, tracked)
-%   scripts/build.ps1 -Submission   -> build/thesis-submission.pdf  (with it, local only)
+%   scripts/build.ps1               -> build/thesis.pdf             (redacted, tracked)
+%   scripts/build.ps1 -Submission   -> build/thesis-submission.pdf  (full, local only)
 %
-% Both the source PDF and the submission output are gitignored.
-\ifdefined\WITHSTECKBRIEF
+% The Steckbrief source, metadata-private.tex and the submission output are gitignored.
+\ifdefined\SUBMISSIONBUILD
   \IfFileExists{frontmatter/steckbrief.pdf}{%
     \includepdf[
       pages=-,

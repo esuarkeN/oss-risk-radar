@@ -12,11 +12,30 @@ previously been submitted, in the same or a similar form, to any examination aut
 
 \vspace{1.2cm}
 
-\thesisPlace, \thesisDeclarationDate
+% The signing city is part of the personal data and therefore only set in the
+% submission build; the public version prints the date alone.
+\ifdefempty{\thesisPlace}{}{\thesisPlace, }\thesisDeclarationDate
 
 \vspace{2.2cm}
 
+% Scanned signature. Like the Steckbrief and the personal metadata it is bound in only
+% by scripts/build.ps1 -Submission and gitignored, so the public build shows the empty
+% rule. The image is set in a zero-width box so it neither shortens the \hrulefill nor
+% shifts the name below it; the small negative raise lets the strokes cross the rule
+% the way a pen would.
+\newcommand{\thesisSignature}{}
+\ifdefined\SUBMISSIONBUILD
+  \IfFileExists{frontmatter/signature.png}{%
+    \renewcommand{\thesisSignature}{%
+      \makebox[0pt][l]{\hspace{0.6cm}\raisebox{-0.1cm}{%
+        \includegraphics[height=1.25cm]{frontmatter/signature.png}}}}%
+  }{%
+    \PackageWarningNoLine{thesis}{Submission build requested but
+      frontmatter/signature.png is missing - the signature line is left blank}%
+  }
+\fi
+
 \begin{tabular}{p{7cm}}
-  \hrulefill \\
+  \thesisSignature\hrulefill \\
   \thesisAuthor
 \end{tabular}

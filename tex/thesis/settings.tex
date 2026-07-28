@@ -11,6 +11,9 @@
 \renewcommand{\ttdefault}{lmtt}
 \usepackage{microtype}
 \usepackage{csquotes}
+% \ifdefempty: the title page and the declaration omit any metadata field that is left
+% empty, which is how the public build drops the personal data (see metadata.tex).
+\usepackage{etoolbox}
 \usepackage{geometry}
 \usepackage{setspace}
 \usepackage{graphicx}

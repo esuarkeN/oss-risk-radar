@@ -1,8 +1,9 @@
 param(
   [switch]$Watch,
-  # Bind the signed Steckbrief into the front matter and write a separate,
-  # gitignored output. Use this for the copy that is handed in; the plain build
-  # stays free of the signature so it can live in the public repository.
+  # Build the copy that is handed in: personal data from metadata-private.tex on the
+  # title page and under the declaration, plus the signed Steckbrief bound into the
+  # front matter. Written to a separate, gitignored output. The plain build stays
+  # redacted and free of the signature so it can live in the public repository.
   [switch]$Submission
 )
 
@@ -14,19 +15,30 @@ $MainFile = Join-Path $ThesisRoot "main.tex"
 
 if ($Submission) {
   $JobName = "thesis-submission"
-  $PreTex = '\def\WITHSTECKBRIEF{}'
-  $TexArg = "$PreTex\input{main.tex}"
   $Steckbrief = Join-Path $ThesisRoot "frontmatter\steckbrief.pdf"
   if (-not (Test-Path $Steckbrief)) {
     Write-Warning "frontmatter\steckbrief.pdf not found - the submission build will be produced WITHOUT the Steckbrief page."
   }
+  $PrivateMetadata = Join-Path $ThesisRoot "metadata-private.tex"
+  if (-not (Test-Path $PrivateMetadata)) {
+    Write-Warning "metadata-private.tex not found - the submission build will be produced WITHOUT matriculation number, e-mail, study group, examiners and signing city."
+  }
 } else {
   $JobName = "thesis"
-  $PreTex = ""
   $TexArg = $MainFile
 }
 
 New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
+
+# The submission flag is set through a generated wrapper file rather than by passing
+# TeX code on the command line. Windows PowerShell drops the leading backslash of an
+# argument such as \def\SUBMISSIONBUILD{}\input{main.tex}, so pdflatex received it as
+# the filename "defSUBMISSIONBUILD" and stopped. \input resolves against the working
+# directory, which is the thesis root, so main.tex and its chapters are still found.
+if ($Submission) {
+  $TexArg = Join-Path $BuildDir "$JobName.tex"
+  Set-Content -Path $TexArg -Encoding utf8 -Value '\def\SUBMISSIONBUILD{}\input{main.tex}'
+}
 
 function Require-CommandHint {
   Write-Error @"
@@ -53,14 +65,11 @@ try {
       $watchArgs += "-pvc"
     }
 
-    $preArgs = @()
-    if ($PreTex) { $preArgs += "-usepretex=$PreTex" }
-
     # NB the -jobname argument must be quoted: PowerShell does not expand a variable
     # in a token it parses as a parameter name, so -jobname=$JobName would be passed
     # through literally.
-    & latexmk @watchArgs @preArgs -pdf -interaction=nonstopmode -halt-on-error `
-      "-jobname=$JobName" -outdir="$BuildDir" "$MainFile"
+    & latexmk @watchArgs -pdf -interaction=nonstopmode -halt-on-error `
+      "-jobname=$JobName" -outdir="$BuildDir" "$TexArg"
     if ($LASTEXITCODE -eq 0) {
       exit 0
     }

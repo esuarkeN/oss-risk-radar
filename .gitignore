@@ -71,3 +71,12 @@ tex/thesis/**/*.toc
 # signature; this repository is public, so the file stays local. main.tex guards the
 # \includepdf so the thesis still builds without it.
 tex/thesis/frontmatter/steckbrief.pdf
+
+# Personal data for the handed-in version (matriculation number, e-mail, study group,
+# examiners, signing city). Read only by scripts/build.ps1 -Submission; the tracked
+# metadata.tex carries the redacted defaults, so the public build works without it.
+tex/thesis/metadata-private.tex
+
+# Scanned handwritten signature for the declaration of authorship. Bound in by
+# scripts/build.ps1 -Submission only; the public build leaves the rule empty.
+tex/thesis/frontmatter/signature.png

@@ -37,19 +37,28 @@
 
       \vspace*{1cm}
 
-      \thesisAuthor \\
-      \thesisMatriculationNumber \\
-      \thesisStudyGroup \\
-      \thesisEmail
+      % Matrikelnummer, Studiengruppe, E-Mail und die Gutachter stehen nur in der
+      % Abgabefassung; im öffentlichen Build sind die Felder leer und entfallen hier.
+      \thesisAuthor
+      \ifdefempty{\thesisMatriculationNumber}{}{\\ \thesisMatriculationNumber}
+      \ifdefempty{\thesisStudyGroup}{}{\\ \thesisStudyGroup}
+      \ifdefempty{\thesisEmail}{}{\\ \thesisEmail}
 
     \end{center}
   \end{singlespace}
 
   \normalsize
   \vfill % variabler vertikaler Abstand
+  % Die Gutachterzeilen werden vor der Tabelle zusammengesetzt: ein \ifdefempty
+  % unmittelbar im Tabellenkörper würde das & in seinem Argument verstecken, sodass
+  % TeX es nicht mehr als Spaltentrenner sieht.
+  \newcommand{\thesisGutachterRows}{}
+  \ifdefempty{\thesisSupervisor}{}{%
+    \appto\thesisGutachterRows{Erstgutachter: & \thesisSupervisor \\[0.25cm]}}
+  \ifdefempty{\thesisSecondSupervisor}{}{%
+    \appto\thesisGutachterRows{Zweitgutachter: & \thesisSecondSupervisor \\[0.25cm]}}
   \begin{tabular}{@{}ll}
-    Erstgutachter:              & \thesisSupervisor \\[0.25cm]
-    Zweitgutachter:             & \thesisSecondSupervisor \\[0.25cm]
+    \thesisGutachterRows
     Ende der Bearbeitungsfrist: & \thesisSubmissionDate \\
   \end{tabular}
 

@@ -28,6 +28,7 @@
     "ml:notebook:execute": "node scripts/ml/notebook.mjs execute",
     "ml:notebook:execute:ci": "node scripts/ml/notebook.mjs execute --runner local",
     "thesis:build": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/build.ps1",
+    "thesis:build:submission": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/build.ps1 -Submission",
     "thesis:watch": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/build.ps1 -Watch",
     "thesis:clean": "powershell -ExecutionPolicy Bypass -File tex/thesis/scripts/clean.ps1",
     "test:api": "cd backend/api && go test ./...",

@@ -1,30 +1,53 @@
-% Thesis metadata — fill these in. Consumed by frontmatter/titlepage.tex.
+% Thesis metadata. Consumed by frontmatter/titlepage.tex and backmatter/declaration.tex.
 % German Provadis deckblatt with an English thesis title.
+%
+% THIS FILE IS TRACKED IN A PUBLIC REPOSITORY. It therefore carries only the values
+% that are safe to publish. Everything personal (matriculation number, e-mail, study
+% group, the two examiners, the signing city) lives in metadata-private.tex, which is
+% gitignored and pulled in only by the submission build:
+%
+%   scripts/build.ps1              -> build/thesis.pdf             public, redacted
+%   scripts/build.ps1 -Submission  -> build/thesis-submission.pdf  full, local only
+%
+% A field left empty here is simply omitted from the title page and the declaration;
+% see the \ifdefempty guards in frontmatter/titlepage.tex.
 \newcommand{\thesisTitle}{Predicting Open-Source Dependency Inactivity Risk for Secure Software Supply Chains}
 
 % Persönliche Daten
 \newcommand{\thesisAuthor}{Eric Krause}
-\newcommand{\thesisMatriculationNumber}{Matrikelnummer: D720}
-\newcommand{\thesisEmail}{eric.krause@telekom.de}
+\newcommand{\thesisMatriculationNumber}{}
+\newcommand{\thesisEmail}{}
 \newcommand{\thesisPhone}{}
 
 % Studiengang / Institution
 \newcommand{\thesisUniversity}{Provadis School of International Management and Technology}
 \newcommand{\thesisFaculty}{Informatik und Wirtschaftsinformatik}
 \newcommand{\thesisProgram}{Informatik}
-\newcommand{\thesisStudyGroup}{BIN-T23-F-4}
+\newcommand{\thesisStudyGroup}{}
 
 % Gutachter und Abgabe
-\newcommand{\thesisSupervisor}{Prof. Dr. Lamya Abdullah}
-\newcommand{\thesisSecondSupervisor}{Dr. Peter Manshausen}
+\newcommand{\thesisSupervisor}{}
+\newcommand{\thesisSecondSupervisor}{}
 \newcommand{\thesisSubmissionDate}{29.07.2026}
 
 % Place and date printed under the declaration of authorship. The Provadis template
-% requires BOTH in every case ("In jedem Fall muss unter dem Text der ehrenwörtlichen
-% Erklärung Ort und Datum angegeben werden"); the signature itself is optional for the
-% HVS upload. >>> SET \thesisPlace TO THE CITY YOU SIGN IN BEFORE SUBMITTING. <<<
-\newcommand{\thesisPlace}{Forst (Lausitz)}
+% requires BOTH in the handed-in version ("In jedem Fall muss unter dem Text der
+% ehrenwörtlichen Erklärung Ort und Datum angegeben werden"); the signature itself is
+% optional for the HVS upload. The place is set in metadata-private.tex, so the public
+% build prints the date alone.
+\newcommand{\thesisPlace}{}
 \newcommand{\thesisDeclarationDate}{\thesisSubmissionDate}
+
+% Personal data for the handed-in version. \SUBMISSIONBUILD is defined by
+% scripts/build.ps1 -Submission; without it the redacted values above stand.
+\ifdefined\SUBMISSIONBUILD
+  \IfFileExists{metadata-private.tex}{%
+    \input{metadata-private}%
+  }{%
+    \PackageWarningNoLine{thesis}{Submission build requested but metadata-private.tex
+      is missing - the title page will be built WITHOUT the personal data}%
+  }
+\fi
 
 % PDF document metadata (hyperref is loaded in settings.tex, before this file).
 \hypersetup{
