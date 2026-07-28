@@ -25,10 +25,31 @@
 \usepackage{caption}
 \usepackage{subcaption}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta,decorations.pathreplacing,calc}
+\usetikzlibrary{arrows.meta,decorations.pathreplacing,calc,backgrounds}
 \usepackage[nohyperlinks]{acronym}
 % Used to bind the signed Telekom Steckbrief into the front matter (see main.tex).
 \usepackage{pdfpages}
+
+% Reference from the running text into the KI-Verzeichnis, as required by §5.1 of the
+% Provadis "Regelungen zum Wissenschaftlichen Arbeiten mit Hilfe von Künstlicher
+% Intelligenz". \kiref{Claude Opus 5/3} marks verbatim adoption, \kirefcf{...} marks a
+% passage that was only developed from the AI output ("vgl.").
+\newcommand{\kiref}[1]{\footnote{#1 --- see the Declaration on the Use of Artificial
+  Intelligence, p.~\pageref{chap:ai-usage}.}}
+\newcommand{\kirefcf}[1]{\footnote{cf.\ #1 --- see the Declaration on the Use of
+  Artificial Intelligence, p.~\pageref{chap:ai-usage}.}}
+
+% Loud placeholder for the verbatim opening prompts that still have to be pasted into
+% the KI-Verzeichnis. Impossible to miss in the compiled PDF.
+\newcommand{\promptTODO}[1]{\textbf{[\,PROMPT #1 --- TO BE INSERTED\,]}}
+
+% The back matter reaches seven-character Roman page numbers (e.g. XXXVIII), which
+% overflow the default 1.55em page-number field of the contents lists. Affects the
+% lists only; margins, typeface and page numbering itself are unchanged.
+\makeatletter
+\renewcommand{\@pnumwidth}{4em}
+\renewcommand{\@tocrmarg}{5em}
+\makeatother
 \usepackage[
   backend=biber,
   style=ieee,
@@ -56,6 +77,24 @@
 \onehalfspacing
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.7em}
+
+% Heading sizes and the space above a chapter title.
+%
+% §3.2.4 of the Anforderungen recommends Times New Roman 14, Arial 13 or Verdana 12
+% for chapter headings. Headings are set in the helvet sans (the Arial equivalent),
+% so the applicable figure is 13pt. Because helvet is loaded with scaled=0.90, a
+% nominal size renders at 0.90 of its value, hence 14.4pt nominal for 13.0pt
+% effective. The lower levels step down from there so the hierarchy is preserved;
+% \sffamily is repeated because \setkomafont replaces the whole declaration and
+% would otherwise fall back to the serif body face.
+\setkomafont{chapter}{\sffamily\bfseries\fontsize{14.4}{17.3}\selectfont}
+\setkomafont{section}{\sffamily\bfseries\fontsize{13.2}{15.8}\selectfont}
+\setkomafont{subsection}{\sffamily\bfseries\fontsize{12}{14.4}\selectfont}
+%
+% scrreprt defaults the space above a chapter title to 3.3\baselineskip+\parskip.
+% The Anforderungen say nothing about it, and with \onehalfspacing the default
+% leaves roughly 2.8cm of white space below an already 3cm top margin.
+\RedeclareSectionCommand[beforeskip=-1.5\baselineskip,afterskip=.8\baselineskip]{chapter}
 
 % Breakable underscore for long snake_case feature identifiers in narrow table cells.
 \newcommand{\su}{\_\allowbreak}

@@ -1,38 +1,28 @@
 \chapter*{Abstract}
 \addcontentsline{toc}{chapter}{Abstract}
 
-Modern software depends heavily on open-source components, yet downstream
-projects remain exposed when an upstream repository quietly stops being
-maintained. This thesis asks to what extent publicly observable repository
-health and maintenance indicators can predict whether an open-source dependency
-becomes inactive within a twelve-month horizon, and how the resulting risk score
-can support risk-based dependency triage. Following a Design Science Research
-approach, the work develops and evaluates OSS Risk Radar, an artifact that
-constructs a leakage-controlled historical dataset from GH Archive event data
-and public package metadata, engineers observation-time features describing
-activity, responsiveness, and how narrowly a project's work rests on individual
-contributors, and trains calibrated inactivity-risk models.
+Modern software depends on open-source components, but downstream projects face
+maintenance and security exposure when an upstream repository becomes inactive. This
+thesis investigates whether public repository health and maintenance indicators
+predict inactivity within twelve months and support dependency triage. Following
+a Design Science Research-oriented approach, it develops OSS Risk Radar. The
+artifact reconstructs a leakage-controlled historical dataset from GH Archive
+and public package metadata, computes observation-time activity and maintenance
+features, and trains calibrated inactivity-risk models.
 
-On a repository foundation dataset of 5{,}000 projects and 50{,}000 quarterly
-observation snapshots, a gradient-boosted model reaches a held-out ROC-AUC of
-\(0.958\) --- the probability that an inactive repository is ranked above an
-active one --- with a Brier score of \(0.078\), and its skill largely persists
-under a repository-disjoint split (\(0.950\)). This aggregate figure is, however, a poor
-measure of what the model contributes: a trivial rule that ranks repositories by
-days since their last commit reaches \(0.957\) on the same rows, against
-\(0.974\) for the model. The learned model earns its complexity on the
-repositories that are still active at the observation time --- the subgroup for
-which an early warning is most decision-relevant --- where it attains \(0.905\)
-against \(0.844\) for the best trivial rule. The thesis therefore reports both a
-null result on the aggregate comparison and a positive result on early decline.
-Excluding bot accounts from the commit and contributor signals is shown to be
-worth its cost by retraining the model on the unfiltered signals and comparing
-both against the same clean labels, and security-practice signals are kept as
-parallel triage context rather than as predictors of inactivity. A
-practical demonstrator applies the deployed model per repository to the
-dependency repositories of a real project, producing a ranked triage view in
-which each repository's calibrated score is accompanied by an operational
-evidence-support measure. The demonstrator shows how the score can be integrated
-into a dependency-triage workflow rather than establishing that it improves
-triage decisions. The score is positioned as a decision-support signal for
-prioritizing dependency review, not as a verdict on abandonment.
+The foundation dataset contains 5{,}000 repositories and 50{,}000 quarterly
+snapshots. Full-history XGBoost reaches held-out ROC-AUC \(0.958\), the
+probability that an inactive repository ranks above an active one, with Brier
+score \(0.078\). A repository-disjoint split reaches \(0.950\). On rows where
+commit recency is defined, that trivial rule reaches \(0.957\), compared with
+\(0.974\) for XGBoost on the same rows. Among repositories still active at the
+observation date, XGBoost reaches \(0.905\) against \(0.844\) for the best
+trivial rule. Most aggregate discrimination is therefore available from recency,
+while the learned model adds more for early decline.
+
+Security-practice signals remain separate triage context and do not enter the
+inactivity model. A practical demonstrator applies the staged models per
+repository to a real project's dependencies and produces a ranked view with
+evidence support. It demonstrates technical integration, not improved analyst
+decisions. Repository inactivity remains an operational proxy for elevated
+maintenance risk, not proof of abandonment or software insecurity.

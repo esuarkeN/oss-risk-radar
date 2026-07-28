@@ -1,18 +1,59 @@
 \chapter{Introduction}
 \label{chap:introduction}
 
+This chapter motivates repository maintenance as a dependency-security concern,
+states the research question, and defines the scope and contributions of the
+thesis.
+
 \section{Motivation and Problem Statement}
 \label{sec:intro-motivation}
 
-Modern software systems are not developed in isolation, but are commonly assembled from first-party code, third-party components, and open-source software dependencies. In this thesis, open-source software is understood as software distributed under a license that complies with the Open Source Definition, which includes rights such as use, modification, and redistribution \cite{osiOpenSourceDefinition}.
+Modern software systems combine first-party code with third-party and
+open-source dependencies. Studies across Java, Python, Ruby, and npm describe
+applications that depend substantially on externally maintained packages,
+including transitive dependencies
+\cite{prana2021outsight,miller2025abandonment}. Here, open-source software means
+software distributed under a license that complies with the Open Source
+Definition \cite{osiOpenSourceDefinition}; Section~\ref{sec:background-supply-chain-security}
+gives the licensing criteria.
 
-Depending on such components moves part of the maintenance burden to people the downstream project does not employ. This is what makes upstream maintenance a security concern rather than merely an inconvenience: when a vulnerability is disclosed in a component that is still maintained, the normal response is a version bump. When the same vulnerability is disclosed in a component whose maintainers have stopped working on it, no upstream fix arrives, and the downstream project is left with the expensive options --- forking the project, vendoring a private patch, or migrating to a different component --- often under time pressure. An unmaintained dependency therefore accumulates unpatched exposure with no clear mitigation path, which is why secure-development guidance treats dependency upkeep as a supply-chain control in its own right: the NIST Secure Software Development Framework includes the acquisition and maintenance of well-secured third-party and open-source components as part of secure development practice \cite{souppaya2022ssdf}, and the SLSA framework addresses supply-chain integrity through artifacts, build processes, provenance, and related security controls \cite{slsa2025spec}.
+Depending on external components transfers part of the maintenance burden to
+people outside the downstream project. If maintainers no longer address a
+disclosed vulnerability, the downstream project must fork the component, vendor
+a private patch, or migrate instead of applying a normal version update. Until
+then, the dependency remains exposed without an upstream fix.
+Secure-development guidance therefore treats
+dependency upkeep as a supply-chain control. The NIST Secure Software
+Development Framework includes acquiring and maintaining well-secured
+third-party and open-source components \cite{souppaya2022ssdf}. SLSA addresses
+artifact and build-process integrity and provenance
+\cite{slsa2025spec}.\kiref{Claude Opus 5/1}
 
-The practical relevance is visible in both empirical studies and real-world incidents. Miller et al. found that dependency abandonment is common among widely used npm packages while downstream projects remain exposed through indirect dependencies \cite{miller2025abandonment}, and that affected developers often lack clear response strategies \cite{miller2023wingingit}. Delayed maintenance also prolongs security exposure: across dependencies in 450 Java, Python, and Ruby projects, many vulnerabilities persisted for months before resolution \cite{prana2021outsight}.
+Miller et al. found that \(15\%\) of widely used npm packages became abandoned
+within six years. Only \(18\%\) of the exposed downstream projects removed the
+abandoned dependency \cite{miller2025abandonment}. Their earlier interview study
+found that affected developers often lack clear response strategies
+\cite{miller2023wingingit}. Delayed maintenance also prolongs security exposure.
+Across dependencies in 450 Java, Python, and Ruby projects, publicly known
+vulnerabilities persisted throughout a one-year observation period at mean rates
+of \(78.4\%\), \(97.7\%\), and \(66.4\%\), respectively. Resolved
+vulnerabilities took three to five months \cite{prana2021outsight}.\kiref{Claude Opus 5/10}
 
-Real-world incidents illustrate the impact: the 2016 \texttt{left-pad} unpublishing disrupted many directly and transitively dependent projects \cite{npm2016leftpad}; the 2017 Equifax breach exploited an unpatched Apache Struts vulnerability, settling for up to \$700 million \cite{equifax2017incident,ftc2019equifax}; and the XZ Utils backdoor showed maintainer trust itself becoming an attack surface through social-engineering takeover \cite{openssf2024xzalert}.
+Several incidents illustrate the consequences. The 2016 \texttt{left-pad}
+unpublishing disrupted many direct and transitive dependants
+\cite{npm2016leftpad}. The 2017 Equifax breach exploited an Apache Struts
+vulnerability whose available patch had not been applied, and Equifax later
+agreed to a settlement of up to
+\$700 million \cite{equifax2017incident,ftc2019equifax}. The XZ Utils backdoor
+made maintainer trust an attack surface through a social-engineering takeover
+\cite{openssf2024xzalert}.
 
-These examples do not imply that every inactive repository is insecure or abandoned --- a project may be stable, paused, or maintained through channels not visible in public data --- but they show that dependency health and responsiveness matter for secure supply chains. This thesis therefore treats repository inactivity not as a definitive indicator of project death but as an operational proxy for elevated maintenance risk, and asks whether publicly observable signals can estimate this risk early enough to support dependency triage.
+An inactive repository is not necessarily insecure or abandoned; a project may
+be stable, paused, or maintained through channels not visible in public data.
+The examples nevertheless show how dependency maintenance can affect downstream
+security exposure. This thesis uses repository inactivity as an operational
+proxy for elevated maintenance risk and examines whether public signals can
+estimate that risk over a 12-month horizon.
 
 \section{Research Question and Objectives}
 \label{sec:intro-research-question}
@@ -34,25 +75,72 @@ To answer this research question, the thesis pursues the following objectives:
     \item Demonstrate how the trained model can be applied per repository to a set of dependency repositories to support risk-based triage.
 \end{enumerate}
 
-The research follows a Design Science Research approach, developing and evaluating an artifact --- an inactivity-risk scoring workflow for open-source dependencies --- whose empirical part tests whether it produces useful predictive signals and whose \emph{demonstrator} shows integration into dependency monitoring \cite{hevner2004design,peffers2007design}. The term \emph{demonstrator} is used throughout in its Design Science Research sense of a worked application of the artifact to a real case: Chapter~\ref{chap:demonstrator} applies the deployed model to the dependency repositories of an existing open-source project and reports the resulting ranked triage view. It demonstrates how the score behaves outside the sampled evaluation slice; it is not a second measurement of predictive accuracy, which Chapter~\ref{chap:evaluation} provides.
+The research follows a Design Science Research-oriented approach and develops an
+inactivity-risk scoring workflow for open-source dependencies
+\cite{hevner2004design,peffers2007design}. The empirical evaluation measures
+discrimination and calibration. The \emph{demonstrator} is a worked application
+of the artifact to a real case: Chapter~\ref{chap:demonstrator} applies the
+trained model to the dependency repositories of an existing open-source project.
+It shows integration into dependency monitoring and behavior outside the sampled
+evaluation set, while
+Chapter~\ref{chap:evaluation} provides the measurement of predictive
+accuracy. This distinction defines the role of the \emph{demonstrator}
+throughout the thesis.\kiref{Claude Opus 5/1}
 
 \section{Scope and Assumptions}
 \label{sec:intro-scope}
 
-The scope is limited to open-source dependencies whose source repositories and package metadata are publicly observable and that can be associated with an open-source license, matched via GitHub's SPDX-based license information \cite{githubRestLicenses}. It does not cover private repositories, closed-source vendor components, or dependencies whose source repository cannot be mapped with sufficient confidence.
+The scope covers dependencies with publicly observable source repositories and
+package metadata that can be associated with an open-source license through
+GitHub's SPDX-based license information \cite{githubRestLicenses}. It excludes
+private repositories, closed-source vendor components, and packages that cannot
+be mapped to a source repository (Section~\ref{sec:method-data-sources}).
 
-A second restriction is the hosting platform: this thesis covers open-source projects developed on \emph{GitHub} only. Both the training data and the observation-time features are reconstructed from the public GitHub event stream (Section~\ref{sec:method-data-sources}), so projects hosted elsewhere are outside the scope --- among them projects on competing platforms such as GitLab or Codeberg, projects on self-hosted forges, and projects whose development happens over mailing lists rather than in a hosted issue and pull-request workflow, of which the Linux kernel is the most prominent example. This excludes a substantial and not randomly selected part of the open-source ecosystem, in particular older and infrastructure-level projects, and it is the reason the results are not claimed to transfer to open-source software in general (Section~\ref{sec:validity-external}). A GitHub mirror of a project developed elsewhere is a further edge case, because the mirror can look inactive while the project is not.
+The thesis covers only projects developed on \emph{GitHub}. Both training data
+and observation-time features are reconstructed from its public event stream
+(Section~\ref{sec:method-data-sources}). Projects on GitLab, Codeberg,
+self-hosted forges, or mailing-list workflows such as that of the Linux kernel
+are outside the scope. This non-random exclusion limits generalization to
+open-source software as a whole (Section~\ref{sec:validity-external}). A GitHub
+mirror can also appear inactive although development continues
+elsewhere.\kiref{Claude Opus 5/1}
 
-The prediction target is repository inactivity within \( [t, t + 12\ \text{months}] \). Rather than declaring a repository inactive from a single revision-activity threshold, the thesis derives the label from four complementary activity checks over the horizon --- human commit activity, active contributors, releases or package publications, and merged pull requests --- of which at least two must be satisfied for the repository to count as maintained (Section~\ref{sec:method-definitions}), building on the use of revision activity as a survival signal \cite{robinson2022survival}. Merged pull requests enter the label as a proxy for maintainer interaction; issue activity and responsiveness signals, by contrast, are used only as predictors and are interpreted cautiously because bot responses can distort them \cite{hasan2023firstresponse}.
+The prediction target is repository inactivity within
+\( [t, t + 12\ \text{months}] \). The label uses four activity checks: human
+commit activity, active contributors, releases or package publications, and
+merged pull requests. At least two must hold for the repository to count as
+maintained (Section~\ref{sec:method-definitions}), building on revision activity
+as a survival signal \cite{robinson2022survival}. Merged pull requests serve as a
+proxy for maintainer interaction. Issue activity and responsiveness are
+predictors only and require caution because bots can distort response measures
+\cite{hasan2023firstresponse}.
 
-The thesis assumes publicly observable signals provide useful but incomplete evidence about future inactivity, not a full explanation of sustainability --- cross-project health indicators can mean different things depending on context \cite{yehudi2023contextfree} --- so the model output is interpreted as a triage aid rather than an automated decision system.
+Public signals provide incomplete evidence about future inactivity, and health
+indicators can have different meanings across projects
+\cite{yehudi2023contextfree}. The model output therefore supports triage but does
+not automate the decision.
 
 \section{Contributions}
 \label{sec:intro-contributions}
 
-Realizing the objectives above, this thesis contributes an operational 12-month inactivity-risk label and a reproducible construction workflow for it; an empirical evaluation of whether public repository health and maintenance indicators support machine-learning-based inactivity prediction, benchmarked against simple baselines on both discrimination and probability calibration, with security-practice signals kept as complementary triage context rather than as inactivity predictors; and a per-repository demonstrator that turns the score into a ranked triage view. The goal is not to replace expert judgement but to give software teams a measurable, reproducible signal for prioritizing which dependencies deserve closer attention.
+The thesis makes three contributions:
+
+\begin{enumerate}
+    \item an operational 12-month inactivity-risk label and a reproducible workflow for constructing it;
+    \item an empirical evaluation of inactivity prediction from public repository health and maintenance indicators, benchmarked against simple baselines on discrimination and probability calibration, with security-practice signals kept outside the inactivity model as complementary triage context;
+    \item a per-repository demonstrator that turns the score into a ranked triage view.
+\end{enumerate}
+
+The score provides a reproducible way to prioritize dependencies for expert
+review.
 
 \section{Structure of the Thesis}
 \label{sec:intro-structure}
 
-The remainder of this thesis is structured as follows. Chapters~\ref{chap:background} and~\ref{chap:related-work} cover the background and related work, positioning the artifact relative to prior operationalizations of inactivity, health metrics, and security-practice indicators. Chapter~\ref{chap:methodology} presents the research design, inactivity label, dataset construction, features, models, and evaluation strategy, and Chapter~\ref{chap:implementation} the technical implementation. Chapter~\ref{chap:evaluation} reports and discusses the empirical results; Chapter~\ref{chap:demonstrator} applies the model per repository as a ranked triage view. Chapters~\ref{chap:validity} and~\ref{chap:conclusion} consolidate the threats to validity and conclude with future work.
+Chapters~\ref{chap:background} and~\ref{chap:related-work} provide the conceptual
+and empirical background. Chapters~\ref{chap:methodology}
+and~\ref{chap:implementation} describe the method and its implementation.
+Chapter~\ref{chap:evaluation} evaluates the models, and
+Chapter~\ref{chap:demonstrator} applies them in a ranked triage view.
+Chapters~\ref{chap:validity} and~\ref{chap:conclusion} discuss validity and future
+work.

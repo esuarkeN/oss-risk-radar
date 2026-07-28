@@ -1,12 +1,19 @@
 \chapter{Implementation}
 \label{chap:implementation}
 
-This chapter describes how the methodological design of OSS Risk Radar was realized in software. It concentrates on the parts that bear on the research question: the overall system architecture, the leakage-controlled historical dataset builder, the two dataset-construction corrections that emerged from the design cycle, and the instrumentation that supports the reported evaluation. Engineering detail that is needed only to reproduce or operate the artifact --- the language and technology choices, the dataset-builder module layout, the model configurations, the artifact format, and the scoring service, backend, frontend, and deployment --- is collected in Appendix~\ref{appendix:impl-detail} so that it does not crowd out the scientifically relevant decisions. The artifact remains reproducible and auditable, consistent with the Design Science Research framing of the thesis \cite{hevner2004design,peffers2007design}.
+This chapter describes the system architecture, historical dataset builder,
+design-cycle corrections, and evaluation instrumentation. Appendices~\ref{appendix:impl-detail}
+to~\ref{appendix:impl-eval-instruments} document technology choices, module
+layout, model configurations, artifact format, runtime services, and deployment.
+This separation keeps the implementation reproducible and auditable under the
+Design Science Research framing \cite{hevner2004design,peffers2007design}.
 
 \section{System Architecture Overview}
 \label{sec:impl-architecture}
 
-Three properties of the system bear on the research question. The remaining engineering detail --- the component inventory and the language choices --- is deferred to Appendix~\ref{appendix:impl-detail} and Appendix~\ref{sec:impl-technology}.
+Figure~\ref{fig:architecture} shows the organization. Three properties affect the
+research results; Appendix~\ref{appendix:impl-detail} gives the component
+inventory and language choices.
 
 \begin{enumerate}
   \item \textbf{One shared definition of every feature.} The training code and the runtime scoring service read the same versioned feature definitions. A feature computed one way during training and another way at scoring time would silently invalidate every reported metric, because the model would be evaluated on one function of the data and deployed on another.
@@ -16,54 +23,211 @@ Three properties of the system bear on the research question. The remaining engi
   \item \textbf{The unit of analysis is a single repository,} scored independently; the dependency inventory to grade is an external input, for the reasons set out in Section~\ref{sec:background-supply-chain-security}.
 \end{enumerate}
 
-The source code of the artifact is public. All paths given in this chapter are relative to the repository root, and the exact revision the reported results were produced from is pinned in Appendix~\ref{sec:method-reproducibility} together with the commands that rebuild the dataset and retrain the models \cite{ossRiskRadarReadme}.
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  comp/.style={draw,black!55,rounded corners=1pt,align=center,inner sep=3.2pt,minimum height=7.4mm,text width=27mm,fill=black!8},
+  gate/.style={draw,black!70,rounded corners=1pt,align=center,inner sep=3.2pt,minimum height=7.4mm,text width=30mm,fill=black!18},
+  plane/.style={draw,black!30,dashed,rounded corners=2pt},
+  ar/.style={->,>=Stealth,black!65,line width=0.45pt}
+]
+  % ---------------- training plane ----------------
+  \node[comp] (builder) at (0,0)    {dataset builder\\{\scriptsize Python}};
+  \node[comp] (nb)      at (3.9,0)  {training notebook\\{\scriptsize model fitting}};
+  \node[comp] (artf)    at (7.8,0)  {versioned\\model artifacts};
+  \draw[ar] (builder) -- (nb);
+  \draw[ar] (nb) -- (artf);
+
+  \begin{scope}[on background layer]
+    \draw[plane] (-1.65,-0.75) rectangle (9.45,0.78);
+  \end{scope}
+  \node[font=\scriptsize\itshape,black!55,anchor=west] at (-1.6,1.12) {training plane --- run offline, never during application use};
+
+  % ---------------- promotion gate ----------------
+  \node[gate] (gate) at (3.9,-2.1) {staging gate\\{\scriptsize ROC-AUC must not drop}};
+  \draw[ar] (artf) |- (gate);
+  \node[gate] (bundle) at (-0.55,-2.1) {staged bundle\\{\scriptsize + feature cache}};
+  \draw[ar] (gate) -- (bundle);
+
+  % ---------------- runtime plane ----------------
+  \node[comp] (score) at (-0.55,-4.2) {scoring service\\{\scriptsize Python / FastAPI}};
+  \node[comp] (api)   at (3.9,-4.2)  {backend API\\{\scriptsize Go, job queue}};
+  \node[comp] (web)   at (8.0,-4.2)  {analyst frontend\\{\scriptsize TypeScript / Next.js}};
+  \draw[ar] (bundle) -- (score);
+  \draw[ar] (api) -- (score);
+  \draw[ar] (web) -- (api);
+
+  \begin{scope}[on background layer]
+    \draw[plane] (-2.15,-4.95) rectangle (9.65,-3.42);
+  \end{scope}
+  \node[font=\scriptsize\itshape,black!55,anchor=west] at (-2.1,-5.35) {runtime plane --- loads model files, never fits them};
+
+  % ---------------- shared feature definitions ----------------
+  \node[draw,black!70,rounded corners=1pt,fill=white,align=center,inner sep=3.2pt,
+        text width=30mm,font=\scriptsize] (fdef) at (11.7,-2.1)
+        {versioned feature\\definitions};
+  \draw[ar,black!75] (fdef) |- (builder);
+  \draw[ar,black!75] (fdef) |- (score);
+  \node[font=\scriptsize\itshape,black!60,anchor=north,align=center,text width=32mm]
+    at (11.7,-2.95) {one definition read by both planes};
+\end{tikzpicture}
+\caption[System architecture of OSS Risk Radar]{System architecture. The artifact
+separates into two planes that never overlap in responsibility. In the
+\emph{training plane} the dataset builder produces the historical table, the
+notebook fits the models, and the run is serialized into versioned artifacts. Those
+artifacts reach the \emph{runtime plane} only through the staging gate, which
+promotes a candidate bundle into the staged bundle only if it does not regress
+against the currently promoted baseline (Section~\ref{sec:impl-deployment}); the
+runtime loads these files and never fits a model. The element crossing both planes
+is the versioned feature definition set: the builder and the scoring service
+compute every feature from the same definitions, which is what makes a metric
+measured in the training plane meaningful for a score produced in the runtime one.
+The component inventory and language choices are given in
+Appendix~\ref{appendix:impl-detail} (Table~\ref{tab:impl-components}).}
+\label{fig:architecture}
+\end{figure}
+
+The source code is public, and all paths are relative to the repository root.
+Appendix~\ref{sec:method-reproducibility} pins the evaluated revision and gives
+the rebuild and training commands \cite{ossRiskRadarReadme}.
 
 \section{Historical Dataset Builder}
 \label{sec:impl-dataset-builder}
 
-The historical dataset builder is implemented as a Python package under \texttt{app\sslash training\sslash maintenance\_dataset}. It transforms a repository seed and raw GH Archive event files into an inspectable, leakage-controlled training dataset, and is divided into focused modules for ingestion, event parsing, feature computation, and label computation so that each stage can be tested independently; the module layout is documented in Appendix~\ref{sec:impl-dataset-modules}, and the dataset-quality report it emits in Appendix~\ref{sec:impl-dataset-quality}.
+The historical builder is a Python package under
+\texttt{app\sslash training\sslash maintenance\_dataset}. It converts a
+repository seed and GH Archive files into an inspectable, leakage-controlled
+dataset. Separate modules handle ingestion, event parsing, features, and labels
+for independent testing. Appendix~\ref{sec:impl-dataset-modules} documents the
+layout, and Appendix~\ref{sec:impl-dataset-quality} the quality report.
 
-The separation between observation-time and future-window computation is enforced in code. Each snapshot fixes its feature window to the year before \(t\), a previous window to the year before that, and a label window of twelve months after \(t\). Feature computation only consults events at or before the observation date, and label computation only consults events strictly after it. The label implementation reflects the two-of-four maintenance rule of Section~\ref{sec:method-definitions} --- this thesis's own operational definition, not an external standard --- directly: it counts the number of distinct months with human commits, the number of distinct future contributors, the number of future releases or published package versions, and the number of merged pull requests, and marks a repository as maintained only if it is not archived or deleted within the horizon and at least two of these conditions are met. When the dataset-wide archive coverage horizon does not span the full label window, the row is marked with a \texttt{future\_window\_incomplete} signal and left unlabeled, so that missing data is never silently interpreted as inactivity. The granularity at which this coverage horizon is measured was itself the subject of a correction, discussed in Section~\ref{sec:impl-label-completeness}.
+The code enforces the observation-time/future-window boundary. Each snapshot has
+a feature window for the year before \(t\), a previous window for the preceding
+year, and a label window for the twelve months after \(t\). Features use events
+at or before \(t\); labels use events strictly after it.
 
-Human-versus-bot attribution is applied during both feature and label computation. Commit and contributor counts use an actor filter that excludes automated accounts, so that bot-driven activity does not inflate maintenance evidence. This is consistent with the cautious treatment of responsiveness signals motivated in the methodology, where automated responses are known to distort interaction metrics \cite{hasan2023firstresponse}.
+The label implements the thesis-specific two-of-four rule from
+Section~\ref{sec:method-definitions}. It counts distinct human-commit months,
+future contributors, releases or package publications, and merged pull requests.
+A repository is maintained only when it is not archived or deleted within the
+horizon and at least two conditions hold. If the dataset-wide archive horizon
+does not cover the full label window, \texttt{future\_window\_incomplete} is set
+and the row remains unlabeled. Section~\ref{sec:impl-label-completeness}
+describes a correction to this coverage horizon.
+
+Human-versus-bot attribution is applied during both feature and label computation. Commit and contributor counts use an actor filter that excludes automated accounts, so that bot-driven activity does not inflate maintenance evidence. The same reasoning motivates the cautious treatment of responsiveness signals in the methodology, where automated responses are known to distort interaction metrics \cite{hasan2023firstresponse}; those features are reconstructed proxies and are not bot-filtered (Section~\ref{sec:method-feature-engineering}).
 
 The export step produces two outputs with different purposes. The training snapshot file is the dataset itself --- one row per observation snapshot, in the table layout the training notebook already expects (Section~\ref{sec:method-dataset-construction}). The repository feature cache stores, for each repository, the most recent observation-time feature row, with diagnostic-only fields such as \texttt{repo\_archived\_at\_obs} removed. This cache is what later allows the runtime backend to score a previously seen repository in the richer full-history regime rather than the cold-start regime.
 
-Two design-cycle refinements of the builder are worth recording. First, the feature set was revised after the formative review to replace raw counts that were poor point-in-time predictors (such as an absolute open-issue count, which large healthy projects also carry) with relational and trend-based variables, and to resolve a single primary package-to-repository link per repository so that mirror repositories do not make an actively developed project look inactive; the details are given in Appendix~\ref{sec:impl-feature-refinement}. Second, and more consequential for the labels, is the completeness correction described next.
+The formative review produced two builder refinements. Raw counts such as
+absolute open issues, which can also be high for healthy projects, were replaced
+with relational and trend-based variables. The builder also resolves one primary
+package-to-repository link so mirrors do not make an active project appear
+inactive (Appendix~\ref{sec:impl-feature-refinement}). The second refinement
+corrected label completeness.
 
 \label{sec:impl-label-completeness}
-\textbf{The label-completeness correction.} A further design-cycle iteration corrected how label completeness is determined. The prediction objective, the label window \((t, t + 12\text{ months}]\), and the two-of-four maintenance rule are unchanged; the iteration concerns only which observation rows are admitted as labeled examples, and is therefore a dataset-construction correction rather than a change of the model or its target.
+\textbf{The label-completeness correction.} This correction changes only which
+rows qualify as labeled examples. The prediction objective, window
+\((t, t + 12\text{ months}]\), two-of-four rule, model, and target are unchanged.
 
-The methodology requires that a row be labeled only when the historical data actually covers its full future window, precisely because the absence of future activity is meaningful only when the future period is observed (Section~\ref{sec:method-leakage-prevention}). The initial implementation enforced this using each repository's own last observed event as its coverage end. This proxy is biased in a way that is correlated with the outcome: a repository that simply falls quiet has, by definition, no late events, so its coverage end is early and its later observation rows were discarded as ``incomplete'', even when the archive fully covered the corresponding window. The very repositories that exhibit the inactivity the model is meant to detect were thus systematically under-represented among the labeled positives.
+A row is labeled only when its future window is fully covered
+(Section~\ref{sec:method-leakage-prevention}). The initial implementation used
+each repository's last event as its coverage end. This proxy is correlated with
+the outcome: a repository that falls quiet has no late events, so later snapshots
+were discarded as ``incomplete'' even when the archive covered their windows.
+Inactive repositories were therefore under-represented among labeled positives.
 
-The corrected implementation gates completeness on a dataset-wide archive coverage horizon rather than on any single repository's last event. This horizon is the latest event observed across all repositories in the run, or an explicit cutoff supplied through the new \texttt{-{}-coverage-end} option, which the orchestration script defaults to the latest day of complete hourly GH Archive coverage. A repository that is silent but still inside this horizon is now labeled inactive, as intended, while rows whose window genuinely extends past the available data remain unlabeled. For transparency, a row whose own last event precedes the horizon but which remains labelable is annotated with a \texttt{repo\_silent\_before\_horizon} diagnostic signal, so that the share of rescued silent repositories can be reported as part of the dataset-quality summary. This change aligns the implementation with the leakage-prevention rule already stated in the methodology and removes a selection effect that previously depressed the labeled inactive population.
+The corrected gate uses a dataset-wide archive horizon: either the latest event
+across all repositories or the cutoff supplied by
+\texttt{-{}-coverage-end}. The orchestration script defaults to the latest day
+of complete hourly GH Archive coverage. Silent repositories inside the horizon
+can now be labeled inactive; rows extending beyond available data remain
+unlabeled. The \texttt{repo\_silent\_before\_horizon} diagnostic identifies
+labelable rows whose own last event precedes the horizon, making the rescued
+share inspectable in the quality summary. This aligns the implementation with
+the leakage rule and removes the selection effect that reduced the labeled
+inactive population.
 
 \section{Model Training and Evaluation Instrumentation}
 \label{sec:impl-models}
 
-OSS Risk Radar implements three learned model families for both the full-history and the cold-start regimes: Logistic Regression and a feedforward neural network, both implemented from first principles so that the artifact stays dependency-light and fully inspectable, and XGBoost through its established library. All three share the same dataset, the same time-aware split, and the same calibration and evaluation code; the exact model configurations are documented in Appendix~\ref{sec:impl-from-scratch} and the artifact format in Appendix~\ref{sec:impl-artifacts}.
+Both regimes implement Logistic Regression and a feedforward neural network from
+first principles, and XGBoost through its library \cite{chen2016xgboost}. The
+first two remain dependency-light and inspectable. All families share the
+dataset, time-aware split, calibration, and evaluation code.
+Appendix~\ref{sec:impl-from-scratch} gives the configurations, and
+Appendix~\ref{sec:impl-artifacts} the artifact format.
 
-All three families produce raw probabilities that are post-processed identically. The raw output of a classifier is not a reliable probability: a model trained to separate the classes may order repositories correctly while systematically over- or under-stating how likely inactivity is, which is precisely the failure that calibration measures (Section~\ref{sec:background-ml-basics}). A separate calibration step therefore maps raw scores onto probabilities that match observed frequencies.
+All families use the same post-processing. A classifier may rank repositories
+correctly while over- or understating inactivity probability. A separate
+calibration step maps raw scores to observed frequencies
+(Section~\ref{sec:background-ml-basics}).
 
-The mapping used here is a \emph{histogram} (binned) calibrator: validation predictions are grouped into probability bins, each bin's smoothed empirical inactivity rate is taken as the calibrated value for that bin, and the resulting mapping is forced to be monotonic. Binning is chosen over fitting a parametric curve --- logistic (Platt) scaling being the usual alternative --- for two reasons. It assumes no particular shape for the miscalibration, which matters because the three model families distort probabilities differently and a single functional form need not suit all of them; and it is trivially serializable as a short list of bin boundaries and rates, which allows the exact evaluated mapping to be stored in the model file and replayed at inference rather than refitted. The calibrator is fitted on the validation set, never on the test set, so the reported calibration metrics remain out-of-sample. At inference the calibrated probability is obtained by piecewise-linear interpolation between the populated bins rather than by a flat per-bin lookup. The distinction matters in practice: a flat lookup maps every raw score inside a bin onto the same calibrated value, which collapses distinct repositories onto identical risk scores and makes a ranked triage view degenerate. Interpolating between bin centres preserves the ordering of the raw scores while retaining the empirical calibration, and because the bin rates are monotone by construction the mapping remains monotone. A decision threshold is then selected on the calibrated validation predictions by maximizing the F1 score, and the evaluation module computes the reported metrics (Section~\ref{sec:method-evaluation-strategy}) on the test set.
+The \emph{histogram} calibrator groups validation predictions into probability
+bins, assigns each a smoothed empirical inactivity rate, and enforces a monotonic
+mapping. Unlike logistic (Platt) scaling, it assumes no parametric shape. This
+suits model families with different distortions. Its bin boundaries and rates
+are also stored in the model file and replayed at inference. The calibrator uses
+validation data, never test data, so calibration metrics remain
+out-of-sample.\kiref{Claude Opus 5/4}
 
-Two further instruments were added to that module, and it is worth saying why, because neither is standard practice and both add complexity. They are not precautions taken in the abstract: each answers a specific doubt that the first complete training run raised about whether the headline number meant what it appeared to mean.
+Inference uses piecewise-linear interpolation between populated bins. A flat
+lookup would collapse every raw score in a bin to one value and create ties in
+the ranked view. Interpolation preserves raw-score order and empirical
+calibration. Monotonic bin rates keep the mapping monotonic.
 
-The first doubt was that a single aggregate figure could be carried by an easy majority. The dataset oversamples dormant and archived repositories, so most test rows describe projects that had already fallen quiet before the observation date and whose outcome was largely settled in advance. A model could score well overall while being useless on the repositories that still looked healthy --- which are the only ones an early warning could help. The \emph{slice evaluation} therefore re-computes the metrics within subgroups (popularity tier, history regime, and above all the subset still active at \(t\)), so that a strong majority subgroup cannot mask a weak minority one. It is what turned the aggregate result into the split finding reported in Section~\ref{sec:results-baselines}.
+A decision threshold is then selected on the calibrated validation predictions by maximizing the F1 score, and the evaluation module computes the reported metrics (Section~\ref{sec:method-evaluation-strategy}) on the test set.
 
-The second doubt concerned the split itself. Because each repository contributes ten quarterly snapshots and the split is by date, the same repository appears in both the training and the test rows. A model might then score well by recognizing repositories rather than by generalizing to unseen ones. The \emph{repository-disjoint split} re-runs the whole evaluation with every snapshot of a repository confined to a single partition, bounding how much of the result that recurrence explains (Section~\ref{sec:results-robustness}).
+The first complete run motivated two additional evaluation instruments.
 
-Both instruments leave the serialized model files and the headline metrics unchanged --- they re-analyze the same predictions rather than altering the training --- and their mechanics are documented in Appendix~\ref{sec:impl-slice-evaluation} and Appendix~\ref{sec:impl-grouped-split}.
+Most test rows describe repositories already quiet before \(t\). The
+\emph{slice evaluation} checks whether this easy majority dominates the
+aggregate result. It recomputes metrics by popularity, history regime, and
+activity at \(t\), so a strong majority cannot hide a weak subgroup.
+Appendix~\ref{sec:impl-slice-evaluation} documents the included and excluded
+dimensions. Section~\ref{sec:results-baselines} reports the resulting split
+finding.
+
+The \emph{repository-disjoint split} addresses recurrence across the date-based
+split. It confines all ten quarterly snapshots of a repository to one partition,
+testing generalization to unseen repositories
+(Section~\ref{sec:results-robustness}).
+
+The two instruments differ in kind. The slice evaluation is a re-analysis: it
+re-scores the predictions of the already fitted model. The repository-disjoint
+split is a separate training run, which refits preprocessing, model, calibrator,
+and decision threshold on its own partitions and leaves its test rows untouched
+until every fitting decision is made. Neither changes the staged artifacts or the
+headline metrics, because the reported run keeps the date-based split.
+Appendix~\ref{appendix:impl-eval-instruments}
+documents their mechanics.\kiref{Claude Opus 5/4}
 
 \section{Reproducibility of the Evaluated Artifact}
 \label{sec:impl-deployment}
 
-Every figure reported in this thesis must be traceable to a fixed model, fitted on a fixed dataset, by a procedure that can be re-executed. Three mechanisms establish that.
+Three mechanisms make each result traceable to a fixed model and dataset.
 
-All training runs through a single notebook, \texttt{notebooks\sslash oss\sdash maintenance\sdash training\sdot ipynb}: it is both the workflow documented in this thesis and the only place model files are written, and \texttt{npm run ml:train} executes it non-interactively (Appendix~\ref{sec:impl-training-orchestration}). The reported results therefore come from the same code path a reader would run, rather than from a separate analysis script kept alongside it. Each run is then serialized to a self-describing artifact recording the ordered feature names, fitted parameters, calibration bins, decision threshold, feature-set version, and the hash of the dataset it was fitted on (Appendix~\ref{sec:impl-artifacts}); that hash is stated in Appendix~\ref{sec:method-reproducibility}, so a rebuilt dataset can be verified against the one evaluated here.
+All training runs through
+\texttt{notebooks\sslash oss\sdash maintenance\sdash training\sdot ipynb}, the
+only writer of model files. \texttt{npm run ml:train} executes it
+non-interactively (Appendix~\ref{sec:impl-training-orchestration}), so reported
+results use the documented path. Each artifact records ordered feature names,
+parameters, calibration bins, decision threshold, feature-set version, and
+dataset hash (Appendix~\ref{sec:impl-artifacts}). The hash in
+Appendix~\ref{sec:method-reproducibility} verifies rebuilt data against the
+evaluated dataset.
 
-Finally, artifacts are not deployed automatically. A staging command promotes a candidate bundle only if it passes a regression comparison against the currently deployed baseline: for each required model, ROC-AUC must not drop and the Brier score must not increase beyond a configured tolerance (Appendix~\ref{sec:impl-staging}). The model that produced the demonstrator output in Chapter~\ref{chap:demonstrator} is therefore verifiably the model evaluated in Chapter~\ref{chap:evaluation}.
+Artifacts are not deployed automatically. The staging command requires every
+model's ROC-AUC not to drop and its Brier score not to exceed the configured
+tolerance relative to the deployed baseline
+(Appendix~\ref{sec:impl-staging}). Dataset hash and model version link the
+demonstrator output in Chapter~\ref{chap:demonstrator} to the evaluated model in
+Chapter~\ref{chap:evaluation}.
 
-The runtime components that consume these artifacts --- the scoring service (Appendix~\ref{sec:impl-scoring-service}), the backend (Appendix~\ref{sec:impl-backend}), the frontend (Appendix~\ref{sec:impl-frontend}), and the deployment (Appendix~\ref{sec:appendix-impl-deployment}) --- are engineering context rather than part of the argument, and no result in this thesis depends on them.
-
-The next chapter reports and discusses the empirical results obtained with this implementation.
+The scoring service (Appendix~\ref{sec:impl-scoring-service}), backend
+(Appendix~\ref{sec:impl-backend}), frontend
+(Appendix~\ref{sec:impl-frontend}), and deployment
+(Appendix~\ref{sec:appendix-impl-deployment}) consume these artifacts. They
+provide engineering context; no reported result depends on them.

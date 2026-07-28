@@ -2,10 +2,10 @@
 \addcontentsline{toc}{chapter}{Glossary}
 \label{chap:glossary}
 
-This glossary explains the recurring technical terms of the thesis. Terms from
-machine-learning practice are defined in the sense in which they are standard in
-that literature; where this thesis defines a term of its own, the entry says so.
-The formal equations for the evaluation metrics are given in
+This glossary explains the recurring technical terms of the thesis.\kiref{Claude Opus 5/3}
+Terms from machine-learning practice are defined in the sense in which they are
+standard in that literature; where this thesis defines a term of its own, the entry
+says so. The formal equations for the evaluation metrics are given in
 Appendix~\ref{sec:method-metric-definitions}.
 
 {\renewcommand{\arraystretch}{1.35}
@@ -24,8 +24,15 @@ Ablation &
 An experiment that removes or disables one component of a system and retrains it,
 so that the difference in results measures what that component actually
 contributed. Used here for the human-actor filter
-(Section~\ref{sec:results-bot-ablation}) and for feature availability
+(Appendix~\ref{appendix:bot-ablation}) and for feature availability
 (Section~\ref{sec:method-prediction-regimes}). \\
+
+Average precision &
+Area under the precision-recall curve: a ranking measure that, unlike ROC-AUC,
+ignores correctly ranked negatives and so is not flattered by a large negative
+class. Its no-skill reference is the positive rate of the evaluated set, not
+\(0.5\), so it must be read alongside that rate
+(Section~\ref{sec:results-precision-recall}). \\
 
 Brier score &
 A measure of how accurate predicted \emph{probabilities} are: the mean squared
@@ -115,7 +122,9 @@ Slice evaluation &
 Re-computing the metrics separately within meaningful subgroups of the test set
 (for example by popularity, or restricted to repositories still active at the
 observation date), so that strong performance on a large subgroup cannot hide weak
-performance on a smaller one. \\
+performance on a smaller one. The word \emph{slice} is used in this thesis only for
+such a subgroup; the three data partitions are called the training, validation, and
+test sets. \\
 
 Two-of-four maintenance rule &
 This thesis's own operational definition of maintenance: a repository counts as

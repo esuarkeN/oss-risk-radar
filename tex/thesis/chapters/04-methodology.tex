@@ -1,49 +1,104 @@
 \chapter{Methodology}
 \label{chap:methodology}
 
-This chapter describes the methodological design used to answer the research question. The thesis follows a Design Science Research-oriented approach, because the work develops and evaluates an artifact for a practical software engineering problem: an inactivity-risk scoring workflow for open-source dependencies \cite{hevner2004design,peffers2007design}. The artifact is implemented as OSS Risk Radar, a decision-support tool for open-source dependency maintenance and software supply-chain risk triage \cite{ossRiskRadarReadme}.
+The methodology combines a Design Science Research-oriented artifact with
+historical supervised learning. This approach fits the development and
+evaluation of a software artifact for a practical engineering problem
+\cite{hevner2004design,peffers2007design}. The artifact, OSS Risk Radar, supports
+open-source dependency maintenance and software supply-chain risk triage
+\cite{ossRiskRadarReadme}.
 
-The methodology combines artifact construction with historical supervised learning. Instead of using manually assigned or synthetic labels, the training dataset is built from real open-source repositories --- GitHub-hosted throughout, for the reasons given in Section~\ref{sec:intro-scope} --- and from historical GitHub event data. For each repository, the dataset builder creates observation snapshots at defined points in time. Each snapshot contains only features that would have been available at or before the observation date \(t\). The label is derived from the following 12-month period \((t, t + 12\text{ months}]\). This design reflects the intended use case: estimating future inactivity risk from observable signals, rather than explaining inactivity after it has already occurred.
+The training dataset uses real GitHub-hosted repositories and historical GitHub
+events, not manually assigned or synthetic labels
+(Section~\ref{sec:intro-scope}). For each repository, the builder creates
+observation snapshots whose features were available at or before date \(t\).
+The label comes from the following 12 months,
+\((t, t + 12\text{ months}]\). The resulting task estimates future inactivity
+from information available at the observation date.
 
 \section{Research Design}
 \label{sec:method-research-design}
 
-The research design consists of three connected parts. First, OSS Risk Radar is developed as a software artifact that can ingest dependency or repository information, enrich it with public signals, and produce inactivity-oriented risk scores. Second, a historical supervised training dataset is constructed from real open-source repositories. Third, trained model artifacts are evaluated quantitatively and qualitatively to determine whether the scores are useful for risk-based dependency triage.
+The research design has three parts: OSS Risk Radar ingests dependency or
+repository information and produces inactivity-risk scores from public signals;
+a historical dataset supplies supervised examples; and quantitative evaluation
+measures discrimination and calibration, complemented by formative manual case
+review.
 
-The artifact is not a vulnerability scanner or a definitive trust score, and does not claim that a repository is secure or insecure; it estimates whether observable maintenance and activity signals indicate elevated inactivity risk. Because inactivity is only one aspect of dependency risk --- a repository can be inactive without being vulnerable, or active while still having security weaknesses --- the model output is interpreted as a decision-support signal for prioritization and manual review.
+The artifact estimates inactivity risk from observable maintenance and activity.
+It is neither a vulnerability scanner nor a definitive trust score: inactive
+repositories may have no vulnerability, while active ones may still have
+security weaknesses. The output prioritizes repositories for manual review.
 
-The scope of the predictive model must be stated precisely, because the research question also refers to security-practice signals. OpenSSF Scorecard is used as a \emph{separate} security-posture signal in the surrounding enrichment workflow \cite{zahan2022scorecard}, \emph{not} as part of the predictive feature vector: the inactivity classifier is trained exclusively on activity, contributor, responsiveness, and contributor-concentration signals, and security-practice indicators are presented to the analyst as a parallel posture output rather than as predictors of inactivity. This separation avoids overclaiming that security-practice checks improve inactivity prediction and keeps the predictive target conceptually clean.
+OpenSSF Scorecard is a \emph{separate} security-posture signal in the enrichment
+workflow \cite{zahan2023scorecard}. A Scorecard-derived quantity does \emph{not}
+enter the observation-time feature set in
+Section~\ref{sec:method-feature-engineering}.
+Security-practice indicators appear as parallel analyst context, and the
+predictive target remains restricted to activity and maintenance signals.
 
-Concretely, ``security-practice signals'' means the following. For each analyzed repository the enrichment workflow requests its OpenSSF Scorecard record: an aggregate score in \([0,10]\) together with the individual automated checks behind it, among them whether the project has branch protection enabled, whether changes go through code review, whether releases are signed, whether workflow tokens are least-privilege, and whether known vulnerabilities are outstanding \cite{zahan2022scorecard}. The scoring service rescales this record into a single \texttt{security\_posture\_score} on a 0--100 scale, adjusting the aggregate for individually strong and individually weak checks, and emits it as a field of the same scoring response that carries the inactivity-risk score --- but as a separate field, computed by a separate path, with no Scorecard quantity entering the inactivity model. Where no Scorecard record is available, the posture score is marked as not model-derived rather than imputed, so that missing data cannot masquerade as good or bad security posture.
+For each repository, OpenSSF provides an aggregate in \([0,10]\) and checks for
+branch protection, code review, signed releases, least-privilege workflow tokens,
+and known vulnerabilities \cite{zahan2023scorecard}. The service adjusts strong
+and weak checks and returns a 0--100 \texttt{security\_posture\_score}. The
+separate field is marked not model-derived when Scorecard is missing; it is not
+imputed.\kiref{Claude Opus 5/1}
 
 \section{Iterative Artifact Development}
 \label{sec:method-iterative-development}
 
-OSS Risk Radar was developed iteratively. The first iteration validated the end-to-end workflow with a small pilot training run --- creating historical snapshots, training a model, exporting an artifact, and returning scores for manual inspection --- and is not used in any reported result. Manual inspection exposed implausible scoring in some cases: one operationally active project scored implausibly high and others scored low where a more nuanced assessment seemed warranted. Treated as formative error analysis rather than as a measure of accuracy, these cases drove a revision of the feature set and training setup to better separate activity, release behavior, contributor dynamics, responsiveness, backlog pressure, and how narrowly the contributor base is concentrated --- the build--evaluate--diagnose--refine cycle at the core of Design Science Research.
+The first iteration validated snapshot construction, training, artifact export,
+and manual scoring with a small pilot run that contributes no reported result.
+Manual review found implausible scores: one operationally active project ranked
+too high, while lower scores in other cases seemed to require more contextual
+assessment. This formative error analysis led to separate features for activity,
+releases, contributor dynamics and concentration, responsiveness, and backlog
+pressure. It followed a build--evaluate--diagnose--refine cycle.
 
 The second iteration produced the dataset and model artifacts used for the reported evaluation, expanding the empirical basis to the repository-first foundation dataset of Section~\ref{sec:method-data-sources}, whose seed buckets serve only as sampling provenance while the label is derived from future repository behavior.
 
 \section{Definitions and Prediction Target}
 \label{sec:method-definitions}
 
-The central unit of analysis is a GitHub repository. In the training dataset, a row represents a repository observation snapshot at a specific observation date \(t\). The prediction task is binary classification:
+The unit of analysis is a GitHub repository. Each row represents a repository at
+observation date \(t\). The binary prediction task is:
 
 \begin{quote}
 Given the observable repository and package state at time \(t\), predict whether the repository becomes inactive within the following 12 months.
 \end{quote}
 
-Everything in that sentence hinges on where \(t\) sits, and this is the point at which the design is easiest to misread. The observation date \(t\) is not the present. It is deliberately placed far enough in the past that the twelve months following it have \emph{already elapsed} and are recorded in the archive. Supervised learning requires the outcome to be known, so a snapshot can only be labeled once its outcome window is history. In the reported dataset the observation dates run quarterly from \texttt{2023-01-01} to \texttt{2025-04-01}, while the GH Archive files extend to \texttt{2026-06-16}; the label window of even the last observation date closes on \texttt{2026-04-01} and therefore lies inside the recorded period (Section~\ref{sec:method-observation-window}).
+The observation date lies far enough in the past for the following twelve months
+to have \emph{already elapsed}. A snapshot can only receive a supervised label after this
+outcome window closes. Observation dates run quarterly from
+\texttt{2023-01-01} to \texttt{2025-04-01}, and the GH Archive files extend to
+\texttt{2026-06-16}. The final label window closes on
+\texttt{2026-04-01}, within the recorded period
+(Section~\ref{sec:method-observation-window}).
 
-Each snapshot consequently splits the archive at \(t\) into two disjoint stretches, both of which are in the past when the dataset is built, and which are used for strictly different purposes:
+Each snapshot splits the historical archive at \(t\) into two disjoint periods:
 
 \begin{itemize}
     \item \textbf{Backwards from \(t\)} lies the evidence the model is allowed to see. Observation-time features aggregate the event history over the 30, 90, and 365 days before \(t\) (Section~\ref{sec:method-feature-engineering}). This is the \emph{input}.
     \item \textbf{Forwards from \(t\)} lies the twelve-month window from which the label is computed, and which the model never sees for that row. This is the \emph{prediction target}.
 \end{itemize}
 
-The word \emph{future} is therefore always relative to \(t\), never to the reader: the ``future window'' is future with respect to the observation date and past with respect to the moment of dataset construction. This is what makes the task supervised and what makes it honest at the same time --- the model is asked to anticipate an outcome that was genuinely unknown at \(t\), and the answer is available only because \(t\) is old enough for the answer to have happened. A model deployed on a live repository performs the identical computation with \(t\) set to today, with the difference that the outcome window has not yet run and no label exists.
+Here, \emph{future} is relative to \(t\): the window follows the observation date
+but precedes dataset construction. Its outcome was unknown at \(t\), although it
+is available for supervised training later. Live scoring sets \(t\) to the
+current date, for which the outcome window has not elapsed and no label
+exists.\kiref{Claude Opus 5/4}
 
-The exported training label is named \texttt{label\_inactive\_12m} and is referred to throughout as the \emph{inactivity label}. It is computed in two steps: the dataset builder first evaluates a boolean maintenance variable \texttt{maintained\_12m} over the future window and then negates it. The detour is deliberate rather than incidental. The evidence available in the archive is evidence \emph{of} maintenance --- commits, contributors, releases, merged pull requests are all things that happen --- whereas inactivity is the absence of all of them. Stating the rule in the positive direction therefore lets each of its four conditions be written as a check for something observable, which is both easier to verify against the data and easier to reason about when the thresholds are varied (Section~\ref{sec:results-label-sensitivity}); expressing the same rule directly as inactivity would require negating a conjunction of thresholds and would obscure what is actually being counted. The negation itself is exact, so the two formulations are equivalent, and only the inactivity direction is exported and modelled --- the target of the thesis is the risk that maintenance stops, so the positive class is inactivity. If the future window is incomplete, the row remains unlabeled and is not used for supervised model fitting.
+The exported \emph{inactivity label},
+\texttt{label\_inactive\_12m}, is the negation of the future-window maintenance
+variable \texttt{maintained\_12m}. The archive records positive evidence
+\emph{of} maintenance: commits, contributors, releases, and merged pull requests. Defining
+these four observable checks first makes the rule easier to verify and vary
+(Section~\ref{sec:results-label-sensitivity}). Negation is exact, so the two
+directions are equivalent. Only inactivity, the \emph{absence} of that evidence,
+is exported and modeled as the positive class because the target is the risk
+that maintenance stops.\kiref{Claude Opus 5/4}
+Rows with incomplete future windows remain unlabeled and are excluded from
+fitting.
 
 The future label window is defined as:
 
@@ -84,73 +139,382 @@ The current implementation treats a repository as maintained within the 12-month
     \item at least two pull requests are merged.
 \end{enumerate}
 
-Because the decisive part of this definition is the requirement that at least two of the four checks hold, it is referred to below as the \emph{two-of-four maintenance rule}. Requiring two rather than one deliberately avoids treating a single event --- one drive-by commit, one automated release --- as sufficient evidence that a project is being maintained, while requiring all four would misclassify the many healthy projects that legitimately do not release, or do not receive external pull requests, in a given year. At the same time the rule remains operationally measurable from historical public data. The merged-pull-request condition is used as a practical proxy for broader maintainer interaction, because GH Archive data does not reliably identify all maintainer responses without additional issue-comment attribution logic \cite{ossRiskRadarDatasetBuilder}.
+This is the \emph{two-of-four maintenance rule}. Requiring two checks prevents a
+single drive-by commit or automated release from establishing maintenance.
+Requiring all four would misclassify healthy projects that do not release or
+receive external pull requests during a given year. The rule remains measurable
+from public history.
 
-One qualification applies to the archival condition in the reported dataset. Because the dataset is built through the reproducible offline path, which supplies no \texttt{archived\_at} timestamp (Section~\ref{sec:method-offline-metadata}), the ``not archived or deleted'' condition never fires and the label reduces to the two-of-four maintenance rule alone. This is a conservative simplification rather than a distortion --- an archived repository receives no commits, contributors, releases, or merged pull requests in its future window, so the activity rule already marks it inactive --- but it does mean a repository archived while still receiving activity would not be caught by the archival condition.
+Merged pull requests proxy broader maintainer interaction. GH Archive records
+typed events, not resolved roles \cite{gharchive}; identifying maintainer
+comments would require attribution logic and remains vulnerable to bot
+distortion \cite{hasan2023firstresponse}. Merge events are unambiguous in the
+event stream. The artifact documents the implementation
+\cite{ossRiskRadarDatasetBuilder}.
 
-The specific thresholds in this rule (the two-of-four requirement and the numeric cut-offs for months, contributors, releases, and merged pull requests) are heuristic design choices rather than externally validated constants. They were chosen to require sustained rather than incidental activity. Because the label definition directly influences class prevalence, the sensitivity of the results to these thresholds is treated as a robustness concern: the full evaluation is repeated under stricter and more permissive variants of the rule in Section~\ref{sec:results-label-sensitivity} (Appendix~\ref{appendix:label-sensitivity}).
+The offline build supplies no \texttt{archived\_at} timestamp
+(Section~\ref{sec:method-offline-metadata}), so the archival condition never
+fires and the label uses only the two-of-four rule. Archived repositories
+normally receive none of the four activity signals and are already marked
+inactive, making this a conservative simplification. The condition would,
+however, miss a repository archived while still receiving activity.
+
+The two-of-four requirement and the cut-offs for months, contributors, releases,
+and merged pull requests are heuristic design choices, not externally validated
+constants. They require sustained activity. Because they affect class
+prevalence, Section~\ref{sec:results-label-sensitivity}
+(Appendix~\ref{appendix:label-sensitivity}) repeats the evaluation with stricter
+and more permissive variants.
 
 \section{Data Sources}
 \label{sec:method-data-sources}
 
-The dataset construction uses public and reproducible data sources wherever possible. GH Archive is used as the primary source for historical GitHub event data. GH Archive provides public GitHub event streams as hourly archives \cite{gharchive}. The dataset builder parses these archives into normalized repository histories, including commits, issues, pull requests, releases, stars, and forks.
+GH Archive is the primary historical source. It distributes public GitHub event
+streams as hourly archives \cite{gharchive}, which the builder parses into
+normalized histories of commits, issues, pull requests, releases, stars, and
+forks.
 
-Repository and package metadata are enriched through multiple adapters. deps.dev is used for package and dependency metadata where package-to-repository mapping is required \cite{depsdevApi}. GitHub metadata is used for stable repository fields such as creation time, default branch, and fork state. OpenSSF Scorecard is used by the broader OSS Risk Radar enrichment workflow as a separate security-practice signal source \cite{zahan2022scorecard}, but, as stated in Section~\ref{sec:method-research-design}, it is not part of the historical inactivity feature vector. Present-day GitHub activity totals are not used as historical observation-time features, because they would leak information from after the observation date into older snapshots.
+deps.dev supplies package and dependency metadata when package-to-repository
+mapping is required \cite{depsdevApi}. GitHub supplies stable fields such as
+creation time, default branch, and fork state. OpenSSF Scorecard remains a
+separate security-practice source \cite{zahan2023scorecard}
+(Section~\ref{sec:method-research-design}). Present-day GitHub activity totals
+are excluded from historical snapshots because they would leak information from
+after the observation date.
 
-The dataset is built in two stages, and the first produces what is referred to throughout as the \emph{foundation seed}: the fixed list of 5{,}000 GitHub repositories that the dataset is built from. It is called a seed because it is only a list of repository identities --- no features and no labels --- from which the second stage grows the actual dataset by replaying each repository's event history at ten observation dates. Fixing this list once, and storing it, is what makes the build reproducible: rerunning the pipeline processes exactly the same repositories rather than whatever a fresh search would return that day.
+The first construction stage produces the \emph{foundation seed}, a fixed list
+of 5{,}000 repository identities without features or labels. The second stage
+replays each history at ten observation dates. Storing the seed makes reruns use
+the same repositories instead of a new search result.\kiref{Claude Opus 5/4}
 
-The seed is drawn from public, non-fork GitHub repositories that have a license object and meet a minimum star threshold (default 100 stars). The seed is drawn separately from three sampling buckets --- active, dormant, and archived repositories --- so that the mixture can be controlled rather than left to whatever the search returns; these buckets serve only as sampling provenance, since the supervised labels come exclusively from future activity in the 12-month window \cite{ossRiskRadarDatasetBuilder}. The sampling frame is designed to oversample inactive repositories, targeting 45\% active against 55\% dormant or archived. The realized seed departs from this target, because the dormant and the low-star active buckets could not be filled from the search frame and a fallback bucket topped the seed up with active repositories: as built it is 52.0\% active, 28.0\% dormant, and 20.0\% archived (Appendix~\ref{sec:appendix-seed-composition}), so the intended oversampling is only partly realized at the seed level. The inactive base rate that matters is instead the one observed in the held-out test slice, reported in Chapter~\ref{chap:evaluation}; because it lies well above the natural OSS inactivity rate, predicted probabilities are calibrated to this sampled prevalence rather than to a specific deployment population, a point revisited for calibration and precision in Section~\ref{sec:method-evaluation-strategy} and Section~\ref{sec:method-limitations}.
+The seed contains public, non-fork GitHub repositories with a license object and
+at least 100 stars by default. Separate active, dormant, and archived buckets
+control the mixture. They are neither features nor labels: labels come
+exclusively from activity in the 12-month future window
+\cite{ossRiskRadarDatasetBuilder}. They are, however, defined on repository state
+after the observation dates, which is qualified below. The target mixture is
+45\% active and 55\% dormant or archived.
+
+The dormant and low-star active buckets could not be filled, so a fallback added
+active repositories. The realized seed is 52.0\% active, 28.0\% dormant, and
+20.0\% archived (Appendix~\ref{sec:appendix-seed-composition}), so the intended
+oversampling is only partly realized at seed level. The held-out inactive rate
+reported in Chapter~\ref{chap:evaluation} is therefore more relevant than the
+seed buckets. It exceeds
+reported unsampled rates: Coelho et al.\ observe that \(16\%\) of \(2{,}927\)
+active projects became unmaintained within one year, while Miller et al.\ report
+\(15\%\) abandonment among widely used npm packages over six years
+\cite{coelho2020maintained,miller2025abandonment}. The probabilities are
+calibrated to the sampled prevalence, not a deployment population
+(Sections~\ref{sec:method-evaluation-strategy} and~\ref{sec:method-limitations}).
+
+\label{sec:method-retrospective-frame}
+\textbf{The frame is sampled retrospectively.} The seed was generated on
+\texttt{2026-06-11}, after every label window had closed, and its bucket queries
+read repository state at that date. The active buckets require a push within the
+preceding year (\texttt{pushed:>=2025-06-11}), the dormant buckets require no
+push for two years (\texttt{pushed:<=2024-06-11}), and the archived buckets
+require the archive flag to be set. Entry into the frame is therefore decided by
+behavior that falls partly inside the outcome windows the model predicts. The
+buckets do not enter the feature vector and do not define the label, but they are
+not independent of it either. In the final test cohort, the inactive rate is
+\(1.000\) across the \(1{,}399\) dormant rows and \(0.942\) across the
+\(1{,}000\) archived rows. It is \(0.409\) across the \(2{,}095\) active rows
+and \(0.209\) across the \(506\) fallback rows. The dormant rate reaches
+\(1.000\) from the \texttt{2024-07-01} cohort onward.
+
+Two consequences follow, and both restrict how the reported numbers may be read.
+The inactive rate of \(0.661\) describes this construction rather than a base
+rate obtainable by sampling repositories at \(t\). The aggregate task is also
+easier than the deployment task. Much of it consists of
+separating buckets that were formed from later behavior and are already legible
+at \(t\) through commit recency. Consistently, the trivial recency baseline of
+Section~\ref{sec:results-baselines} reproduces most aggregate ranking skill. All
+reported metrics are conditional on this retrospectively
+sampled frame. Chapter~\ref{chap:validity} returns to the threat, and drawing the
+frame from repository state at each observation date, rather than at generation
+time, is recorded as future work in
+Chapter~\ref{chap:conclusion}.\kiref{Claude Opus 5/11}
 
 \label{sec:method-offline-metadata}
-\textbf{Offline repository metadata and its consequences.} The reported dataset is built through the offline path: repository identities come from the seed and no live GitHub, registry, or deps.dev call is made during construction, so the build depends only on the archived seed and the GH Archive files and can be repeated exactly without credentials, rate limits, or drift in mutable metadata. Because every observation-time feature is reconstructed from the event history rather than fetched, the predictive content is unaffected. The path does leave the repository creation date, archival timestamp, and fork flag unpopulated; the three resulting consequences --- an identically zero \texttt{repo\_age\_days}, an inert archival label condition (Section~\ref{sec:method-definitions}), and an inert fork filter --- are detailed in Appendix~\ref{sec:appendix-undefined-features}, and populating these attributes is noted as future work in Chapter~\ref{chap:conclusion}.
+\textbf{Offline repository metadata and its consequences.} The reported build
+uses the stored seed and GH Archive files without live GitHub, registry, or
+deps.dev calls. It is repeatable without credentials, rate limits, or changes in
+mutable metadata. All observation-time features are reconstructed from event
+history, so the predictive content is unaffected. The offline path leaves
+creation date, archival timestamp, and fork flag unpopulated. This makes
+\texttt{repo\_age\_days} identically zero and the archival label condition and
+fork filter inert. Appendix~\ref{sec:appendix-undefined-features}
+details these effects; Chapter~\ref{chap:conclusion} lists metadata enrichment as
+future work.
 
 \section{Dataset Construction Workflow}
 \label{sec:method-dataset-construction}
 
-The historical dataset builder creates an inspectable dataset through a sequence of intermediate steps: it loads repository candidates from the foundation seed, resolves repository identities, enriches stable metadata through GitHub, parses GH Archive event files into normalized repository histories, builds quarterly observation snapshots, computes observation-time features using only data available at or before \(t\), computes 12-month labels using only the future window \((t, t + 12\text{ months}]\), and exports the training snapshot dataset together with a repository feature cache for runtime full-history scoring. The individual steps and the intermediate files written at each stage --- which make the construction process auditable and allow the dataset to be inspected before training --- are listed in Appendix~\ref{appendix:dataset-construction}. The dataset is exported as a single table in which one row is one observation snapshot, the columns are the features of Section~\ref{sec:method-feature-engineering}, and one further column holds the label. This is the same table layout the project's model-training code already expected before the historical builder existed, which is the reason the builder needs no training interface of its own: the reconstructed historical data can be handed to the existing training step unchanged, and results obtained from it are therefore produced by the same code path as any other training run. The commands that regenerate the seed and rebuild the dataset, the per-run documentation items, and the dataset hash of the reported run are given in Appendix~\ref{sec:method-reproducibility}.
+Figure~\ref{fig:dataset-pipeline} shows the construction sequence. The builder
+loads the foundation seed, resolves repository identities, enriches stable
+metadata, normalizes GH Archive events, and creates quarterly snapshots. For each
+snapshot, it computes features from data at or before \(t\) and the 12-month
+label from \((t, t + 12\text{ months}]\). It exports both the training table and
+a feature cache for runtime full-history scoring.
+
+Feature and label computation read disjoint parts of the normalized timeline and
+meet only in the exported row. Appendix~\ref{appendix:dataset-construction} lists
+the intermediate files that make each stage inspectable. The final table contains
+one snapshot per row, the features from
+Section~\ref{sec:method-feature-engineering}, and one label column. It matches the
+existing training interface, so reconstructed data use the same training path as
+other runs. Appendix~\ref{sec:method-reproducibility} gives the rebuild commands,
+run documentation, and dataset hash.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  box/.style={draw,black!55,rounded corners=1pt,align=center,inner sep=3.4pt,minimum height=7.6mm,text width=21mm},
+  src/.style={box,fill=black!8},
+  feat/.style={box,fill=black!14},
+  lab/.style={box,fill=black!5},
+  sink/.style={box,fill=black!20},
+  ar/.style={->,>=Stealth,black!65,line width=0.45pt}
+]
+  % --- ingestion chain -------------------------------------------------
+  \node[src] (seed)  at (0,0)    {foundation seed\\(5{,}000 repos)};
+  \node[src] (arch)  at (3.4,0)  {GH Archive\\event files};
+  \node[src] (hist)  at (6.8,0)  {normalized\\event history};
+  \node[src] (snap)  at (10.2,0) {quarterly\\snapshots at $t$};
+
+  \draw[ar] (seed) -- (arch);
+  \draw[ar] (arch) -- (hist);
+  \draw[ar] (hist) -- (snap);
+
+  % --- the split -------------------------------------------------------
+  \node[feat] (feats) at (10.2,-2.0) {observation-time\\features};
+  \node[lab]  (labs)  at (10.2, 2.0) {12-month\\label};
+
+  \draw[ar] (snap) -- node[right,font=\scriptsize,pos=0.42,align=left]
+    {\ events $\le t$} (feats);
+  \draw[ar] (snap) -- node[right,font=\scriptsize,pos=0.42,align=left]
+    {\ events $>t$} (labs);
+
+  % leakage boundary
+  \draw[dashed,black!70,line width=0.7pt] (7.9,-3.0) -- (7.9,3.0);
+  \node[black!70,font=\scriptsize\itshape,align=center,anchor=south]
+    at (7.9,3.0) {temporal leakage boundary};
+
+  % --- outputs ---------------------------------------------------------
+  \node[sink] (train) at (13.6,-1.0) {training snapshot\\table (50{,}000 rows)};
+  \node[sink] (cache) at (13.6, 1.2) {repository\\feature cache};
+
+  \draw[ar] (feats) -- (train);
+  \draw[ar] (labs)  -- (train);
+  \draw[ar] (feats) -- (cache);
+
+  \node[font=\scriptsize,black!60,anchor=north,align=center]
+    at (13.6,-1.85) {to model training\\(Section~\ref{sec:method-model-training})};
+  \node[font=\scriptsize,black!60,anchor=south,align=center]
+    at (13.6,1.95) {to runtime scoring\\(Chapter~\ref{chap:implementation})};
+\end{tikzpicture}
+\caption[Dataset construction pipeline and its leakage boundary]{Dataset
+construction pipeline. The upper chain is ingestion: the fixed foundation seed
+selects the repositories, GH Archive supplies their raw events, and these are
+normalized into a per-repository chronological history from which quarterly
+observation snapshots are cut. At each snapshot the pipeline splits. Everything at
+or before the observation date \(t\) may become a \emph{feature}; everything after
+it may only become the \emph{label}; nothing crosses the dashed boundary
+(Section~\ref{sec:method-leakage-prevention}). The two paths meet only in the
+exported row. The feature path is written a second time, without labels, as the
+repository feature cache that lets the runtime score a previously seen repository
+in the full-history regime. Appendix~\ref{appendix:dataset-construction} lists the
+individual steps and the intermediate file written at each of them.}
+\label{fig:dataset-pipeline}
+\end{figure}
 
 \section{Observation Window and Historical Coverage}
 \label{sec:method-observation-window}
 
-The full-history training run used in the reported evaluation contains 50,000 rows: 5,000 repositories observed at ten quarterly dates from \texttt{2023-01-01} to \texttt{2025-04-01}. The GH Archive files available for the run span \texttt{2021-01} to \texttt{2026-06-16}, so the twelve-month label window of even the latest observation date (ending \texttt{2026-04-01}) lies fully inside the coverage horizon, and all 50,000 rows are labeled. The rows are split into 37,500 training rows, 7,500 validation rows, and 5,000 test rows. The split is by observation date rather than at random: the oldest snapshots become training data, the next-oldest the validation set, and the newest the test set. Because the ten quarterly cohorts are equally sized, the \(10\%\) test partition coincides exactly with the final observation date --- every test row is observed at \texttt{2025-04-01}.
+The reported run contains 50,000 rows: 5,000 repositories at ten quarterly dates
+from \texttt{2023-01-01} to \texttt{2025-04-01}. Its GH Archive files span
+\texttt{2021-01} to \texttt{2026-06-16}. The latest label window ends on
+\texttt{2026-04-01}, so all 50,000 rows are labeled.
 
-Splitting this way means the model is always fitted on the past and tested on the future, which is the only arrangement that mirrors how it would be used and the only one under which a good result is not partly an artifact of hindsight. It has one drawback. Because each repository is observed ten times, the same repository appears both in the training rows (at earlier dates) and in the test rows (at the final date). A model could therefore score well on the test set partly by recognizing repositories it has already seen, rather than by generalizing to new ones. To measure how much of the result that accounts for, the entire evaluation is repeated under a second, stricter split in which every snapshot of a given repository is confined to one partition, so that the test set contains only repositories the model has never encountered in any form. That repository-disjoint split is described in Appendix~\ref{sec:impl-grouped-split} and its result reported in Section~\ref{sec:results-robustness}.
+The time-ordered split assigns the oldest 37,500 rows to training, the next 7,500
+to validation, and the newest 5,000 to testing. Because the ten cohorts have
+equal size, the \(10\%\) test partition is the final observation date; every test
+row is observed on \texttt{2025-04-01}.
 
-A snapshot serves as a labeled example only if the archive covers its full twelve-month window \emph{after} \(t\) (the right-hand shaded region of Figure~\ref{fig:observation-window}); otherwise the row is kept but left unlabeled and excluded from fitting. The reason is that the label is built from an \emph{absence} of activity, and an absence is only meaningful where one would have seen activity had it occurred. If the archive stops halfway through a repository's label window, the second half contains no events for the trivial reason that nothing was recorded, and reading that as inactivity would manufacture positives out of missing data.
+The cut is made by row position rather than by cohort, so the boundary between
+training and validation falls inside the \texttt{2024-10-01} cohort: \(2{,}500\)
+of its rows are assigned to training and \(2{,}500\) to validation. Training thus
+covers \texttt{2023-01-01} to \texttt{2024-10-01} and validation
+\texttt{2024-10-01} to \texttt{2025-01-01}. Rows are ordered only by observation
+date and ties keep their original order, so the division within that cohort is by
+position and not by any repository property. The test partition is unaffected and
+remains one complete cohort.
 
-In this run the situation does not arise: the archive extends to \texttt{2026-06-16} and the latest label window closes on \texttt{2026-04-01}, so all 50,000 rows are labeled. It would arise if the observation grid were extended closer to the present --- an observation date after roughly \texttt{2025-06} would have a window running past the end of the archive --- or if archive files for part of the period were missing. The gate is therefore a safeguard that is inactive for the reported dataset rather than a filter that removed rows from it. (A smaller subset of the data is used only for local pipeline smoke testing and never for reported results.)
+\label{sec:method-label-availability}
+\textbf{Labels are used before they could have been observed.} Each label
+requires the twelve months following its observation date. The latest training
+rows are observed on \texttt{2024-10-01} and their labels close on
+\texttt{2025-10-01}; the latest validation labels close on \texttt{2026-01-01}.
+Both lie after the test observation date of \texttt{2025-04-01}. An analyst
+standing at \texttt{2025-04-01} could therefore not have fitted this model,
+because part of its training signal had not yet occurred. The evaluation is a
+retrospective chronological one with overlapping outcome windows rather than a
+simulation of prospective deployment. It supports the claim that the model ranks
+later observations correctly when fitted on earlier ones; it does not establish
+that the same model could have been built in time to issue those predictions.
+Removing the overlap would require an embargo of one full label horizon, which
+here means discarding the three cohorts whose outcome windows extend past the
+test date --- \texttt{2024-07-01}, \texttt{2024-10-01}, and \texttt{2025-01-01},
+or \(15{,}000\) of the \(45{,}000\) non-test rows. With ten cohorts available
+this was judged too costly for the reported run and is recorded as future work
+(Chapter~\ref{chap:conclusion}).\kiref{Claude Opus 5/11}
+
+The model is fitted on earlier observations and tested on later ones, matching
+the forecasting setting. However, each repository contributes ten snapshots and
+therefore appears in training and testing at different dates. Performance could
+partly reflect recognition of seen repositories. A repository-disjoint
+evaluation assigns every snapshot of a repository to one partition, leaving
+only unseen repositories in its test set. Appendix~\ref{sec:impl-grouped-split}
+describes this split, and Section~\ref{sec:results-robustness} reports the result.
+
+A snapshot is labeled only if the archive covers the full twelve months \emph{after}
+\(t\), shown on the right of Figure~\ref{fig:observation-window}. Other rows are
+retained but excluded from fitting. Because inactivity is an absence of events,
+incomplete coverage could otherwise turn missing data into positive labels.
+
+This run contains no such rows: coverage ends on \texttt{2026-06-16}, after the
+latest label window closes on \texttt{2026-04-01}. An observation after roughly
+\texttt{2025-06}, or missing archive files, would activate the gate. It removes
+no rows from the reported dataset.\kiref{Claude Opus 5/4} A smaller subset is
+used only for local pipeline smoke tests and never for reported results.
+Thus, all \(50{,}000\) reported rows pass this coverage gate.
 
 \section{Feature Engineering}
 \label{sec:method-feature-engineering}
 
-The feature engineering step converts repository and package history before \(t\) into numeric variables. The reported full-history model uses feature set \texttt{feature\sdash set\sdash v4\sdash full\sdash history}, whose 60 inputs combine 43 reconstructed historical features --- spanning commit and contributor activity, issue and pull-request flow, release cadence, derived risk proxies, responsiveness, and backlog pressure --- with 17 current-snapshot features that require no event history, such as dependency context, popularity, and ecosystem. \emph{Backlog pressure} here is not a vague label but a set of measured quantities: the relative change in the open-issue count over the 90 days before \(t\), the number of issues opened more than 90 days before \(t\) that are still open at \(t\), and that stale count expressed as a share of the current open backlog, complemented in the cold-start set by backlog size and 90-day open-issue growth. The intuition is that a tracker whose open items are both growing and ageing indicates maintainers losing ground, independently of how fast they answer the items they do address. The cold-start regime (Section~\ref{sec:method-prediction-regimes}) uses exactly the latter 17. One qualification applies to both counts: because the foundation seed is repository-first and the offline build makes no registry call, the package-derived inputs --- the ecosystem indicators, the dependency-context flags, and the published-version counters --- take the same value in every row of the reported dataset. Ten of the 60 inputs are constant in this sense and therefore contribute nothing; they are inert rather than misleading, since a zero-variance column cannot split a tree, but the counts should be read as the size of the implemented vector rather than as the number of signals the evaluation had available. The affected features are listed in Appendix~\ref{sec:appendix-undefined-features}. The mapping from the observable health-indicator categories of Section~\ref{sec:background-oss-health} to these feature groups is given in Appendix~\ref{appendix:health-indicators} (Table~\ref{tab:background-health-indicators}), and the exact definition and rationale for every individual feature in the full feature reference in Appendix~\ref{appendix:feature-reference} (Tables~\ref{tab:method-feature-groups}, \ref{tab:method-feature-reference}, and~\ref{tab:method-snapshot-features}).
+Feature set \texttt{feature\sdash set\sdash v4\sdash full\sdash history} contains
+60 inputs derived before \(t\). Of these, 43 reconstruct commit and contributor
+activity, issue and pull-request flow, releases, risk proxies, responsiveness,
+and backlog pressure. The other 17 describe the current snapshot, including
+dependency context, popularity, and ecosystem. The cold-start regime uses these
+17 features (Section~\ref{sec:method-prediction-regimes}).
 
-The features are derived from a normalized event history rather than any single source field: GH Archive supplies typed events that the builder parses into a per-repository chronological history of commits, issues, pull requests, releases, stars, and forks \cite{gharchive}. Each observation-time feature is a trailing-window aggregate anchored at \(t\) --- counts over the 30, 90, and 365 days before \(t\), state values at \(t\), and derived ratios, latencies, and drop-off measures. All of these lie in the left-hand region of Figure~\ref{fig:observation-window}, before the leakage boundary. Trailing windows are preferred to cumulative totals because the target is trajectory rather than lifetime volume, and two conventions keep variables comparable across heterogeneous projects. First, commit- and contributor-based counts apply a \emph{human-actor filter}: events attributed to bot accounts are excluded, so that automated activity --- a dependency-update bot committing weekly to an otherwise abandoned project --- cannot be mistaken for maintenance. The same filter is applied to the label, and Section~\ref{sec:results-bot-ablation} measures what it is worth by rebuilding the entire dataset without it. Second, absolute counts that would not compare across project sizes are also provided in a relative or trend-based form.
+\emph{Backlog pressure} comprises three historical quantities: relative
+open-issue growth over the preceding 90 days, issues older than 90 days that
+remain open at \(t\), and their share of the open backlog. The cold-start set also
+contains backlog size and 90-day open-issue growth. Together they indicate
+whether open items are growing and ageing independently of response speed.
 
-The selection of these signals is grounded in prior work: revision activity predicts project survival \cite{robinson2022survival}, motivating the commit, contributor, and release windows, while the issue, pull-request, and responsiveness signals follow the observable-metric vocabulary of the CHAOSS project health model \cite{chaossStarterProjectHealth,goggins2021transparent}. Because context-free indicators are individually insufficient across heterogeneous projects \cite{yehudi2023contextfree}, the design learns a calibrated combination of many observation-time signals rather than relying on any single metric.
+Because the seed is repository-first and the offline build makes no registry
+call, ecosystem indicators and dependency-context flags are constant. Eight of
+the 60 inputs are constant across all 50,000 rows and are inert, because
+  zero-variance columns cannot split a tree. Two further inputs,
+  \texttt{package\sdash age\sdash days} and
+  \texttt{versions\sdash published\sdash 365d}, vary only with the observation
+  date and not between repositories, so ten inputs in total carry no
+  repository-level signal and roughly 50 remain informative. The two counts describe the
+  implemented vectors, not the number of informative signals. Appendix~\ref{sec:appendix-undefined-features}
+lists the affected features and explains why the two cohort-dependent inputs
+cannot change the reported ROC-AUC.\kiref{Claude Opus 5/6}
+Appendix~\ref{appendix:health-indicators}
+(Table~\ref{tab:background-health-indicators}) maps the health-indicator
+categories of Section~\ref{sec:background-oss-health} to feature groups.
+Appendix~\ref{appendix:feature-reference}
+(Tables~\ref{tab:method-feature-groups}, \ref{tab:method-feature-reference},
+and~\ref{tab:method-snapshot-features}) defines every feature.
 
-One qualification applies to the responsiveness features in particular, and the thesis calls them \emph{reconstructed proxies} to mark it. CHAOSS defines a metric named \emph{Time to First Response} with its own precise specification; the features here measure the same underlying idea but are not that metric, because they are computed from GH Archive events under this thesis's own rules. Two divergences matter. A ``first response'' is taken to be the earliest comment by any account other than the person who opened the issue or pull request, which is broader than a maintainer response and, on this path, does not exclude bots --- the reason bot-generated first responses are a documented distortion of exactly this measurement \cite{hasan2023firstresponse}. And for pull requests, where no comment exists, the merge or close event is used in place of a response, which is a weaker notion of responsiveness than the name suggests. A second and separate sense of \emph{proxy} applies to reconstructed stars and forks: these are lower bounds rather than complete counts, since the archive window may begin after the repository was created. Neither kind of proxy invalidates the feature, but both are reasons to read the resulting attributions as evidence about observable behaviour rather than as canonical CHAOSS measurements.
+The builder parses GH Archive events into chronological histories of commits,
+issues, pull requests, releases, stars, and forks \cite{gharchive}. Features are
+counts over the 30, 90, and 365 days before \(t\), state at \(t\), or derived
+ratios, latencies, and drop-off measures. They lie before the leakage boundary in
+Figure~\ref{fig:observation-window}. Trailing windows capture trajectory instead
+of lifetime volume.
 
-Reconstructed issue-backlog features carry the same caveat: they describe the tracker as the archive records it, not as a full API query would.
+Commit and contributor counts apply a \emph{human-actor filter} that excludes
+events attributed to bot accounts. It prevents automated activity, such as
+weekly dependency-bot commits, from appearing as maintenance. The label uses the
+same filter, and
+Appendix~\ref{appendix:bot-ablation} measures its effect by rebuilding the
+dataset without it. Relative and trend-based features supplement absolute counts
+that do not compare across project sizes.
+
+Revision activity predicts project survival \cite{robinson2022survival}, which
+motivates the commit, contributor, and release windows. Issue, pull-request, and
+responsiveness signals follow the CHAOSS project-health vocabulary
+\cite{chaossStarterProjectHealth,goggins2021transparent}. Since individual
+context-free indicators are insufficient across heterogeneous projects
+\cite{yehudi2023contextfree}, the model learns a calibrated combination.
+
+The responsiveness features are \emph{reconstructed proxies}, not the canonical
+CHAOSS \emph{Time to First Response} metric. They follow thesis-specific rules
+over GH Archive events. A first response is the earliest comment from an account
+other than the person who opened the issue or pull request. This account need not
+be a maintainer and may be a bot
+\cite{hasan2023firstresponse}. For pull requests without comments, the merge or
+close event substitutes for a response.
+
+Reconstructed star and fork counts use a second sense of \emph{proxy}: they are
+lower bounds when
+archive coverage begins after repository creation. These limitations do not
+invalidate the features, but attributions describe observable behavior rather
+than canonical CHAOSS measurements.\kiref{Claude Opus 5/4}
+
+Reconstructed issue backlogs likewise describe the archived tracker, not a full
+API result.
 
 \label{sec:method-undefined-features}
-\textbf{Undefined versus zero-valued features.} A feature that cannot be computed for a repository must be distinguished from one whose value is genuinely zero, because for several variables zero is the \emph{most favourable} value rather than a neutral one. A quantity is \emph{right-censored} when a repository has no observed commit --- the ``days since last commit'' has no finite value but is at least the age of the observable record, so the censoring bound encodes it as maximally stale rather than as freshly committed. A quantity is \emph{undefined} when it does not exist at all --- the median time to merge a pull request is meaningless for a repository that merged none --- and is left for the model artifact to impute rather than set to a misleading zero. The exact censoring bound, the per-model imputation rules, and the two indicator features that carry the ``no events at all'' signal are given in Appendix~\ref{sec:appendix-undefined-features}.
+\textbf{Undefined versus zero-valued features.} Zero is the \emph{most favorable} value
+for several variables and must not encode missing data. When no commit is
+observed, ``days since last commit'' is \emph{right-censored} at the age of the
+observable record. This represents maximal observed staleness instead of a
+recent commit. A metric that does not exist, such as median merge time for a
+repository with no merged pull request, remains \emph{undefined} for model-specific
+imputation. Appendix~\ref{sec:appendix-undefined-features} defines the censoring
+bound, imputation, and two ``no events'' indicators.
 
-Keeping the two apart is what allows the feature attributions of Section~\ref{sec:results-attribution} to be read as evidence about maintenance behaviour rather than about data availability: a zero-valued latency would make silence predictive through a variable whose documented meaning is responsiveness, so the model could appear to have learned that fast responders fail. The feature-set revision after the first manual review (Section~\ref{sec:method-iterative-development}) also excludes features that would not be reliable point-in-time predictors: \texttt{repo\_archived\_at\_obs}, for example, is retained as diagnostic metadata while already-archived rows are filtered out during fitting, so that archival cannot become a shortcut label.
+This distinction keeps data availability from masquerading as maintenance
+behavior in the attributions of Section~\ref{sec:results-attribution}. A
+zero-valued latency would make silence look like immediate responsiveness. The
+revised feature set also excludes unreliable point-in-time predictors
+(Section~\ref{sec:method-iterative-development}). For example,
+\texttt{repo\_archived\_at\_obs} remains diagnostic metadata while
+already-archived rows are excluded from fitting, preventing archival from
+becoming a shortcut label.
 
 \section{Full-History and Cold-Start Prediction Regimes}
 \label{sec:method-prediction-regimes}
 
-Every model is trained twice, on two nested feature sets. The \emph{full-history} regime uses all 60 inputs, including the 43 features reconstructed from the GH Archive event history before \(t\) --- time-windowed commit, release, contributor, issue, and pull-request signals, and the activity-drop proxies derived from them. The \emph{cold-start} regime uses only the 17 current-snapshot features, which require a single observation of the repository and its package metadata and no event history at all.
+Each model is trained in two regimes. \emph{full-history} uses all 60 inputs,
+including 43 reconstructed commit, release, contributor, issue, pull-request, and
+activity-drop features before \(t\). \emph{cold-start} uses the 17
+current-snapshot features and requires no event history.
 
-The pairing is an ablation on \emph{feature availability}, and because GH Archive is public it is worth stating precisely what it measures. The historical features are obtainable in principle for any public repository, so the regimes do not contrast what a scorer \emph{can} know with what it \emph{cannot}. They measure what the reconstruction is \emph{worth}: whether parsing tens of thousands of archive files buys predictive skill that a single metadata read does not already supply. Reconstruction is nonetheless not always informative --- \(7{,}687\) of the \(50{,}000\) rows have no observable event before their observation date, leaving their historical features censored or undefined (Section~\ref{sec:method-undefined-features}). The regimes also happen to correspond to a runtime distinction, since a repository absent from the precomputed feature cache is scored from live metadata alone, but that is a consequence of the ablation rather than its motivation.
+This ablation on \emph{feature availability} measures the value of reconstructing
+history from tens of thousands of public archive files compared with one metadata
+read. Historical features are theoretically available for any public repository:
+the regimes do not contrast what a scorer \emph{can} know with what it
+\emph{cannot}.
+However, \(7{,}687\) of \(50{,}000\) rows have no earlier observed event, leaving
+their historical features censored or undefined
+(Section~\ref{sec:method-undefined-features}). At runtime, repositories absent
+from the feature cache also use cold-start, although this is not the motivation
+for the ablation. The comparison asks what reconstruction is \emph{worth}.
 
-The design assumes that richer temporal information makes the full-history model the stronger of the two. Across the whole test set that assumption appears barely supported --- the gap between the two gradient-boosted models is \(0.005\) ROC-AUC. Section~\ref{sec:results-history-ablation} shows this reading to be an artifact of \emph{which repositories the test set contains}. Most of them have already fallen silent by the observation date, and for those the outcome is largely settled: a repository with no commits for two years needs no reconstructed history to be recognized as at risk, so both models score it correctly and the comparison between them measures nothing. The reconstruction only has room to help on repositories that still look active at \(t\) and decline afterwards, and that is the subgroup where the difference in fact appears.
+Across the full test set, full-history exceeds cold-start by only \(0.005\)
+ROC-AUC. Many repositories are already quiet at \(t\), so recency makes their
+outcome easy to rank without reconstructed history. A repository with no commits
+for two years, for example, needs no reconstructed trajectory to appear at risk.
+Section~\ref{sec:results-history-ablation} shows that this depends on
+\emph{which repositories the test set contains}: the difference is larger among
+repositories that remain active at \(t\) and later decline.
 
 \section{Leakage Prevention}
 \label{sec:method-leakage-prevention}
 
-Temporal leakage is a central threat in historical prediction tasks. The temporal boundary at the observation date \(t\) that separates feature construction from label derivation is shown in Figure~\ref{fig:observation-window}. The dataset builder applies the following rules to reduce leakage:
+Figure~\ref{fig:observation-window} shows the boundary at \(t\) between feature
+construction and label derivation. The builder enforces:
 
 \begin{enumerate}
     \item Observation-time features are derived only from timestamps \( \leq t \).
@@ -158,21 +522,44 @@ Temporal leakage is a central threat in historical prediction tasks. The tempora
     \item Rows with incomplete future-window coverage remain unlabeled.
     \item Live GitHub enrichment is limited to stable repository metadata such as creation time, default branch, and fork state.
     \item Historical stars, forks, issues, pull requests, and releases are not taken from current GitHub API totals.
-    \item Seed buckets such as active, dormant, and archived are used only for sampling provenance and not as labels.
+    \item Seed buckets such as active, dormant, and archived are used only for sampling provenance and not as labels. They are drawn from repository state at seed-generation time and therefore constrain the frame rather than the row (Section~\ref{sec:method-retrospective-frame}).
 \end{enumerate}
 
-These rules simulate a real prediction setting: at observation time \(t\) future activity is unknown, so information from after \(t\) is excluded from feature construction and used only for label derivation.
+At \(t\), later activity is unknown. It is excluded from features and used only
+to derive the label.
 
-It is important to distinguish temporal leakage from a related but legitimate effect. Several observation-time features, such as days since the last commit, the activity-drop ratio, or days since the last release, are strongly correlated with future inactivity by construction: a repository that is already quiet at \(t\) is statistically likely to remain quiet. This is not leakage, because these features use only information available at or before \(t\). It does mean, however, that part of the predictive signal reflects activity persistence rather than the early detection of decline. This effect motivates both the trivial recency baseline and the active-at-\(t\) subset evaluation described in Section~\ref{sec:method-evaluation-strategy}.
+Activity persistence is distinct from leakage. Days since the last commit,
+activity drop, and days since the last release use valid information available at
+\(t\), but already-quiet repositories tend to remain quiet. Some discrimination
+therefore reflects persistence instead of early decline. This motivates the
+recency baseline and active-at-\(t\) evaluation in
+Section~\ref{sec:method-evaluation-strategy}.
 
 \section{Model Training}
 \label{sec:method-model-training}
 
-Training and scoring are separated: all model fitting happens in one training notebook, and the scoring service only loads the model files that notebook exports, never fitting a model itself \cite{ossRiskRadarReadme}. Section~\ref{sec:impl-deployment} describes how this separation is realized and why it makes the reported results reproducible.
+One notebook performs all fitting and exports the model files. The scoring
+service only loads these files \cite{ossRiskRadarReadme}.
+Section~\ref{sec:impl-deployment} describes this reproducibility boundary.
 
-The reported learned model families are Logistic Regression, XGBoost, and a feedforward neural network, each trained for the full-history and cold-start regimes. Logistic Regression is used as an interpretable linear model, XGBoost as a strong non-linear gradient-boosted tree model, and the neural network as a non-linear model that learns feature interactions through hidden layers \cite{james2021islr}. In addition, two trivial non-learned baselines are included as references. The first ranks repositories by days since the last human commit; the second by negated annual commit volume. Both select a decision threshold on the validation slice and are evaluated on the same held-out slice as the learned models, and both are computed inside the training notebook so that every reported baseline figure originates from the run that produced the headline metrics. The baselines are necessary because the label is itself activity-related (Section~\ref{sec:method-leakage-prevention}): the learned models are only worth reporting if they outperform them, especially on the repositories still active at \(t\), where Section~\ref{sec:results-baselines} shows the learned advantage to be concentrated.
+The learned families are Logistic Regression, XGBoost, and a feedforward neural
+network, each trained in both regimes. Logistic Regression provides an
+interpretable linear model. XGBoost supplies non-linear gradient-boosted trees
+\cite{chen2016xgboost}; the neural network learns non-linear interactions through
+hidden layers \cite{james2021islr}.
 
-The exact model configurations and hyperparameters are documented in Appendix~\ref{sec:impl-from-scratch}; all learned models are calibrated on the validation slice before evaluation.
+Two non-learned baselines rank repositories by days since the last human commit
+or by negated annual commit volume. They select thresholds on validation data and
+are evaluated on the test set. Commit volume covers all test rows, while recency
+is defined for \(4{,}556\) rows (Section~\ref{sec:results-baselines}). Both run
+inside the training notebook, linking their results to the same run as the
+learned models. Because the label is activity-related, these baselines measure
+how much ranking skill one activity signal already provides
+(Section~\ref{sec:method-leakage-prevention}). Section~\ref{sec:results-baselines}
+shows that the learned advantage is concentrated among repositories still active
+at \(t\).
+
+The exact model configurations and hyperparameters are documented in Appendix~\ref{sec:impl-from-scratch}; all learned models are calibrated on the validation set before evaluation.
 
 Training uses a time-aware split with the default ratio:
 
@@ -180,26 +567,72 @@ Training uses a time-aware split with the default ratio:
 75\% \text{ training}, \quad 15\% \text{ validation}, \quad 10\% \text{ test}
 \]
 
-Rows are ordered by observation date before splitting. The model is fitted on the earliest training slice. The validation slice is used for probability calibration and threshold selection. A histogram-based (binned) calibrator is fitted on the validation predictions, and a decision threshold is selected from the validation data. The final test slice is held out for reporting evaluation results. This design avoids a random split that would mix earlier and later observation periods and would not match the intended forecasting setting.
+Rows are ordered by observation date. The earliest rows train the model;
+validation predictions fit the histogram calibrator and select the decision
+threshold. The final test set is reserved for reporting. This avoids mixing later
+observations into earlier model development.
 
 \section{Evaluation Strategy}
 \label{sec:method-evaluation-strategy}
 
-The primary evaluation is quantitative, on the time-aware held-out test slice, which is used neither for fitting nor for calibration. The reported metrics --- accuracy, precision, recall, F1 score, Brier score, log loss, ROC-AUC, expected calibration error, and a combined quality score --- are defined formally in Section~\ref{sec:method-metric-definitions}. Because the inactive base rate in the slice is not extreme (approximately 0.66), ROC-AUC is a reasonable primary ranking metric: the objection that it can present an overly optimistic picture applies to strongly imbalanced problems, where a precision-recall curve is the more informative summary \cite{saito2015precision}. Precision and recall are reported at the selected operating point, but because precision depends on the positive-class prevalence and the sampled prevalence is not the expected deployment prevalence, precision is interpreted as conditional on the sampled prevalence rather than as a deployment guarantee, and is not treated as a headline comparison metric. Calibration is assessed separately, since a probability-like risk score must match observed outcome frequencies and not merely rank correctly \cite{niculescu2005probabilities}.
+The primary evaluation uses the time-aware test set for neither fitting nor
+calibration. Appendix~\ref{sec:method-metric-definitions} defines accuracy,
+precision, recall, F1, Brier score, log loss, ROC-AUC, average precision,
+expected calibration
+error, and the combined quality score.
 
-Two comparisons guard against inflated headline numbers. The learned models are compared against the trivial recency baseline, and they are additionally evaluated on the subset of repositories still active at \(t\) --- the harder and more decision-relevant case, because predicting that an already dormant repository stays inactive is close to trivial. Reporting this subset separately prevents activity persistence (Section~\ref{sec:method-leakage-prevention}) from dominating the overall metrics. A repository counts as active at~\(t\) when it has at least one bot-filtered human commit in the trailing 90-day window, that is \(\text{active-at-}t = \mathbf{1}\!\left(\text{\texttt{commits\_90d}} > 0\right)\); the 90-day window is an operational choice rather than a tuned threshold, and a multi-signal variant (also requiring recent releases or merged pull requests) is left to future work.
+The inactive base rate is approximately 0.66, so ROC-AUC is a reasonable primary
+ranking metric. Precision-recall summaries are more informative under strong class
+imbalance \cite{saito2015precision}, which is why average precision is reported
+for the active-at-\(t\) subset defined below, where the inactive rate falls to
+\(0.225\) (Section~\ref{sec:results-precision-recall}). Precision and recall are reported at the
+selected operating point. Since precision depends on prevalence, it is
+conditional on this sample and is not a deployment guarantee or headline
+comparison. Calibration is assessed separately because probability scores must
+match observed frequencies \cite{niculescu2005probabilities}.
 
-This quantitative evaluation is complemented by manual case review, because inactivity risk is an operational proxy rather than a directly observable truth; such review identifies cases where the model is right for the wrong reason or where context demands caution, and it drove the feature-set revision in the first iteration. The held-out split is a valid \emph{internal} evaluation of temporal generalization only; its limits as evidence of generalization beyond the constructed dataset are treated as a threat to external validity in Chapter~\ref{chap:validity}.
+The models are compared with recency and evaluated separately on repositories
+still active at \(t\). This subset limits domination by activity persistence
+(Section~\ref{sec:method-leakage-prevention}) and represents the harder case in
+which early warning can still affect a decision. Active-at-\(t\) means at least one
+bot-filtered human commit in the trailing 90 days:
+\(\text{active-at-}t = \mathbf{1}\!\left(\text{\texttt{commits\_90d}} > 0\right)\).
+The 90-day window is an operational choice, not a tuned threshold. A multi-signal
+variant with recent releases or merged pull requests remains future work.
 
-The primary deployed full-history artifact is \texttt{xgboost\sdash full\sdash history}, version \texttt{0.2.0}, trained with \texttt{feature\sdash set\sdash v4\sdash full\sdash history}; it is the model staged for runtime scoring. Its held-out test metrics, together with those of the Logistic Regression model, the neural network (\texttt{neural\sdash net\sdash full\sdash history}), and the two trivial baselines, are reported and interpreted in Chapter~\ref{chap:evaluation}.
+Because inactivity as defined in Section~\ref{sec:method-definitions} is an
+operational proxy, formative manual review identifies
+context-sensitive cases and predictions made for the wrong reason; it drove the
+first feature revision. A systematic case review is future work
+(Chapter~\ref{chap:conclusion}). The held-out split is an \emph{internal}
+evaluation of temporal generalization. Chapter~\ref{chap:validity} discusses
+external validity.
+
+The staged full-history artifact is
+\texttt{xgboost\sdash full\sdash history}, version \texttt{0.2.0}, trained with
+\texttt{feature\sdash set\sdash v4\sdash full\sdash history}.
+Chapter~\ref{chap:evaluation} compares its held-out metrics with Logistic
+Regression, \texttt{neural\sdash net\sdash full\sdash history}, and the two
+baselines.
 
 \section{Methodological Limitations}
 \label{sec:method-limitations}
 
-This section records limitations that are intrinsic to the method and its data. Broader validity threats and their mitigation are consolidated in Chapter~\ref{chap:validity}; this section is intentionally restricted to data and design limitations.
+This section records data and design limitations; Chapter~\ref{chap:validity}
+discusses the broader validity threats.
 
-First, the method depends on the completeness of the provided GH Archive files: missing event hours leave repository histories incomplete. Second, public GitHub activity does not capture all maintenance --- projects may develop elsewhere, release off GitHub, or maintain stable software with little visible activity. Third, package-to-repository mappings can be ambiguous when packages move or metadata is incomplete. Fourth, the inactivity label is a proxy for elevated maintenance risk rather than a statement of abandonment, and its thresholds (Section~\ref{sec:method-definitions}) are heuristic choices whose effect on prevalence is a known robustness concern.
+Missing GH Archive hours leave histories incomplete. Public GitHub events omit
+development elsewhere, off-platform releases, and stable software requiring
+little visible activity. Package-to-repository mappings can be ambiguous after
+moves or with incomplete metadata. The inactivity label is an operational proxy,
+and its heuristic thresholds affect prevalence
+(Section~\ref{sec:method-definitions}).
 
-The foundation seed also bounds scope and prevalence: the evaluation covers visible open-source repositories with a license and a minimum star count rather than all of GitHub, and the oversampling of dormant and archived repositories (Section~\ref{sec:method-data-sources}) makes predicted probabilities conditional on the sampled prevalence, to be recalibrated before they are read as deployment-time risk estimates.
+The seed covers visible, licensed repositories above a minimum star count, not
+all of GitHub. Oversampling dormant and archived repositories makes
+probabilities conditional on the sampled prevalence; deployment risk estimates
+require recalibration (Section~\ref{sec:method-data-sources}).
 
-Finally, the internal test split evaluates temporal generalization within the constructed dataset but does not replace external validation on a newly sampled repository set, which is identified as future work in Chapter~\ref{chap:conclusion} rather than claimed as a completed result.
+The internal split tests temporal generalization within the dataset. External
+validation on a newly sampled repository set remains future work
+(Chapter~\ref{chap:conclusion}).

@@ -1,39 +1,97 @@
 \chapter{Related Work}
 \label{chap:related-work}
 
-This chapter positions the thesis relative to concrete prior approaches, their operationalizations, and the gap it addresses. The aim is comparative: for each strand of work, the relevant difference to the present inactivity-risk artifact is made explicit.
+This chapter compares the inactivity-risk workflow with prior operationalizations
+of inactivity, project-health metrics, and security-practice indicators.
 
 \section{OSS Inactivity and Abandonment Operationalizations}
 \label{sec:related-inactivity}
 
-A first strand of work studies how open-source inactivity or abandonment can be defined and measured. Robinson et al. apply survival-style analysis to open-source Python projects and use revision activity as an observable signal for project survival \cite{robinson2022survival}. This supports the idea that activity-based signals can be used to reason about future project state, but survival analysis typically estimates time-to-event over a population rather than producing a per-repository forward-looking risk score at a fixed horizon.
+Robinson et al. apply survival-style analysis to open-source Python projects and
+use revision activity as an observable signal for project survival
+\cite{robinson2022survival}. Their results support reasoning about future project
+state from activity. A fitted hazard model can yield per-subject predictions, but
+their study reports population-level survival behavior. It does not evaluate
+fixed-horizon repository predictions against held-out future outcomes as done
+here.
 
-Miller et al. study dependency abandonment in the npm ecosystem and show that abandonment is common among widely used packages and that downstream projects often remain exposed, including through transitive dependencies \cite{miller2025abandonment}. Their earlier interview study shows that developers frequently lack clear strategies for responding to abandonment \cite{miller2023wingingit}. These works motivate the practical need for an early-warning triage signal, but they characterize abandonment retrospectively and at the ecosystem level rather than predicting a 12-month inactivity outcome for an individual repository from point-in-time features.
+Miller et al. find that \(15\%\) of widely used npm packages became abandoned
+within six years and that only \(18\%\) of exposed downstream projects removed
+the dependency \cite{miller2025abandonment}.\kiref{Claude Opus 5/10} Their
+interview study finds that developers often lack clear response strategies
+\cite{miller2023wingingit}. Both studies characterize abandonment
+retrospectively at ecosystem level. They do not predict a 12-month outcome for an
+individual repository from point-in-time features. Their findings motivate an
+early-warning triage signal.
 
-A closer strand predicts maintenance status rather than describing it retrospectively. Coelho et al.\ train a machine-learning classifier that identifies unmaintained GitHub projects from repository activity features and validate its output against project developers \cite{coelho2018identifying}; their follow-up work tracks several thousand active projects over a year and proposes a machine-learning metric of the \emph{level} of maintenance activity, reporting that roughly one in six active projects becomes unmaintained within twelve months \cite{coelho2020maintained}. At the component level, the OSSARA model assesses the abandonment risk of embedded open-source dependencies by aggregating per-component maintenance predictions to support continuous monitoring \cite{li2022ossara}. These works establish that maintenance and abandonment can be predicted, not only measured after the fact, and are the closest prior art to the present thesis.
+Coelho et al.\ train a classifier that identifies unmaintained GitHub projects
+from activity features and validate its output with project developers
+\cite{coelho2018identifying}. Their follow-up tracks \(2{,}927\) active projects
+for one year and proposes a machine-learning metric for the \emph{level} of
+maintenance activity. It reports that \(16\%\) became unmaintained
+\cite{coelho2020maintained}. At component level, OSSARA aggregates maintenance
+predictions to assess the abandonment risk of embedded open-source dependencies
+for continuous monitoring \cite{li2022ossara}. These studies show that
+maintenance status can be predicted and are the closest predictive comparisons
+for this thesis.
 
-Against this predictive prior work, the present thesis is distinguished less by the idea of prediction than by its specific operationalization: a fixed 12-month horizon evaluated from point-in-time observation snapshots reconstructed from GH~Archive with an explicit temporal leakage boundary; a multi-signal inactivity label combining human commit, contributor, release, and merged-pull-request activity rather than a single revision-activity threshold or a continuous activity index; probability \emph{calibration} and comparison against strong trivial recency baselines rather than discrimination metrics alone; a separate analysis of the repositories still active at the observation time, where early warning is most decision-relevant; and integration of the calibrated score into a per-repository dependency-triage demonstrator that keeps inactivity prediction and security posture explicitly separate. Issue activity and responsiveness signals are kept as predictors only and are not part of the label.
+The present work differs in its operationalization:
+
+\begin{itemize}
+    \item a fixed 12-month horizon evaluated from point-in-time observation snapshots reconstructed from GH~Archive with an explicit temporal leakage boundary;
+    \item a multi-signal inactivity label combining human commit, contributor, release, and merged-pull-request activity instead of a single revision-activity threshold or continuous activity index;
+    \item probability \emph{calibration} and comparison against strong trivial recency baselines in addition to discrimination metrics;
+    \item a separate analysis of the repositories still active at the observation time, where early warning is most decision-relevant;
+    \item integration of the calibrated score into a per-repository dependency-triage demonstrator that keeps inactivity prediction and security posture explicitly separate.
+\end{itemize}
+
+Issue activity and responsiveness signals are kept as predictors only and are not part of the label.
 
 \section{Repository Health Metrics and Dashboards}
 \label{sec:related-health-metrics}
 
-A second strand concerns standardized project health measurement. The CHAOSS project provides metrics models, including the Starter Project Health Metrics Model, as structured entry points for measuring project health \cite{chaossStarterProjectHealth}. Goggins et al. argue that making project health transparent requires structured measurement and interpretation rather than isolated indicators \cite{goggins2021transparent}. These efforts provide a vocabulary of observable signals that informs the feature engineering of this thesis.
+The CHAOSS project provides standardized metrics models, including the Starter
+Project Health Metrics Model \cite{chaossStarterProjectHealth}. Goggins et al.
+argue that transparent project health requires structured measurement and
+interpretation instead of isolated indicators \cite{goggins2021transparent}.
+This vocabulary informs the feature engineering.
 
-However, dashboards and metrics models are primarily descriptive: they surface indicators for human interpretation rather than predicting a future outcome. Yehudi et al. show that individual context-free health indicators are insufficient for identifying sustainability across heterogeneous projects \cite{yehudi2023contextfree}. This thesis takes that critique as a design constraint: instead of presenting single indicators, it combines many observation-time signals into a calibrated predictive model and evaluates the combination empirically, while explicitly acknowledging that the resulting score is a limited operational proxy.
+Dashboards and metrics models primarily describe indicators for human
+interpretation. They do not predict a future outcome. Yehudi et al. show that
+individual context-free indicators are insufficient for identifying
+sustainability across heterogeneous projects \cite{yehudi2023contextfree}. The
+model therefore combines observation-time signals and evaluates the combination
+empirically. Its output remains a limited operational proxy.
 
 \section{Security-Practice Indicators}
 \label{sec:related-security-practice}
 
-A third strand concerns security-practice signals. OpenSSF Scorecard provides automated security-related checks for open-source repositories \cite{zahan2022scorecard}, and supply-chain frameworks such as the NIST SSDF and SLSA motivate why dependency security posture matters \cite{souppaya2022ssdf,slsa2025spec}. These checks describe present-day security practices rather than future maintenance activity.
+OpenSSF Scorecard provides automated security-related checks for open-source
+repositories \cite{zahan2023scorecard}. The NIST SSDF and SLSA explain why this
+security posture matters for dependencies
+\cite{souppaya2022ssdf,slsa2025spec}. The checks describe present security
+practices, not future maintenance activity.
 
-This distinction is important for the present work. As stated in Section~\ref{sec:method-research-design}, OpenSSF Scorecard is used as a parallel security-posture signal in OSS Risk Radar and is deliberately not part of the inactivity model feature vector. The thesis therefore does not claim that security-practice checks improve inactivity prediction; it keeps the predictive target focused on activity and maintenance signals, while presenting security posture as complementary context for triage.
+OSS Risk Radar therefore presents OpenSSF Scorecard as a parallel
+security-posture signal and excludes it from the inactivity-model feature vector
+(Section~\ref{sec:method-research-design}). No claim is made that these checks
+improve inactivity prediction; they provide complementary triage context.
 
 \section{Responsiveness Measurement Caveats}
 \label{sec:related-responsiveness}
 
-Several features in this thesis describe responsiveness (issue first-response time, pull-request response and merge latency). Because bot-generated first responses can distort such measurements \cite{hasan2023firstresponse}, this thesis treats them as reconstructed GH Archive proxies rather than canonical CHAOSS metrics, interpreted cautiously (Section~\ref{sec:background-metric-pitfalls}).
+The responsiveness features cover issue first-response time and pull-request
+response and merge latency. Bot-generated responses can distort these measures
+\cite{hasan2023firstresponse}, so they are treated as reconstructed GH Archive
+proxies, not canonical CHAOSS metrics
+(Section~\ref{sec:background-metric-pitfalls}).
 
 \section{Research Gap}
 \label{sec:related-summary}
 
-Prior work provides operationalizations of inactivity and abandonment, standardized health metrics, security-practice indicators, and --- in the closest cases --- machine-learning models that predict maintenance status \cite{coelho2018identifying,coelho2020maintained,li2022ossara}. What remains open is therefore not whether maintenance can be predicted at all, but a reproducible, forward-looking, \emph{calibrated} per-repository inactivity-risk model with a fixed 12-month horizon, a multi-signal inactivity label, leakage-controlled point-in-time features, an explicit comparison against trivial recency baselines, and an explicit separation between the inactivity prediction target and parallel security-posture signals, packaged into a dependency-triage artifact.
+Prior work operationalizes inactivity and abandonment, standardizes health
+metrics, provides security-practice indicators, and predicts maintenance status
+\cite{coelho2018identifying,coelho2020maintained,li2022ossara}. The open question
+is whether the operationalization in Section~\ref{sec:related-inactivity}
+supports a reproducible, forward-looking, \emph{calibrated} per-repository score
+within a dependency-triage artifact.

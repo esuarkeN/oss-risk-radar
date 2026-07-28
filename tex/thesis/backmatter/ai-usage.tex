@@ -3,30 +3,37 @@
 \label{chap:ai-usage}
 
 In this thesis, generative AI systems were used in a supporting role for editorial,
-technical, and methodological tasks. These included, in particular, researching
-potentially relevant literature, the linguistic and formal revision of text passages,
-support in the development and documentation of software components, and checking the
-scientific soundness of the work. All content, sources, and changes proposed by AI
-systems were independently reviewed by the author before being adopted.
+technical, and methodological tasks. These included researching potentially relevant
+literature, the linguistic and formal revision of text passages, the drafting and
+revision of individual sections against reviewer feedback, support in the development
+and documentation of software components, and checking the scientific soundness of the
+work. All content, sources, and changes proposed by AI systems were independently
+reviewed by the author before being adopted; the research question, the study design,
+the empirical results, and the conclusions drawn from them are the author's own.
 
-Table~\ref{tab:ai-prompts} documents the individual interactions with the AI systems
-used, listing in each case the system, the underlying prompt or task, and how the results
-were used.
+Table~\ref{tab:ai-prompts} documents the individual interactions in the order in which
+they were used. Each entry gives the system with its version, the opening prompt, and
+what the output was used for together with the section it entered. Where the same system
+was used several times, the entries are numbered (for example \emph{Claude Opus~5/2}).
+Passages in the running text that were drafted with AI support carry a footnote
+referring to the corresponding entry; a footnote prefixed with ``cf.'' marks a passage
+for which the output served only as a starting point.
 
 {\footnotesize
 \setlength{\tabcolsep}{4pt}
 \renewcommand{\arraystretch}{1.2}
-\begin{longtable}{p{0.17\textwidth} p{0.45\textwidth} p{0.30\textwidth}}
+\begin{longtable}{p{0.15\textwidth} p{0.42\textwidth} p{0.35\textwidth}}
 \caption{Use of generative AI systems in the preparation of this thesis and the software
-artifact, listing the system, the prompt or task, and how the results were used.}
+artifact, listing the system and version, the opening prompt, and how and where the
+results were used.}
 \label{tab:ai-prompts} \\
 \toprule
-\textbf{System} & \textbf{Prompt or task} & \textbf{Use of results} \\
+\textbf{System} & \textbf{Opening prompt} & \textbf{Use of results and location} \\
 \midrule
 \endfirsthead
 \multicolumn{3}{l}{\small\itshape Table~\ref{tab:ai-prompts} --- continued from previous page} \\
 \toprule
-\textbf{System} & \textbf{Prompt or task} & \textbf{Use of results} \\
+\textbf{System} & \textbf{Opening prompt} & \textbf{Use of results and location} \\
 \midrule
 \endhead
 \midrule
@@ -35,67 +42,246 @@ artifact, listing the system, the prompt or task, and how the results were used.
 \bottomrule
 \endlastfoot
 
-GPT-5.5 with Deep Research
-& Research of scientific sources on metrics and criteria by which the inactivity, or
-activity state, of open-source software projects can be determined.
-& The proposed sources were reviewed for their scientific quality and thematic relevance.
-A subset of the suitable sources was subsequently incorporated into the literature base of
-the thesis. \\
+GPT-5.5 (Deep Research and Thinking)/1
+& ``Hey i write my bachelorthesis about predicting OSS inactivity risk. can you find me
+sources about that topic and also I found these metrics
+\url{https://www.chaoss.community/kb-metrics-and-metrics-models/} and wanted to use them
+can you find sources that actually support those metrics. ty''
+& One interaction serving two purposes: research of scientific sources on how the
+inactivity or activity state of open-source projects can be determined, and a search for
+literature supporting the CHAOSS metrics. All proposed sources were reviewed for
+scientific quality and thematic relevance before a subset was adopted; the CHAOSS
+material was checked against the project's own documentation. \newline
+\emph{Chapters~\ref{chap:background} and~\ref{chap:related-work};
+Sections~\ref{sec:background-oss-health} and~\ref{sec:method-feature-engineering};
+bibliography.} \\
 
-GPT-5.5
-& Research of sources and official documentation on the CHAOSS metrics for assessing the
-health of open-source software projects.
-& The sources and metric descriptions found were independently reviewed. Selected sources
-were adopted as the basis for describing and classifying the project metrics used. \\
-
-Codex with GPT-5.5
+Codex with GPT-5.5/1
+& ``Hey bud can you give me an powershell script which I can use to download
+automatically a list of csv repos such as follows for input given timestamps from
+github archive, ty.''
 & Development of a script for automatically downloading relevant GH Archive data for a
-structured set of GitHub repositories listed in a reference CSV file.
-& The generated script was reviewed, adapted, and used for automated data collection in
-the course of building the research dataset. \\
+structured set of GitHub repositories listed in a reference CSV file. The generated
+script was reviewed, adapted, and used for automated data collection. \newline
+\emph{Software artifact; described in Section~\ref{sec:impl-dataset-builder}.} \\
 
-Codex with GPT-5.5
+Codex with GPT-5.5/2
+& ``so we have our Regression and xgboost model but I want to also tesxt a neural net if
+it performs better so we are scientifically save for that case and show its better or
+not can you help me setup a plan on how we would impelemtn that.''
 & Analysis of possible extensions of the existing prediction model with a neural network,
 and proposals for integrating a corresponding model component into the existing software
-architecture.
-& The proposed approaches were evaluated and used as the basis for implementing an
-additional neural model component in the developed artifact. \\
+architecture. The proposed approaches were evaluated and used as the basis for
+implementing an additional neural model component. \newline
+\emph{Software artifact; reported in Section~\ref{sec:results-performance}.} \\
 
-Claude Opus 4.8
+Codex with GPT-5.5/3
+& ``wouldnt be a full migration to a jupyter notebook smart as its a thesis level program
+and the python scripts remain the same but we have better overview and use the artifact
+of the model in the end anyway. create a plan for that'' (2026-06-04)
 & Transfer and documentation of the existing Python scripts into a Jupyter notebook, with
-an assessment of whether the program code should be fully transferred into the notebook or
-included via the existing scripts.
-& Based on the proposed options, a notebook was created that references the existing Python
-scripts, explains their use, and documents the individual steps of data processing and
-model evaluation in a traceable manner. \\
+an assessment of whether the code should be fully transferred into the notebook or
+included via the existing scripts. A notebook was created that references the existing
+scripts and documents the individual steps of data processing and model evaluation.
+\newline \emph{Software artifact; described in Section~\ref{sec:impl-deployment} and
+Appendix~\ref{sec:impl-training-orchestration}.} \\
 
-Claude Opus 4.8
+Claude Opus 4.8/1
+& ``so now check the whole tex part again for anything vague or not backed by sources
+and then we fix it together so you can ask me questions then'' (2026-07-09)
 & Review of the \LaTeX{} files with regard to scientific style, argumentative
 traceability, and whether external statements are supported by sources and empirical
-statements by the author's own findings.
-& The identified linguistic, structural, and evidence-related issues were reviewed and
-corrected where necessary. The final assessment and adoption of the changes was carried
-out independently. \\
+statements by the author's own findings. The identified issues were reviewed and
+corrected where necessary; the final assessment and adoption of the changes was carried
+out independently. \newline \emph{Whole thesis; no new content generated.} \\
 
-Claude Opus 4.8
+Claude Opus 4.8/2
+& ``okay and another thing well yeah I have 60 pages the limit is around 25 to 30 yeah
+so I have to well shorten and cut stuff but also I feel like we need a lot of it but
+yeah in the end its a scientific work so what can we actually move to the appendix
+(rename aditional content to appendix pls) and move out so we actually have the
+scientificly relevant infos all in the main chapters'' (2026-07-02)
 & Assessment of which extensive tables, feature descriptions, and supplementary content
-could be moved from the main body to the appendix in order to improve the readability and
-length of the main text.
-& Suitable detailed information was moved to the appendix. The summaries and key statements
-required for understanding the methodology and results remained in the main body. \\
+could be moved from the main body to the appendix to improve readability and length.
+Suitable detailed information was moved; the summaries and key statements required for
+understanding the methodology and results remained in the main body. \newline
+\emph{Appendix~\ref{appendix:feature-reference} and~\ref{appendix:impl-detail};
+structural only.} \\
 
-Claude Opus 4.8
-& Creation and review of cross-references between the content moved to the appendix and the
-corresponding sections of the main text.
-& The proposed cross-references were implemented, so that detailed information can be
-located unambiguously from the main text and the appendix refers back to the relevant
-sections of the thesis. \\
+Claude Opus 4.8/3
+& ``yeah we should link our tables and references to the appendix from the main text
+aswell as back from appendix to the main text where you probably jumped to the appendix.
+Do you understand what i mean? if not pls ask me again so you dont assume, ty''
+(2026-07-10)
+& Creation and review of cross-references between the content moved to the appendix and
+the corresponding sections of the main text. The proposed cross-references were
+implemented. \newline \emph{Whole thesis; cross-references only.} \\
 
-Claude Opus 4.8
+Claude Opus 4.8/4
+& ``okay i asked another ai for some feedback and this is what we got, is it right and
+well do you agree and can we fix that? its in feedback.md'' (2026-07-23)
 & Final review of the thesis for \LaTeX{} errors, scientific style, consistency of
-argumentation, and the scientific soundness of the chosen methodology.
-& Based on the review, minor formal and technical adjustments were made to the \LaTeX{}
-files. Content-related suggestions were independently verified before being adopted. \\
+argumentation, and the scientific soundness of the chosen methodology. Minor formal and
+technical adjustments were made; content-related suggestions were independently verified
+before being adopted. \newline \emph{Whole thesis; no new content generated.} \\
+
+Claude Opus 5/1
+& ``so i got feedback under downloads, thesisfeedback. WE should implement it and well
+yeah check for the other informations i got, like the other pdf and ppt files from
+yesterday regarding bachelor sutff so well we should chekc against taht again if
+everythign is sufficient here aswell'' (2026-07-27)
+& Extraction of the annotations from a reviewer-commented PDF of the thesis and revision
+of the affected passages: reworking the motivation to lead with vulnerability exposure,
+adding the GitHub-only scope restriction, defining the term \emph{demonstrator}, naming
+the security-practice signals, and unifying the label terminology. Drafted with AI
+support and reviewed by the author. \newline
+\emph{Sections~\ref{sec:intro-motivation}, \ref{sec:intro-research-question},
+\ref{sec:intro-scope}, \ref{sec:method-research-design},
+\ref{sec:method-definitions}, \ref{sec:method-data-sources},
+\ref{sec:method-dataset-construction}, \ref{sec:demo-ranking},
+\ref{sec:validity-external}.} \\
+
+Claude Opus 5/2
+& ``actually i get more and more the feeling i have more like a master thesis rather
+than a bachelor thesis. As well im diving very deep into stuff but not explain certain
+basics like AUROC in the basics or even in glossary'' (2026-07-27)
+& Drafting of a plain-language explanation of the evaluation metrics (discrimination
+versus calibration, ROC-AUC, Brier score, expected calibration error, held-out test set)
+for readers without a machine-learning background, and clarification of why the recency
+baseline is a like-for-like comparison. Drafted with AI support and reviewed by the
+author. \newline \emph{Section~\ref{sec:background-ml-basics}; abstract.} \\
+
+Claude Opus 5/3
+& Same originating request as \emph{Claude Opus 5/2}; the glossary was produced from the
+part of it concerning undefined basics (``\ldots{}not explain certain basics like AUROC
+in the basics or even in glossary'', 2026-07-27).
+& Drafting of a glossary of the recurring technical terms of the thesis, distinguishing
+established machine-learning terminology from the definitions introduced by this work.
+Drafted with AI support; the entries were checked against the corresponding sections by
+the author. \newline \emph{Glossary (front matter).} \\
+
+Claude Opus 5/4
+& ``now we got the full comments'' (2026-07-27), referring to a second
+reviewer-annotated PDF of the thesis; preceded by ``yes do that pls'' on a partial set of
+the same reviewer's comments.
+& Revision of the methodology, implementation, and results chapters against a second
+round of reviewer comments: making the temporal structure of the observation snapshots
+explicit, justifying the inverted maintenance variable and the binned calibrator,
+motivating the slice evaluation and the repository-disjoint split, defining the
+foundation seed and the human-actor filter, and explaining what a \emph{reconstructed
+proxy} means. Drafted with AI support and reviewed by the author. \newline
+\emph{Sections~\ref{sec:method-definitions}, \ref{sec:method-observation-window},
+\ref{sec:method-feature-engineering}, \ref{sec:method-prediction-regimes},
+\ref{sec:impl-architecture}, \ref{sec:impl-models}, \ref{sec:results-baselines},
+\ref{sec:results-history-ablation}, \ref{sec:demo-mapping};
+Appendix~\ref{appendix:bot-ablation}; Chapter~\ref{chap:validity}.} \\
+
+Claude Opus 5/5
+& Same originating request as \emph{Claude Opus 5/4}; the figure answers the reviewer
+comment ``diagram would be great for stuff like this. spart auch viel text''.
+& Generation of a Ti\emph{k}Z bar chart of the standardized logistic-regression
+coefficients, replacing a prose enumeration of the same values. The plotted values were
+taken from the author's own training run and verified against it. \newline
+\emph{Figure~\ref{fig:attribution}, Section~\ref{sec:results-attribution}.} \\
+
+Claude Opus 5/6
+& Same originating request as \emph{Claude Opus 5/4}; the check was triggered by the
+reviewer comment ``das hast du glaub ich rausgenommen oder?'' on the package-derived
+features.
+& Verification of which model inputs are constant in the reported dataset, and drafting
+of the resulting disclosure. The check was run against the committed training data and
+the model run artifact; the finding that ten of the sixty inputs carry no
+repository-level signal --- eight constant across all rows and two varying only with the
+observation date --- was confirmed by the author. \newline
+\emph{Section~\ref{sec:method-feature-engineering};
+Appendix~\ref{sec:appendix-undefined-features}.} \\
+
+Claude Opus 5/7
+& ``yeah go ahead'' (2026-07-27), authorising the adaptation of typeface, margins, page
+numbering and front-matter order to the Provadis \emph{Anforderungen}; the bibliography
+page ranges were checked during the request recorded as \emph{Claude Opus 5/1}.
+& Verification of the missing page ranges of five published bibliography entries against
+DBLP and the publishers' records, and adaptation of the document formatting to the
+Provadis requirements (typeface, margins, page numbering, order of the front matter).
+\newline \emph{Bibliography; document formatting only, no content generated.} \\
+
+Claude Opus 5/8
+& ``You are acting as a strict academic language editor for an English-language
+bachelor's thesis in computer science \ldots{} start with the introduction''
+(2026-07-28), a structured editing brief followed by chapter-by-chapter requests over
+the same session.
+& Passage-by-passage review of all chapters, the abstract, and the appendix for vague or
+unsupported wording, overstated certainty, inconsistent terminology, and claims not
+carried by the reported results. Each finding was presented to the author with the
+proposed wording; the author decided which to apply, and the approved corrections were
+then made. No new content, sources, or results were introduced. \newline
+\emph{Whole thesis; wording and consistency only.} \\
+
+Claude Opus 5/9
+& Same originating session as \emph{Claude Opus 5/8}; the re-verification was requested
+with ``we should update all numbers to our newest run'' (2026-07-28).
+& Re-training of the reported model on the committed dataset, which reproduced the staged
+run's held-out metrics to six decimal places, and recomputation of the reported figures
+from the unrounded output. The recomputation showed that two margins had been derived by
+subtracting already-rounded values and that two comparisons used different trivial
+baselines; the affected figures were corrected and the comparators stated explicitly. A
+reproducible harness for the label-definition sensitivity analysis was added to the
+software artifact. All figures were produced by executing the author's own pipeline on
+the author's own data. \newline
+\emph{Sections~\ref{sec:results-baselines}, \ref{sec:results-history-ablation},
+\ref{sec:results-slices}, \ref{sec:results-label-sensitivity};
+Chapter~\ref{chap:conclusion}; Appendix~\ref{appendix:label-sensitivity}
+and~\ref{sec:method-reproducibility}; software artifact.} \\
+
+Claude Opus 5/10
+& Same originating session as \emph{Claude Opus 5/8}; prompted by ``for 2 and 3 get the
+sources and check again then'' (2026-07-28).
+& Verification of numeric claims attributed to cited works against the publications
+themselves, and of the demonstrator's characterisations of individual repositories
+against the public GitHub API. Two statements that the cited sources did not support were
+removed, vague quantifiers were replaced by the figures the sources report, and one
+incomplete bibliography entry was completed. The corrected characterisation of two
+repositories in the demonstrator was verified by the author before adoption. \newline
+\emph{Sections~\ref{sec:intro-motivation}, \ref{sec:related-inactivity},
+\ref{sec:demo-ranking}; bibliography.} \\
+
+Claude Opus 5/11
+& ``codex checked and said this should I do to enhance my thesis: \ldots{} is that
+feedback right?'' (2026-07-28), pasting a review of the thesis and software artifact
+produced by another AI system, followed by ``yes do it pls'' authorising the corrections
+the review was found to justify.
+& Verification of an external AI review's claims against the executable code and the
+generated dataset, and drafting of the resulting corrections. Four claims were confirmed
+by direct measurement and three were found to be unsupported; the author decided which to
+act on. The confirmed items were: the boundary between the training and validation
+partitions falls inside one observation cohort and their labels close after the test
+observation date; the foundation seed was drawn from repository state after the outcome
+windows had closed, with the per-stratum inactive rates recomputed from the committed
+dataset; the repository-disjoint split refits the model and was described incorrectly as a
+re-analysis; and two feature inputs vary only with the observation date. All measurements
+were produced by executing the author's own pipeline on the author's own data. \newline
+\emph{Sections~\ref{sec:method-retrospective-frame},
+\ref{sec:method-label-availability},
+\ref{sec:method-feature-engineering}, \ref{sec:method-leakage-prevention},
+\ref{sec:impl-models}, \ref{sec:results-robustness};
+Chapters~\ref{chap:validity} and~\ref{chap:conclusion};
+Appendices~\ref{sec:appendix-undefined-features}
+and~\ref{appendix:impl-eval-instruments}.} \\
+
+Claude Opus 5/12
+& Same originating session as \emph{Claude Opus 5/11}; the analysis was requested with
+``do item d'' (2026-07-28), referring to the one item of the external review that
+proposed an additional measurement rather than a correction.
+& Addition of an average-precision evaluation of the early-warning subset, which the
+thesis had previously recorded as a missing metric. A reproducible harness was added to
+the software artifact; it aborts unless the re-scored predictions reproduce the reported
+held-out ROC-AUC, and it reproduced the previously reported subset figures exactly. The
+metric definition, the reported areas, the bootstrap intervals, and the accompanying
+discussion were drafted with AI support and reviewed by the author. All figures were
+produced by executing the author's own pipeline on the author's own data. \newline
+\emph{Sections~\ref{sec:method-evaluation-strategy},
+\ref{sec:results-precision-recall}; Chapter~\ref{chap:validity};
+Appendix~\ref{sec:method-metric-definitions}; glossary; software artifact.} \\
 
 \end{longtable}
 }

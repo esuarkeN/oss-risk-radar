@@ -1,27 +1,124 @@
 \chapter{Threats to Validity}
 \label{chap:validity}
 
-This chapter consolidates the threats to validity for the thesis and the mitigations applied. Validity is discussed here rather than distributed across the earlier chapters; the methodology chapter (Section~\ref{sec:method-limitations}) is restricted to intrinsic data and design limitations, which are referenced here rather than repeated. Threats are organized along the four categories established for empirical software engineering by Wohlin et al.\ --- construct, internal, external, and conclusion validity \cite{wohlin2012experimentation}.
+Threats follow the construct, internal, external, and conclusion validity
+categories of Wohlin et al.\ \cite{wohlin2012experimentation}. The intrinsic data
+and design limitations are summarized in
+Section~\ref{sec:method-limitations}.
 
 \section{Construct Validity}
 \label{sec:validity-construct}
 
-Construct validity concerns whether the measured quantities represent the intended concepts. The central construct is repository inactivity, which is operationalized as the inverse of a multi-signal maintenance rule over the future window \((t, t + 12\text{ months}]\) (Section~\ref{sec:method-definitions}). This is a proxy: a repository can be stable and low-activity without being abandoned, and visible activity does not capture development that moves to other platforms or release channels. The two-of-four maintenance thresholds are heuristic design choices, and the merged-pull-request clause is a proxy for broader maintainer interaction. These choices are mitigated by requiring sustained rather than incidental activity and by interpreting the score as a triage signal rather than a verdict, but they remain a construct-validity threat that a label sensitivity analysis (Chapter~\ref{chap:conclusion}) would further address. A related decision --- excluding bot actors from the features and label --- is validated by the ablation of Section~\ref{sec:results-bot-ablation}, which shows the filter removes a one-directional bias that masks inactivity rather than merely improving fit.
+Repository inactivity is the inverse of the future-window maintenance rule
+\((t, t + 12\text{ months}]\)
+(Section~\ref{sec:method-definitions}). It is a proxy: stable projects can need
+little activity without being abandoned, and development may move to other
+platforms or release channels. The label therefore cannot prove abandonment.
+The two-of-four thresholds are heuristic, and merged pull requests proxy
+maintainer interaction. Requiring sustained activity reduces incidental labels
+but does not remove this threat.
+
+The sensitivity analysis re-labels all \(50{,}000\) snapshots with one-of-four
+and three-of-four variants (Section~\ref{sec:results-label-sensitivity}). The
+inactive rate ranges from \(0.581\) to \(0.746\), while ROC-AUC remains within
+\(0.958\)--\(0.961\). The result is not specific to the two-of-four threshold,
+but the analysis cannot establish that public activity is the correct maintenance
+construct. Individual cut-off sweeps remain future work
+(Chapter~\ref{chap:conclusion}). The bot-filter ablation additionally shows that
+excluding bots removes a one-directional bias that masks inactivity
+(Appendix~\ref{appendix:bot-ablation}).
 
 \section{Internal Validity}
 \label{sec:validity-internal}
 
-Internal validity concerns whether the reported predictive relationship is genuine rather than an artifact of the setup. The main threat, temporal leakage, is mitigated by the rules in Section~\ref{sec:method-leakage-prevention}: observation-time features use only timestamps \(\leq t\), labels only the future window, rows with incomplete future coverage stay unlabeled, and live enrichment is restricted to stable metadata. A distinct, non-leakage threat is activity persistence: features such as days since last commit are predictive by construction, so part of the discrimination reflects already-quiet repositories staying quiet. Comparison against trivial baselines confirms this is real --- a single recency signal nearly matches the model on the full slice (Section~\ref{sec:results-baselines}). The decisive check is therefore the active-at-\(t\) subset, where the model outranks the best trivial rule by \(0.061\) ROC-AUC (Section~\ref{sec:results-slices}); the predictive contribution is thus established where persistence cannot explain it, and is not claimed from the aggregate metric.
+Temporal leakage is controlled by using timestamps \(\leq t\) for features, the
+future window for labels, leaving incomplete windows unlabeled, and restricting
+live enrichment to stable metadata
+(Section~\ref{sec:method-leakage-prevention}). Activity persistence remains a
+separate threat. A single recency signal nearly matches the model on the full
+test set because many already-quiet repositories stay quiet
+(Section~\ref{sec:results-baselines}). On active-at-\(t\), the model exceeds the
+best trivial rule by \(0.061\) ROC-AUC
+(Section~\ref{sec:results-slices}). The predictive contribution is claimed from
+this subset, not the aggregate metric.
 
-A second concern is repository recurrence: because observations are quarterly, a repository contributes several autocorrelated snapshots, and since the equally sized cohorts make the chronological test partition coincide with the final observation date, every test repository also occurs in training at an earlier date (Section~\ref{sec:method-observation-window}), which would make the metric optimistic relative to unseen repositories. This is addressed by a repository-disjoint split that confines every snapshot of a repository to one partition (Section~\ref{sec:impl-grouped-split}); the held-out ROC-AUC decreases only marginally (Section~\ref{sec:results-robustness}), bounding the optimism and indicating that the discrimination generalizes rather than resting on memorization.
+Quarterly observations create autocorrelated snapshots. Equal cohort sizes make
+the test partition the final date, so every test repository also occurs earlier
+in training (Section~\ref{sec:method-observation-window}). A
+repository-disjoint split confines each repository to one partition and refits
+the model on it (Appendix~\ref{sec:impl-grouped-split}). ROC-AUC decreases only
+marginally, bounding optimism from recurrence and indicating discrimination on
+repositories held out from the same frame
+(Section~\ref{sec:results-robustness}).
+
+The split is chronological but not embargoed
+(Section~\ref{sec:method-label-availability}). Training and validation labels
+close after the test observation date, and the boundary between training and
+validation falls inside the \texttt{2024-10-01} cohort. Neither admits
+information about a test row into its own features or label, so the reported
+metric is not inflated by leakage across the boundary at \(t\). What they do
+restrict is the interpretation: the design is a retrospective chronological
+evaluation with overlapping outcome windows, so it does not demonstrate that the
+model could have been fitted at the simulated prediction date.
 
 \section{External Validity}
 \label{sec:validity-external}
 
-External validity concerns generalization beyond the studied sample. The broadest restriction is the platform. Every repository in the dataset is hosted on GitHub, because both the labels and the observation-time features are reconstructed from the GitHub event stream (Section~\ref{sec:intro-scope}). The results therefore say nothing about projects on GitLab, Codeberg, or self-hosted forges, and still less about projects whose development is not organized around hosted issues and pull requests at all, such as the mailing-list workflow of the Linux kernel. This exclusion is not random with respect to the outcome: platform choice correlates with project age, size, and governance, precisely the properties that shape maintenance behaviour, so the direction of the resulting bias cannot be assumed benign. Within GitHub itself, further limits apply. The foundation seed targets repositories with a license and at least 100 stars, so results should not be generalized to very small, private, new, or low-visibility repositories; the ``low popularity'' subgroup of Section~\ref{sec:results-slices} is low only relative to that frame. The seed also oversamples dormant and archived repositories, so the test-slice inactive rate does not reflect the natural OSS rate, and predicted probabilities and precision are conditional on this sampled prevalence, requiring recalibration for a deployment population (Section~\ref{sec:method-limitations}). The held-out split evaluates temporal generalization within the dataset but not generalization to a freshly sampled set; external validation on out-of-foundation repositories is future work (Chapter~\ref{chap:conclusion}).
+All labels and features come from GitHub events
+(Section~\ref{sec:intro-scope}). The results do not cover GitLab, Codeberg,
+self-hosted forges, or workflows based on mailing lists, such as the Linux
+kernel. Platform choice may covary with project age, size, governance, and
+maintenance, so the direction of this bias is unknown.\kiref{Claude Opus 5/1}
+GitHub samples are also unrepresentative of software development generally: most
+hosted repositories are personal and inactive, and roughly half of registered
+users have no public activity
+\cite{kalliamvakou2016perils}.\kiref{Claude Opus 5/10}
+
+The foundation seed further requires a license and at least 100 stars. Results
+do not generalize to very small, private, new, or low-visibility repositories;
+the ``low popularity'' slice is relative to this frame
+(Section~\ref{sec:results-slices}). Oversampling dormant and archived projects
+also makes probabilities and precision conditional on sampled prevalence.
+Deployment requires recalibration (Section~\ref{sec:method-limitations}).
+
+The frame is also sampled retrospectively, which is the more serious of the two
+sampling threats (Section~\ref{sec:method-retrospective-frame}). The seed was
+drawn on \texttt{2026-06-11} using push recency and archive state at that date,
+so bucket membership is decided by behavior falling inside the outcome windows
+being predicted. The dormant bucket is inactive at a rate of \(1.000\) in the
+test cohort, and roughly half of each cohort comes from buckets whose defining
+condition largely fixes the outcome. Aggregate discrimination is consequently
+measured on a population that is easier to separate than one sampled at \(t\),
+and the aggregate figures should be read as conditional on this frame rather than
+as an estimate of deployment performance. The active-at-\(t\) subset is less
+exposed, since it excludes the already-quiet rows through which the buckets are
+most legible, but it is drawn from the same frame and inherits the restriction.
+Correcting this requires a frame built from repository state at each observation
+date (Chapter~\ref{chap:conclusion}), which the reported run does not
+do.\kiref{Claude Opus 5/11}
+
+Finally, the held-out split tests temporal generalization within the dataset, not
+a fresh sample. Out-of-foundation validation remains future work
+(Chapter~\ref{chap:conclusion}).
 
 \section{Conclusion Validity}
 \label{sec:validity-conclusion}
 
-Conclusion validity concerns whether the conclusions drawn from the metrics are warranted. The evaluation uses a single time-aware held-out split rather than repeated resampling, so most reported metrics are point estimates; the decision-relevant active-at-\(t\) margin over the best trivial baseline is additionally reported with a \(95\%\) repository-clustered bootstrap confidence interval that excludes zero (Chapter~\ref{chap:evaluation}), and a label-definition robustness check is reported in Section~\ref{sec:results-label-sensitivity}. Because prevalence is sampled rather than natural, precision-dependent conclusions are reported as conditional on the sampled prevalence, and ROC-AUC is used as the primary ranking metric with precision-recall analysis as a complement (Section~\ref{sec:method-evaluation-strategy}). Qualitative case review is used as supporting, not confirmatory, evidence and is interpreted as formative.
+Most metrics are point estimates from one time-aware held-out split. The
+active-at-\(t\) margin additionally has a \(95\%\) repository-clustered bootstrap
+interval excluding zero (Chapter~\ref{chap:evaluation}), and
+Section~\ref{sec:results-label-sensitivity} tests label variants. Precision
+remains conditional on sampled prevalence.
 
+ROC-AUC is the primary ranking metric and is insensitive to class prevalence.
+Average precision is additionally reported for the early-warning subset, whose
+inactive rate is \(0.225\); it focuses on the positive class and uses that rate
+as its no-skill reference \cite{saito2015precision}. It supports the same
+conclusion while showing a larger margin over the trivial rules
+(Section~\ref{sec:results-precision-recall}).
+Two limitations remain. No precision-recall \emph{curve} is plotted, so the
+shape of the trade-off at a given recall is not shown, only its area. And
+precision and recall at a single operating point are still reported only at the
+F1-selected threshold, which is chosen on validation data and is not optimal for
+any particular triage budget. Qualitative case review is formative support, not
+confirmatory evidence.

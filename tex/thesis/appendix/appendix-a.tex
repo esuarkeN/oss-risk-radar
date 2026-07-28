@@ -1,9 +1,47 @@
 \chapter{Appendix}
 
+This appendix provides code and data availability, feature and method reference
+material, implementation and reproducibility details, and supplementary
+evaluation output. Its sections cover code availability
+(Appendix~\ref{appendix:code-availability}), health indicators
+(Appendix~\ref{appendix:health-indicators}), implementation detail
+(Appendix~\ref{appendix:impl-detail}), evaluation instruments
+(Appendix~\ref{appendix:impl-eval-instruments}), and undefined-feature handling
+(Section~\ref{sec:appendix-undefined-features}) for the implementation described
+in Chapter~\ref{chap:implementation}.
+
+\section{Code and Data Availability}
+\label{appendix:code-availability}
+
+The artifact of this thesis --- the historical dataset builder, the feature and label
+computation, the model implementations, the training notebook, the scoring service, and
+the orchestration and analysis scripts --- is publicly available at
+
+\begin{center}
+\url{https://github.com/esuarkeN/oss-risk-radar}
+\end{center}
+
+\noindent The results reported here were produced from the pinned revision
+\texttt{f5e688e} \cite{ossRiskRadarReadme}, which carries the reported dataset, the
+staged model artifacts, and the training notebook in the state they were evaluated in.
+That revision is what the dataset hash in Appendix~\ref{sec:method-reproducibility}
+identifies, and all file paths given in this thesis are relative to the repository root.
+The commands that regenerate the foundation seed, rebuild the dataset, and retrain the
+models are listed in Appendix~\ref{sec:method-reproducibility}, together with the
+per-run documentation items. Analyses added after the pinned revision --- among them the
+label-definition sensitivity harness of Appendix~\ref{appendix:label-sensitivity} ---
+are available on the default branch rather than in \texttt{f5e688e}.
+
 \section{Observable Health Indicator Categories}
 \label{appendix:health-indicators}
 
-Table~\ref{tab:background-health-indicators} summarizes the categories of observable health indicators considered in this thesis (Section~\ref{sec:background-oss-health}): an example of the signals in each category, the public source they are derived from, and their expected relevance to inactivity risk. The categories motivate the feature groups implemented in Section~\ref{sec:method-feature-engineering}; the exact per-feature definitions are given in Section~\ref{appendix:feature-reference} below. Security-practice indicators are listed for completeness but, as discussed in Section~\ref{sec:related-security-practice}, are kept as parallel triage context rather than as inputs to the inactivity model.
+Table~\ref{tab:background-health-indicators} lists the observable health
+categories, example signals, public sources, and expected relevance
+(Section~\ref{sec:background-oss-health}). Section~\ref{sec:method-feature-engineering}
+implements the corresponding feature groups, and
+Appendix~\ref{appendix:feature-reference} defines each feature.
+Security-practice indicators remain parallel triage context, not inactivity-model
+inputs (Section~\ref{sec:related-security-practice}).
 
 \begin{table}[htbp]
 \centering
@@ -54,7 +92,7 @@ Opened, merged, and closed-unmerged pull requests; pull request merge ratio; sta
 Release activity &
 Releases in the last 365 days; days since last release; versions published in the last 365 days; recent release flag. \\
 Age and popularity proxies &
-Package age; repository age; stars and forks observed in the available historical data; popularity tier. \\
+Package age; repository age (diagnostic only); stars and forks observed in the available historical data; popularity tier. \\
 Derived risk proxies &
 Activity drop; contributor drop; release gap risk; concentration risk score. \\
 Responsiveness and backlog pressure &
@@ -66,7 +104,10 @@ Issue first-response time; issue resolution time; stale issue share; pull-reques
 {\footnotesize
 \setlength{\tabcolsep}{4pt}
 \begin{longtable}{p{0.23\textwidth} p{0.40\textwidth} p{0.29\textwidth}}
-\caption{Reconstructed historical feature reference (\texttt{feature-set-v4-full-history}): exact definition and rationale for each of the 43 historical model inputs, plus the two diagnostic-only variables \texttt{repo\_archived\_at\_obs} and \texttt{repo\_age\_days}.}
+\caption[Historical feature reference]{Reconstructed historical feature reference
+(\texttt{feature-set-v4-full-history}): exact definition and rationale for each
+of the 43 historical model inputs, plus the two diagnostic-only variables
+\texttt{repo\_archived\_at\_obs} and \texttt{repo\_age\_days}.}
 \label{tab:method-feature-reference} \\
 \hline
 \textbf{Feature} & \textbf{Definition (all measured at or before \(t\))} & \textbf{Why it is included} \\
@@ -123,13 +164,16 @@ Issue first-response time; issue resolution time; stale issue share; pull-reques
 \feat{days\su since\su last\su release} & Days since the most recent release or package version; right-censored at the age of the observable record when no release is ever observed. & Release staleness; complements commit staleness for projects that ship rarely. \\
 \feat{versions\su published\su 365d} & Package-registry versions published in the last 365 days. & Package-level shipping, which can differ from repository releases. \\
 \hline
+\multicolumn{3}{l}{\textit{Dependency context}} \\
+\hline
+\feat{dependency\su count\su at\su obs} & Declared dependency count of the resolved package version at \(t\). & Proxy for maintenance burden and integration complexity. \\
+\hline
 \multicolumn{3}{l}{\textit{Age and popularity proxies}} \\
 \hline
 \feat{package\su age\su days} & Days from the first published package version to \(t\). & Maturity context: young and long-established packages have different baseline inactivity risk. \\
 \feat{repo\su age\su days} & Days from repository creation to \(t\). & Diagnostic metadata only, and not a model input: the offline build supplies no creation date, so this column is identically zero (Section~\ref{sec:method-offline-metadata}). \\
-\feat{stars\su total\su at\su obs} & Cumulative stars observed up to \(t\) (a lower-bound proxy reconstructed from archive events). & Popularity and visibility; more attention tends to correlate with continued maintenance. \\
+\feat{stars\su total\su at\su obs} & Cumulative stars observed up to \(t\) (a lower-bound proxy reconstructed from archive events). & Popularity and visibility; more attention was expected to correlate with continued maintenance, although the association observed in this dataset runs the other way (Section~\ref{sec:results-attribution}). \\
 \feat{forks\su total\su at\su obs} & Cumulative forks observed up to \(t\). & Reuse and derivative activity around the project. \\
-\feat{dependency\su count\su at\su obs} & Declared dependency count of the resolved package version at \(t\). & Proxy for maintenance burden and integration complexity. \\
 \feat{popularity\su tier\su at\su obs} & Low / medium / high tier (0/1/2) derived from star and fork thresholds. & Coarse popularity bucket, because inactivity dynamics differ between obscure and widely used projects. \\
 \hline
 \multicolumn{3}{l}{\textit{Diagnostic and binary flags}} \\
@@ -210,7 +254,7 @@ Total    & 5{,}000 & 5{,}000 & 100\% & 100\% \\
 \end{tabular}
 \end{table}
 
-The realized active count includes a 506-repository fallback bucket that was used to reach the target size after the \texttt{active\sdash foundation} bucket returned 845 of 1{,}000 requested repositories and the \texttt{dormant\sdash foundation} bucket returned 649 of 1{,}000.
+Each of the three sampling groups is drawn from several star-range buckets, which is why the shortfalls are visible only at bucket level. The realized active count of 2{,}601 comprises 2{,}095 repositories from four active buckets --- of which the \texttt{active\sdash foundation} bucket (100--499 stars) returned 845 of the 1{,}000 requested --- plus a 506-repository fallback bucket used to reach the target size. The dormant count of 1{,}399 comprises three buckets, the \texttt{dormant\sdash foundation} bucket returning 649 of 1{,}000; the three archived buckets returned their full 1{,}000.\kiref{Claude Opus 5/8}
 
 \section{Undefined Feature Handling}
 \label{sec:appendix-undefined-features}
@@ -219,29 +263,37 @@ This section gives the exact rules summarized in Section~\ref{sec:method-undefin
 
 \paragraph{Censoring bound.} The age of the observable record is the interval from the later of the repository creation date and the start of archive coverage up to the observation time \(t\). When a repository has no observed commit (or no observed release), the corresponding ``days since'' feature is set to this bound, which is the largest value consistent with the data. When the record begins at or after \(t\) --- that is, when nothing at all was observable before the observation date --- there is no interval over which the event could have been missed and therefore no bound to censor against; the feature is then undefined rather than zero. In the reported dataset this applies to \(7{,}687\) of \(50{,}000\) rows, whose repositories have no GH Archive event before their observation date.
 
-\paragraph{Undefined values.} The four responsiveness medians (\texttt{issue\_first\_response\_median\_days\_365d}, \texttt{issue\_resolution\_median\_days\_365d}, \texttt{pr\_response\_median\_days\_365d}, \texttt{pr\_merge\_latency\_median\_days\_365d}) and the two censored age features are exported as absent keys rather than as \texttt{null} or \texttt{0}, so that no consumer can silently read them as zero. Downstream, the gradient-boosted trees route undefined values natively through XGBoost's missing-value branch, while the logistic-regression and neural-network models substitute the per-feature training-set median, which is stored in the model artifact alongside the standardization parameters and re-applied identically at inference. Because a substituted median standardizes to approximately zero, an undefined feature contributes little to the linear score rather than pulling it toward the favourable extreme.
+\paragraph{Undefined values.} The four responsiveness medians (\texttt{issue\_first\_response\_median\_days\_365d}, \texttt{issue\_resolution\_median\_days\_365d}, \texttt{pr\_response\_median\_days\_365d}, \texttt{pr\_merge\_latency\_median\_days\_365d}) and the two censored age features are exported as absent keys rather than as \texttt{null} or \texttt{0}, so that no consumer can silently read them as zero. Downstream, the gradient-boosted trees route undefined values natively through XGBoost's missing-value branch, while the logistic-regression and neural-network models substitute the per-feature training-set median, which is stored in the model artifact alongside the standardization parameters and re-applied identically at inference. Because a substituted median standardizes to approximately zero, an undefined feature contributes little to the linear score rather than pulling it toward the favorable extreme.
 
-\paragraph{Why it matters.} Before this correction, an undefined latency was stored as \(0.0\). Since \(0\) days is the best possible response time, roughly half of the dataset encoded ``this project has no issues or pull requests at all'' as ``this project responds instantaneously''. The variable was consequently a strong predictor of inactivity with an inverted meaning, and the feature attributions of Section~\ref{sec:results-attribution} reflected data availability rather than maintenance behaviour. The same defect made \texttt{days\_since\_last\_commit} non-monotonic, which in turn depressed the trivial recency baseline against which the learned models are compared (Section~\ref{sec:results-baselines}).
+\paragraph{Why it matters.} Before this correction, an undefined latency was stored as \(0.0\). Since \(0\) days is the best possible response time, this encoded the absence of any observed response as an instantaneous one. The affected share is large: each of the four medians is undefined for between \(46.8\%\) and \(60.4\%\) of the \(50{,}000\) snapshots, and \(36.7\%\) of snapshots have neither issue nor pull-request activity in the trailing year at all.\kiref{Claude Opus 5/9} The variable was consequently a strong predictor of inactivity with an inverted meaning, and the feature attributions of Section~\ref{sec:results-attribution} reflected data availability rather than maintenance behavior. The same defect made \texttt{days\_since\_last\_commit} non-monotonic, which in turn depressed the trivial recency baseline against which the learned models are compared (Section~\ref{sec:results-baselines}).
 
 \paragraph{Offline-build consequences.} Because the reported dataset is built through the reproducible offline path (Section~\ref{sec:method-offline-metadata}), the repository creation date, archival timestamp, and fork flag are never populated, and three consequences follow. First, \texttt{repo\_age\_days} is identically zero and is therefore excluded from the model vector and from any age analysis. Second, \texttt{repo\_archived\_at\_obs} is identically zero, so the archival condition of the maintenance rule never fires (Section~\ref{sec:method-definitions}) and the rule excluding already-archived rows from fitting removes none. Third, build-time fork exclusion is inert, though the seed is generated with a non-fork filter so forks are already absent. Populating these attributes would require live enrichment of every seed repository and is noted as future work in Chapter~\ref{chap:conclusion}.
 
-\paragraph{Zero-variance inputs in the reported dataset.} A related consequence deserves to be stated explicitly, because it qualifies the feature counts used throughout this thesis. The foundation seed is repository-first: it is drawn from GitHub search rather than from a package registry, and the offline build performs no deps.dev lookup. The package-derived inputs of the feature vector therefore have nothing to vary over, and take the same value in all \(50{,}000\) rows. Ten of the \(60\) model inputs are constant in this way:
+\paragraph{Zero-variance inputs in the reported dataset.} A related consequence deserves to be stated explicitly, because it qualifies the feature counts used throughout this thesis. The foundation seed is repository-first: it is drawn from GitHub search rather than from a package registry, and the offline build performs no deps.dev lookup. Several package-derived inputs of the feature vector therefore have nothing to vary over, and take the same value in all \(50{,}000\) rows. Eight of the \(60\) model inputs are constant in this way:
 
 \begin{itemize}
   \item the five ecosystem indicators, since every row carries the same repository-first provenance (\texttt{ecosystem\_other} is \(1\), the other four \(0\));
   \item \texttt{is\_direct\_dependency} and \texttt{has\_repository\_mapping}, both identically \(1\), because a seed repository is by construction a resolved, directly named project;
-  \item \texttt{dependency\_count\_at\_obs}, identically \(0\);
-  \item \texttt{versions\_published\_365d} and \texttt{has\_recent\_release\_flag}, identically \(1\).
+  \item \texttt{dependency\_count\_at\_obs}, identically \(0\).
 \end{itemize}
 
-\texttt{package\_age\_days} is near-degenerate for the same reason, taking only two distinct values. The effective feature vector of the reported run is therefore closer to \(50\) informative inputs than to \(60\), and the cold-start vector correspondingly closer to \(9\) than to \(17\).
+Two further inputs vary across the dataset but carry no \emph{between-repository} information, and are counted separately for that reason. Both follow from one mechanism: when no registry version history is available and the build runs offline, the builder records a single synthetic publication event for every repository, dated to the start of the observation period, \texttt{2023-01-01}. \texttt{package\_age\_days} is then the distance from that date to the observation date and takes exactly ten distinct values --- \(0, 90, 181, \dots, 821\) --- one per quarterly cohort of \(5{,}000\) rows. \texttt{versions\_published\_365d} counts publications in the trailing year and is therefore \(1\) for the four \(2023\) cohorts and \(0\) for the six later ones. Neither is a property of the repository; each is a function of the observation date alone. Ten of the sixty model inputs consequently carry no repository-level signal: the eight constants above and these two. The effective feature vector of the reported run is closer to \(50\) informative inputs than to \(60\). Seven of the eight constants --- the five ecosystem indicators, \texttt{is\_direct\_dependency}, and \texttt{has\_repository\_mapping} --- belong to the current-snapshot set, and neither cohort-dependent input does, so the cold-start vector is correspondingly closer to \(10\) than to \(17\).
 
-This does not affect the reported metrics. A feature with no variance cannot split a tree, so the gradient-boosted models assign it zero gain and ignore it, and a constant column standardizes to zero for the linear and neural models; the constants are inert rather than misleading. Two things do follow. First, the counts ``60'' and ``17'' should be read as the size of the implemented vector, not as the number of signals the reported evaluation actually had available. Second, it explains an otherwise puzzling absence in the feature attribution of Section~\ref{sec:results-attribution}: no package- or ecosystem-derived variable appears among the influential features, not because ecosystem is uninformative in general, but because this dataset contains no variation in it to learn from. Testing whether ecosystem carries signal would require a package-first sampling frame and is left to future work (Chapter~\ref{chap:conclusion}).
+A third input is affected indirectly. \texttt{has\_recent\_release\_flag} is set when either an archive release event or a package publication falls in the trailing year, so the synthetic publication forces it to \(1\) for every row of the four \(2023\) cohorts. From \texttt{2024-01-01} onward it is driven by archive release events alone and does vary between repositories, taking value \(0\) on \(21{,}169\) rows overall. It is informative in the later cohorts and uninformative in the earlier ones, and is therefore not counted among the ten.
 
-\section{Implementation Detail}
+One consequence matters for the time-ordered split. Because \texttt{package\_age\_days} increases monotonically with the cohort, its test-set value of \(821\) lies outside the range seen during training, whose maximum is \(639\). A tree routes such a value to the branch of its largest training split, and a linear model extrapolates a trend that carries no repository-level meaning.\kiref{Claude Opus 5/11}
+
+The reported ranking metrics are unaffected. A feature with no variance cannot split a tree, so the gradient-boosted models assign it zero gain and ignore it, and a constant column standardizes to zero for the linear and neural models; all eight accordingly carry a fitted coefficient of exactly zero in the staged logistic-regression artifact, so they are inert rather than misleading. The two cohort-dependent inputs are constant \emph{within} the test cohort, since every test row shares the observation date \texttt{2025-04-01}, so they cannot reorder test rows and cannot change ROC-AUC. They could in principle shift all test probabilities by a common amount, which would show in Brier score and expected calibration error; this is not separately quantified. Two things do follow. First, the counts ``60'' and ``17'' should be read as the size of the implemented vector, not as the number of signals the reported evaluation actually had available. Second, it explains an otherwise puzzling absence in the feature attribution of Section~\ref{sec:results-attribution}: no package- or ecosystem-derived variable appears among the influential features, not because ecosystem is uninformative in general, but because this dataset contains no variation in it to learn from. Testing whether ecosystem carries signal would require a package-first sampling frame and is left to future work (Chapter~\ref{chap:conclusion}).
+
+\section{System Components and Technology Selection}
 \label{appendix:impl-detail}
 
-This appendix collects the engineering detail of the artifact that is needed to reproduce or operate it, but that is not required to follow the scientific argument in Chapter~\ref{chap:implementation}. The cooperating system components referenced in Section~\ref{sec:impl-architecture} are summarized in Table~\ref{tab:impl-components}.
+This section gives the component inventory and language choices. The following
+sections document the build and training pipeline
+(Appendix~\ref{appendix:impl-pipeline}), runtime services
+(Appendix~\ref{appendix:impl-runtime}), and evaluation instruments
+(Appendix~\ref{appendix:impl-eval-instruments}). Table~\ref{tab:impl-components}
+summarizes the components from Section~\ref{sec:impl-architecture}.
 
 \begin{table}[htbp]
 \centering
@@ -261,11 +313,7 @@ Deployment assets & Docker / Kubernetes & Container images, Compose, and the Arg
 \end{tabular}
 \end{table}
 
-\subsection{Technology Selection}
 \label{sec:impl-technology}
-
-This subsection expands the component overview of Section~\ref{sec:impl-architecture}.
-
 The components use different programming languages, each selected for the part of the system where it is most appropriate.
 
 Python is used for all data engineering and machine learning, including the historical dataset builder, the feature and label computation, the model implementations, and the scoring service. Python was chosen because the libraries this thesis depends on --- \texttt{numpy} for the from-scratch model implementations and \texttt{xgboost} for the gradient-boosted trees --- are native to its ecosystem, and because it remains among the most widely used languages for data work \cite{stackoverflow_python_2025}, which eases reproduction of the analytical core. The scoring service is implemented with FastAPI.
@@ -275,6 +323,13 @@ Go is used for the backend orchestration service. The backend is primarily a con
 TypeScript with the Next.js framework is used for the analyst frontend, and TypeScript is also used for the shared data contracts. TypeScript provides type safety for the user interface and shares type definitions with the backend contracts. The frontend additionally relies on the broader JavaScript and Node.js tooling ecosystem, which is among the most widely used on GitHub \cite{github_language_stats}. This is a tooling choice rather than a statement about the ecosystems the artifact scores: the dataset seed and the demonstrator in Chapter~\ref{chap:demonstrator} are Python-centric, and the model itself is ecosystem-agnostic.
 
 Node.js additionally hosts the orchestration command-line scripts under \texttt{scripts/ml}. These scripts coordinate the higher-level workflow steps, such as generating the repository seed, building the dataset, executing the training notebook, and staging artifacts. They wrap the underlying Python pipeline so that the full reproducible workflow can be triggered through consistent \texttt{npm} commands.
+
+\section{Dataset Builder and Training Pipeline}
+\label{appendix:impl-pipeline}
+
+This section documents the offline path from repository seed to evaluated model
+files: module layout, quality reporting, feature revision, model configuration,
+artifact format, notebook orchestration, and the staging gate.
 
 \subsection{Dataset-Builder Modules}
 \label{sec:impl-dataset-modules}
@@ -308,14 +363,23 @@ The \texttt{DatasetBuilder} class executes the construction workflow described i
 \subsection{Dataset-Quality Reporting}
 \label{sec:impl-dataset-quality}
 
-To make the per-run documentation items required by the methodology (Section~\ref{sec:method-observation-window}) reproducible rather than transcribed by hand, a small \texttt{dataset\_quality} module computes a structured quality report from the exported snapshot rows. It produces three views. The first is row accounting: the total, labeled, and unlabeled counts, the inactive and active label balance, the number of already-archived-at-observation rows that are excluded from fitting, and the completeness signals introduced above, including the \texttt{repo\_silent\_before\_horizon} count that quantifies how many labeled examples the corrected coverage gate retains. The second is label balance per slice, broken down by ecosystem and by popularity tier, which exposes where labeled examples are concentrated. The third is per-feature missingness, derived from the missing-signal annotations already attached during feature extraction, so that a feature is reported as missing only when its underlying observation-time signal was unavailable rather than genuinely zero. The report is rendered in the training notebook alongside the existing coverage summary, and the row accounting deliberately records whether label-completeness signals are present in the export so that a value of zero is not misread as an absence of incomplete windows when an older export simply did not carry them.
+To make the per-run documentation items required by the methodology (Section~\ref{sec:method-observation-window}) reproducible rather than transcribed by hand, a small \texttt{dataset\_quality} module computes a structured quality report from the exported snapshot rows. It produces three views. The first is row accounting: the total, labeled, and unlabeled counts, the inactive and active label balance, the number of already-archived-at-observation rows that are excluded from fitting, and the completeness signals introduced above, including the \texttt{repo\_silent\_before\_horizon} count that quantifies how many labeled examples the corrected coverage gate retains. The second is label balance per subgroup, broken down by ecosystem and by popularity tier, which exposes where labeled examples are concentrated. The third is per-feature missingness, derived from the missing-signal annotations already attached during feature extraction, so that a feature is reported as missing only when its underlying observation-time signal was unavailable rather than genuinely zero. The report is rendered in the training notebook alongside the existing coverage summary, and the row accounting deliberately records whether label-completeness signals are present in the export so that a value of zero is not misread as an absence of incomplete windows when an older export simply did not carry them.
 
-\subsection{Model Configurations}
+\subsection{Feature-Set Refinement After the Formative Review}
+\label{sec:impl-feature-refinement}
+
+This subsection gives the details of the first design-cycle refinement summarized in Section~\ref{sec:impl-dataset-builder}.
+
+The feature set used for training was refined iteratively, as described in the methodology's formative development step (Section~\ref{sec:method-iterative-development}). The first feature set contained variables that turned out to be poor point-in-time predictors. A representative example is a raw open-issue count: large, actively maintained projects can carry very large issue backlogs, so a model can wrongly associate a high absolute issue count with risk, even though the project is healthy. The revised feature set therefore replaces raw counts with relational and trend-based variables, such as issue closure ratio, issue backlog growth, stale-issue share, and pull-request response and merge latency, which are more comparable across projects of different sizes.
+
+A second class of problems came from repository identity. Some packages point to mirror repositories rather than to the upstream development repository, which can make a project look inactive even though active development happens elsewhere. The mapping logic therefore prefers explicit seed and deps.dev mappings and resolves the primary package-to-repository link per repository, rather than treating every registry entry as an independent signal. Finally, the revised feature set keeps \texttt{repo\_archived\_at\_obs} only as diagnostic metadata and excludes already-archived observation rows during model fitting, so that the visible archival flag cannot become a shortcut label.
+
+\subsection{Model Configurations and Hyperparameters}
 \label{sec:impl-from-scratch}
 
 This subsection expands the model families introduced in Section~\ref{sec:impl-models} and specified in Section~\ref{sec:method-model-training}.
 
-The Logistic Regression model is implemented directly in Python. It standardizes each input feature using training-set means and standard deviations, stores these standardization parameters with the model, and fits the coefficients by gradient descent on the class-weighted log-likelihood. Class-balanced sample weights counter the label imbalance, and an L2 penalty regularizes the coefficients. Because the model stores explicit per-feature coefficients, it doubles as an interpretable baseline whose weights can be inspected to check whether the engineered features behave as expected. This interpretability is what made it useful during the feature-set refinement described in Section~\ref{sec:impl-feature-refinement}.
+The Logistic Regression model is implemented directly in Python. It standardizes each input feature using training-set means and standard deviations, stores these standardization parameters with the model, and fits the coefficients by gradient descent on the class-weighted log-likelihood. Class-balanced sample weights counter the label imbalance, and an L2 penalty regularizes the coefficients. Because the model stores explicit per-feature coefficients, it doubles as an interpretable baseline whose weights can be inspected to check whether the engineered features behave as expected. This interpretability is what made it useful during the feature-set refinement described in Appendix~\ref{sec:impl-feature-refinement}.
 
 The neural network is a multilayer perceptron implemented on top of numpy, without a deep-learning framework. It uses two hidden layers of 64 and 32 units with ReLU activations and a sigmoid output, standardizes its inputs in the same way as the Logistic Regression model, and initializes its weights with Xavier-uniform values under a fixed random seed for reproducibility. Training uses mini-batch stochastic gradient descent on the binary cross-entropy objective, with balanced class weights and L2 regularization. The default configuration matches the methodology: a learning rate of \(0.01\), 150 epochs, a batch size of 256, and an L2 penalty of \(0.001\). The forward and backward passes are written explicitly, which keeps the model transparent and removes any heavy training dependency from the artifact.
 
@@ -350,6 +414,11 @@ The staging script first validates the dataset itself: the snapshots must be non
 
 The most important gate is the regression comparison. Before promotion, the candidate artifacts are compared against the currently deployed baseline. For each required model, the script checks that ROC-AUC has not dropped, and that the Brier score has not increased, by more than a configured tolerance. If any required model fails this comparison, promotion is rejected and the existing staged bundle is retained. When promotion succeeds, the script normalizes the snapshot file, the run artifacts, and the repository feature cache to their runtime paths and writes them into the deployed bundle.
 
+\section{Runtime Services and Deployment}
+\label{appendix:impl-runtime}
+
+This section documents the components that consume the promoted model bundle at request time --- the scoring service, the backend that orchestrates an analysis, the analyst frontend, and the container and cluster deployment. None of them is part of the evidential argument of this thesis; no reported result depends on them.
+
 \subsection{Scoring Service}
 \label{sec:impl-scoring-service}
 
@@ -359,13 +428,24 @@ The scoring service is a FastAPI application under \texttt{mltraining\sslash sco
 
 For each dependency, the service builds the feature vector in the artifact's feature order, imputing undefined signals from the training-set medians stored with the artifact (Section~\ref{sec:method-undefined-features}) and recording which signals were missing. It deserializes the artifact according to its model family, computes the raw probability, and applies the stored calibrator to obtain the calibrated inactivity probability. This probability is scaled to a 0--100 inactivity-risk score, and a complementary 12-month maintenance-outlook score is derived as its inverse. The service assigns a discrete risk bucket and an action level from the score, where the action level is one of \texttt{monitor}, \texttt{review}, or \texttt{replace\_candidate}, so that the continuous score maps onto the triage actions used in the demonstrator.
 
-The service keeps the inactivity prediction and the security posture strictly separate, exactly as required by the methodology. The OpenSSF Scorecard signal is summarized into a parallel security-posture score and is never fed into the predictive feature vector \cite{zahan2022scorecard}.
+The service keeps the inactivity prediction and the security posture strictly separate, exactly as required by the methodology. The OpenSSF Scorecard signal is summarized into a parallel security-posture score and is never fed into the predictive feature vector \cite{zahan2023scorecard}.
 
-Each score is accompanied by an \emph{evidence-support} value \(s \in [0,1]\). It is deliberately not a statistical confidence interval or a probability that the prediction is correct: the artifact ships no coefficient covariance, so no closed-form predictive variance is available. Instead, \(s\) is an operational measure of how much observable evidence backs the individual score, computed as the geometric mean of three per-repository quantities,
+Each score is accompanied by an \emph{evidence-support} value \(s \in [0,1]\). It is deliberately not a statistical confidence interval or a probability that the prediction is correct: the artifact ships no coefficient covariance, so no closed-form predictive variance is available. Instead, \(s\) is an operational measure of how much observable evidence backs the individual score. It is the geometric mean of three per-repository quantities:
 \[
   s = \left( c \cdot d \cdot b \right)^{1/3},
 \]
-where \(c\) is signal coverage (the share of expected maintenance signals actually observed before imputation, or the model's \texttt{signal\_completeness} feature when present), \(d\) is the in-distribution share (the fraction of observed evidential features lying within \(2\sigma\) of the training mean), and \(b = n / (n + 30)\) maps the number of validation samples \(n\) backing the matched calibration bin onto \([0,1]\). The geometric mean makes a single weak component collapse the result. The decision margin to the threshold is reported separately and is not part of \(s\). Explicit caveats are attached when calibration bins are missing, when the artifact's feature version is unexpected, or when input signals had to be imputed. Finally, the service returns human-readable explanation factors and evidence items so that an analyst can see which signals shaped the score rather than only the number itself.
+Here, \(c\) is signal coverage: the share of expected maintenance signals
+observed before imputation, or the model's \texttt{signal\_completeness} feature
+when present. The in-distribution share \(d\) is the fraction of observed
+evidential features within \(2\sigma\) of the training mean. Finally,
+\(b = n / (n + 30)\) maps the number of validation samples \(n\) backing the
+matched calibration bin onto \([0,1]\). The geometric mean makes a single weak
+component collapse the result. The decision margin to the threshold is reported
+separately and is not part of \(s\). Explicit caveats are attached when
+calibration bins are missing, when the artifact's feature version is unexpected,
+or when input signals had to be imputed. Finally, the service returns
+human-readable explanation factors and evidence items so that an analyst can see
+which signals shaped the score rather than only the number itself.
 
 \subsection{Backend Orchestration Service}
 \label{sec:impl-backend}
@@ -389,39 +469,37 @@ The frontend is a Next.js application under \texttt{frontend/web} that uses the 
 
 A second area of the frontend is the machine-learning evaluation surface. These pages read the training dataset and run endpoints exposed by the backend and visualize them with purpose-built charts, including a calibration curve, a model-metric comparison across the trained models, a Logistic Regression coefficient view, and a training-metric history. These views were used directly to inspect and report model behavior during the thesis.
 
-\subsection{Deployment}
+\subsection{Container and Cluster Deployment}
 \label{sec:appendix-impl-deployment}
 
 This subsection expands the deployment path of Section~\ref{sec:impl-deployment}.
 
-The artifact is containerized for both local and production-style operation. Canonical image definitions live under \texttt{deployment\sslash docker}, and a Docker Compose file orchestrates PostgreSQL, the Go backend, the scoring service, and the frontend for local development; a single \texttt{npm run dev} command builds and starts the full stack and waits for the services to become healthy. For production-style operation, the project is deployed to a k3s cluster managed by Argo CD, with container images published to a registry and the application served behind a public domain \cite{ossRiskRadarReadme}. Because the deployed model bundle is a versioned set of files under \texttt{deployment\sslash training}, deployment and model promotion remain auditable: the running service uses exactly the artifacts that passed the staging gate described in Section~\ref{sec:impl-staging}.
+The artifact is containerized for both local and production-style operation. Canonical image definitions live under \texttt{deployment\sslash docker}, and a Docker Compose file orchestrates PostgreSQL, the Go backend, the scoring service, and the frontend for local development; a single \texttt{npm run dev} command builds and starts the full stack and waits for the services to become healthy. For production-style operation, the project is deployed to a k3s cluster managed by Argo CD, with container images published to a registry and the application served behind a public domain \cite{ossRiskRadarReadme}. Because the deployed model bundle is a versioned set of files under \texttt{deployment\sslash training}, deployment and model promotion remain auditable: the running service uses exactly the artifacts that passed the staging gate described in Appendix~\ref{sec:impl-staging}.
 
-\subsection{Feature-Set Refinement}
-\label{sec:impl-feature-refinement}
+\section{Evaluation Instruments}
+\label{appendix:impl-eval-instruments}
 
-This subsection gives the details of the first design-cycle refinement summarized in Section~\ref{sec:impl-dataset-builder}.
+This section gives the mechanics of the two evaluation instruments introduced in Section~\ref{sec:impl-models}. They are of different kinds, and the distinction matters for what each result may claim. The slice evaluation is a re-analysis: it re-scores the predictions of the same fitted model within subgroups. The repository-disjoint split is a separate training run under a different partitioning rule, so it produces its own fitted model. Neither alters the reported run, whose serialized artifacts and headline metrics are unchanged, because the reported configuration retains the chronological split.
 
-The feature set used for training was refined iteratively, as described in the methodology's formative development step (Section~\ref{sec:method-iterative-development}). The first feature set contained variables that turned out to be poor point-in-time predictors. A representative example is a raw open-issue count: large, actively maintained projects can carry very large issue backlogs, so a model can wrongly associate a high absolute issue count with risk, even though the project is healthy. The revised feature set therefore replaces raw counts with relational and trend-based variables, such as issue closure ratio, issue backlog growth, stale-issue share, and pull-request response and merge latency, which are more comparable across projects of different sizes.
-
-A second class of problems came from repository identity. Some packages point to mirror repositories rather than to the upstream development repository, which can make a project look inactive even though active development happens elsewhere. The mapping logic therefore prefers explicit seed and deps.dev mappings and resolves the primary package-to-repository link per repository, rather than treating every registry entry as an independent signal. Finally, the revised feature set keeps \texttt{repo\_archived\_at\_obs} only as diagnostic metadata and excludes already-archived observation rows during model fitting, so that the visible archival flag cannot become a shortcut label.
-
-\subsection{Slice Evaluation}
+\subsection{Subgroup Definitions for the Slice Evaluation}
 \label{sec:impl-slice-evaluation}
 
-This subsection gives the mechanics of the slice-evaluation instrument introduced in Section~\ref{sec:impl-models}; the resulting figures are reported in Section~\ref{sec:results-slices} and tabulated in Section~\ref{appendix:eval-tables}.
+The resulting figures are reported in Section~\ref{sec:results-slices} and tabulated in Appendix~\ref{appendix:eval-tables}.
 
 A single aggregate metric can hide a subgroup on which the model performs poorly, because a strong majority subgroup can mask a weak minority one. A slice-evaluation helper therefore re-scores the same held-out predictions within subgroups, reusing the existing metric implementation so that no separate evaluation logic is introduced. To make this possible the training pipeline also returns the per-row held-out predictions alongside the aggregate result; these are used only for analysis and are not written into the model artifact, so the serialized artifacts and the reported headline metrics are unchanged. The harness includes a consistency check that requires the aggregate over all slices to reproduce the model's reported held-out ROC-AUC, so the per-slice figures are guaranteed to originate from the same execution as the headline metrics.
 
 The subgroups are those that vary meaningfully in the foundation dataset: popularity tier, a cold-start-like versus has-history regime, and whether the repository was still active at the observation date. The last of these is the active-at-\(t\) subset referenced in the evaluation strategy (Section~\ref{sec:method-evaluation-strategy}) and in the discussion of activity persistence in Chapter~\ref{chap:validity}: restricting the evaluation to repositories that are still active at \(t\) separates genuine early-warning skill from the trivial tendency of already-quiet repositories to remain quiet. Two candidate dimensions are deliberately excluded because the sampling frame holds them constant. Ecosystem is excluded because the repository-first foundation seed assigns the same provenance ecosystem to every row; cross-ecosystem evaluation would require a package-first sampling frame and is left to future work. Repository-age band is excluded because the offline build carries no repository creation date, so \texttt{repo\_age\_days} is identically zero and every row would fall into a single band (Section~\ref{sec:method-offline-metadata}); reporting such a slice would suggest an age analysis that the data cannot support. Because slicing reduces the sample size, each slice is reported with its own row count, ranking metrics that are undefined for single-class slices are reported as absent rather than as a misleading value, and thin slices are interpreted with corresponding caution.
 
-\subsection{Repository-Disjoint Robustness Split}
+\subsection{Mechanics of the Repository-Disjoint Split}
 \label{sec:impl-grouped-split}
 
-This subsection gives the mechanics of the repository-disjoint split introduced in Section~\ref{sec:impl-models}; it addresses the repository-recurrence threat of Chapter~\ref{chap:validity} that arises from the split described in Section~\ref{sec:method-observation-window}.
+This subsection addresses the repository-recurrence threat of Chapter~\ref{chap:validity} that arises from the split described in Section~\ref{sec:method-observation-window}.
 
 The reported evaluation uses a chronological split: rows are ordered by observation date and cut into training, validation, and test partitions. Because observations are taken quarterly, a repository contributes several snapshots over time, so the same repository can appear in both the training and the test partition, and the twelve-month label windows of its successive snapshots overlap. The held-out metric then partly reflects generalization to later observations of repositories already seen during training, which is optimistic relative to performance on genuinely new repositories. This is the deployment-realistic question --- the system does re-score repositories over time --- but it should not be the only question asked.
 
-A further evaluation iteration therefore adds a repository-disjoint split that assigns every snapshot of a repository to a single partition, so that the held-out set contains only repositories absent from training. The split is selectable through a configuration option whose default preserves the chronological behavior, so the reported artifacts and headline metrics are unchanged, and the pipeline asserts that the partitions are repository-disjoint whenever the grouped split is used. Running the deployed full-history model under both splits lets the difference between them bound the optimism introduced by repository recurrence. In practice the held-out ROC-AUC decreases only marginally under the repository-disjoint split, which indicates that the model's discrimination is not an artifact of memorizing individual repositories but generalizes to unseen ones; the exact figures for both splits are produced in the training notebook and reported in Chapter~\ref{chap:evaluation}.
+A further evaluation iteration therefore adds a repository-disjoint split that assigns every snapshot of a repository to a single partition, so that the held-out set contains only repositories absent from training. The split is selectable through a configuration option whose default preserves the chronological behavior, so the reported artifacts and headline metrics are unchanged, and the pipeline asserts that the partitions are repository-disjoint whenever the grouped split is used.
+
+Because grouping changes which rows are available for fitting, this is a full second training run rather than a re-scoring of the reported model. The same pipeline entry point is invoked with the grouped strategy, and it refits in the same order as the reported run: the feature preprocessing, then the classifier on the grouped training partition, then the histogram calibrator and the F1-selected decision threshold on the grouped validation partition. The grouped test partition enters only after those decisions are fixed. The two runs therefore report two different fitted models, and the difference between their held-out ROC-AUC values bounds the optimism introduced by repository recurrence. In practice the held-out ROC-AUC decreases only marginally, which indicates that the model's discrimination does not rest on memorizing individual repositories. The comparison is between held-out repositories drawn from the same retrospectively sampled foundation frame (Section~\ref{sec:method-data-sources}), so it does not establish transfer to open-source repositories in general. The exact figures for both splits are produced in the training notebook and reported in Chapter~\ref{chap:evaluation}.
 
 \section{Dataset Construction Steps}
 \label{appendix:dataset-construction}
@@ -466,10 +544,10 @@ strategy (Section~\ref{sec:method-evaluation-strategy}) and reported throughout
 Chapter~\ref{chap:evaluation}.
 
 All metrics are computed on the calibrated probabilities of the held-out test
-slice. Let \(N\) be the number of evaluation samples, \(p_i \in [0,1]\) the
+set. Let \(N\) be the number of evaluation samples, \(p_i \in [0,1]\) the
 predicted probability of inactivity for sample \(i\), and \(y_i \in \{0,1\}\) the
 true label (\(1\) = inactive within twelve months). The positive (inactive) base
-rate of the slice is
+rate of the test set is
 \begin{equation}
   \bar{p} = \frac{1}{N}\sum_{i=1}^{N} y_i ,
 \end{equation}
@@ -487,6 +565,23 @@ repository is scored above a random active one, with ties counted as one half:
 where \(N_{+}\) and \(N_{-}\) are the numbers of positive and negative samples.
 It is threshold- and calibration-independent: \(0.5\) is random ranking and
 \(1.0\) is a perfect ranking.
+
+\paragraph{Ranking under class imbalance.} Average precision summarizes the
+precision-recall curve. Samples are sorted by decreasing score; at each distinct
+score threshold \(n\), let \(P_n\) and \(R_n\) be the precision and recall
+attained by predicting positive down to that threshold. Average precision is the
+step-wise sum
+\begin{equation}
+  \mathrm{AP} = \sum_{n} \big( R_n - R_{n-1} \big)\, P_n , \qquad R_0 = 0 ,
+\end{equation}
+with tied scores collapsed into a single threshold so that a signal with many
+ties is neither rewarded nor penalized for them. No interpolation between points
+is applied. Unlike ROC-AUC, average precision ignores true negatives and so does
+not credit a model for correctly ranking a large negative class. Its no-skill
+reference is not \(0.5\) but the positive base rate \(\bar{p}\), which a random
+ranking attains, so an AP value is interpretable only alongside the prevalence of
+the set it was computed on. It is reported for the early-warning subset in
+Section~\ref{sec:results-precision-recall}.
 
 \paragraph{Probabilistic accuracy.} The Brier score is the mean squared error
 between probability and outcome, and the log loss is the binary cross-entropy
@@ -522,7 +617,7 @@ counts of true and false positives and negatives (\(\mathrm{TP}, \mathrm{FP},
 \end{equation}
 The F1 score is the harmonic mean of precision and recall, so it cannot be made
 large by optimizing one at the expense of the other; \(\tau\) is selected on the
-validation slice to maximize it.
+validation set to maximize it.
 
 \paragraph{Combined quality score.} The quality score converts ranking and
 probabilistic accuracy into skill scores relative to the trivial base-rate
@@ -536,7 +631,7 @@ predictor and averages them, weighting ranking at \(0.6\) and calibration at
 \end{align}
 A value of \(0\) indicates no improvement over predicting the base rate and \(1\)
 indicates perfect ranking and calibration. Because both skill terms are measured
-against the slice base rate \(\bar{p}\), the quality score is conditional on the
+against the test-set base rate \(\bar{p}\), the quality score is conditional on the
 sampled prevalence and is intended for model comparison rather than as a
 standalone performance guarantee.
 
@@ -593,7 +688,7 @@ deployment/training/runs/
   20260709T205727480957Z-xgboost-full-history-2d29a928dac3.json
 \end{verbatim}
 
-The reported held-out metrics are those recorded in this staged run file, which is the authoritative record of the reported experiment. The corresponding source revision --- containing this dataset, the staged run artifacts, and the training notebook --- is archived at commit \texttt{f5e688e} \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline. Re-executing the training notebook against this archived dataset reproduces the reported figures (for example, held-out ROC-AUC \(0.958\) and the active-at-\(t\) subset result of Chapter~\ref{chap:evaluation}). One caveat applies to the hash above: it is the value recorded by the staged run at training time, whereas the dataset file committed at \texttt{f5e688e} was re-serialized afterwards and therefore carries a different content hash (\texttt{f71b9f7a\ldots}); the two files are equivalent in content and yield identical metrics, so the recorded hash identifies the run while the committed file reproduces it.
+The reported held-out metrics are those recorded in this staged run file, which is the authoritative record of the reported experiment. The corresponding source revision --- containing this dataset, the staged run artifacts, and the training notebook --- is archived at commit \texttt{f5e688e} \cite{ossRiskRadarReadme}, so that the reported run can be traced to a fixed state of the dataset builder and training pipeline. One caveat applies to the hash above: it is the value recorded by the staged run at training time, whereas the dataset file committed at \texttt{f5e688e} was re-serialized afterwards and therefore carries a different content hash (\texttt{f71b9f7a\ldots}). Re-training \texttt{xgboost\sdash full\sdash history} on the committed file reproduces the recorded held-out metrics exactly --- ROC-AUC \(0.957852\), Brier \(0.077939\), expected calibration error \(0.035155\), F1 \(0.916369\), and the selected threshold \(0.506689\), each identical to six decimal places --- so the two files differ only in serialization: the recorded hash identifies the run, and the committed file reproduces it.\kiref{Claude Opus 5/9}
 
 \section{Label-Definition Sensitivity}
 \label{appendix:label-sensitivity}
@@ -603,34 +698,46 @@ Section~\ref{sec:results-label-sensitivity}: the held-out evaluation repeated un
 one-of-four, two-of-four (primary), and three-of-four variants of the maintenance
 rule. All \(50{,}000\) snapshots are re-labeled from the same stored future-window
 signals, and the full-history XGBoost model is re-trained per variant on the
-identical time-aware split; the recency baseline is evaluated on the rows with a
-defined last-commit date, as elsewhere. The two-of-four row reproduces the reported
-headline figures, which confirms that the re-labeling harness matches the primary
-pipeline.
+identical time-aware split. Because the recency baseline is undefined for the
+\(444\) test rows without an observable commit history
+(Section~\ref{sec:results-baselines}), the model is reported both on the full test
+set and re-scored on the \(4{,}556\) recency-defined rows, so that the model and
+the two trivial rules are compared on identical rows. Two checks confirm that the
+re-labeling harness matches the primary pipeline: the two-of-four labels derived
+from the stored signals agree with the exported \texttt{label\_inactive\_12m} on
+all \(50{,}000\) snapshots, and the two-of-four row reproduces the reported
+headline figures. The analysis is reproduced by
+\texttt{scripts\sslash ml\sslash label\su sensitivity\sdot py}, which performs
+both checks and aborts if the first one fails
+(Appendix~\ref{appendix:code-availability}).
 
+\clearpage
 \begin{table}[htbp]
   \centering
   \small
+  \setlength{\tabcolsep}{3.5pt}
   \caption{Sensitivity of the held-out evaluation to the maintenance-rule
-  threshold. ``Inactive rate'' is the positive-class share of the test slice;
-  AUROC columns are ROC-AUC on that slice for the full-history XGBoost model and
-  the days-since-last-commit recency baseline.}
+  threshold. ``Inactive rate'' is the positive-class share of the test set.
+  ``XGBoost (all)'' is the full-history model on all \(5{,}000\) test rows; the
+  remaining columns are on the \(4{,}556\) recency-defined rows, where model and
+  baselines are scored on identical rows. ``Margin'' is the model there minus
+  the stronger of the two trivial rules, which is the recency rule under the
+  permissive variant and commit volume under the other two.}
   \label{tab:label-sensitivity}
-  \begin{tabular}{lrrr}
+  \begin{tabular}{lrrrrrr}
     \toprule
-    Maintenance rule & Inactive rate & XGBoost AUROC & Recency AUROC \\
+    Maintenance rule & Inactive rate & XGBoost (all) & XGBoost (rec.) & Recency & Commits & Margin \\
     \midrule
-    1-of-4 (permissive) & 0.581 & 0.961 & 0.965 \\
-    2-of-4 (primary)    & 0.661 & 0.958 & 0.957 \\
-    3-of-4 (strict)     & 0.746 & 0.959 & 0.940 \\
+    1-of-4 (permissive) & 0.581 & 0.961 & 0.975 & 0.965 & 0.960 & \(+0.010\) \\
+    2-of-4 (primary)    & 0.661 & 0.958 & 0.974 & 0.957 & 0.958 & \(+0.016\) \\
+    3-of-4 (strict)     & 0.746 & 0.959 & 0.972 & 0.940 & 0.949 & \(+0.023\) \\
     \bottomrule
   \end{tabular}
 \end{table}
-
 \section{Full Demonstrator Ranking}
 \label{appendix:demo-full}
 
-Table~\ref{tab:demo-ranking-full} lists the complete ranked inactivity-risk view for all 30 dependency repositories of \texttt{ArchipelagoMW\sslash Archipelago} produced by the deployed model in the demonstrator (Chapter~\ref{chap:demonstrator}); the body reports the flagged and medium-risk subset in Table~\ref{tab:demo-ranking}.
+Table~\ref{tab:demo-ranking-full} lists the complete ranked inactivity-risk view for all 30 dependency repositories of \texttt{ArchipelagoMW\sslash Archipelago} produced by the model in the demonstrator (Chapter~\ref{chap:demonstrator}); the body reports the flagged and medium-risk subset in Table~\ref{tab:demo-ranking}.
 
 The explanation factors of the highest-ranked repository, \texttt{bsdiff4} (\texttt{ilanschnell\sslash bsdiff4}, risk \(92.1\); Section~\ref{sec:demo-ranking}), taken directly from the scored output, illustrate the intended semantics: the two cold-start ensemble members predict \(97.0\%\) and \(87.2\%\) inactivity risk, the model-agreement factor reports the spread between them, and the input-completeness factor records that \(75\%\) of expected signals were available before imputation. The moderate evidence support of \(0.69\) and the caveats attached to the score --- that it came from the cold-start model, no full-history cache row being available, and that two release-related signals were imputed --- are what present the flag as a prompt for manual review rather than a definitive judgement.
 
@@ -638,61 +745,66 @@ The explanation factors of the highest-ranked repository, \texttt{bsdiff4} (\tex
   \centering
   \small
   \caption{Complete ranked inactivity-risk view for the dependency repositories of
-  \texttt{ArchipelagoMW/Archipelago}, as produced by the deployed model. Risk is
+  \texttt{ArchipelagoMW/Archipelago}, as produced by the model. Risk is
   the 0--100 inactivity-risk score; ``Supp.'' is the per-prediction evidence support;
-  ``Regime'' is full-history (FH) or cold-start (CS).}
+  ``Sec.'' is the parallel 0--100 security-posture score derived from the
+  repository's OpenSSF Scorecard record, which is not an input to the inactivity
+  model (Section~\ref{sec:method-research-design}) and is shown as --- for the three
+  repositories with no available Scorecard record; ``Regime'' is full-history (FH)
+  or cold-start (CS).}
   \label{tab:demo-ranking-full}
   \footnotesize
   \setlength{\tabcolsep}{3.5pt}
-  \begin{tabular}{llrlrl}
+  \begin{tabular}{llrlrrl}
     \toprule
-    Package & Source repository & Risk & Action & Supp. & Regime \\
+    Package & Source repository & Risk & Action & Supp. & Sec. & Regime \\
     \midrule
-    bsdiff4 & \texttt{ilanschnell/bsdiff4} & 92.1 & \texttt{replace\_candidate} & 0.69 & CS \\
-    setproctitle & \texttt{dvarrazzo/py-setproctitle} & 80.4 & \texttt{replace\_candidate} & 0.61 & CS \\
+    bsdiff4 & \texttt{ilanschnell/bsdiff4} & 92.1 & \texttt{replace\_candidate} & 0.69 & 6 & CS \\
+    setproctitle & \texttt{dvarrazzo/py-setproctitle} & 80.4 & \texttt{replace\_candidate} & 0.61 & 11 & CS \\
     \midrule
-    jinja2 & \texttt{pallets/jinja} & 77.1 & review & 0.77 & CS \\
-    cymem & \texttt{explosion/cymem} & 74.9 & review & 0.75 & CS \\
-    markupsafe & \texttt{pallets/markupsafe} & 74.2 & review & 0.75 & CS \\
-    pymem & \texttt{srounet/Pymem} & 54.3 & review & 0.47 & CS \\
+    jinja2 & \texttt{pallets/jinja} & 77.1 & review & 0.77 & 58 & CS \\
+    cymem & \texttt{explosion/cymem} & 74.9 & review & 0.75 & 24 & CS \\
+    markupsafe & \texttt{pallets/markupsafe} & 74.2 & review & 0.75 & 54 & CS \\
+    pymem & \texttt{srounet/Pymem} & 54.3 & review & 0.47 & --- & CS \\
     \midrule
-    flask-compress & \texttt{colour-science/flask-compress} & 48.5 & monitor & 0.45 & CS \\
-    pony & \texttt{ponyorm/pony} & 42.8 & monitor & 0.59 & CS \\
-    flask-limiter & \texttt{alisaifee/flask-limiter} & 41.9 & monitor & 0.58 & CS \\
-    kivymd & \texttt{kivymd/KivyMD} & 41.8 & monitor & 0.47 & CS \\
-    waitress & \texttt{Pylons/waitress} & 41.3 & monitor & 0.59 & CS \\
-    schema & \texttt{keleshev/schema} & 37.3 & monitor & 0.78 & CS \\
-    pyyaml & \texttt{yaml/pyyaml} & 35.4 & monitor & 0.77 & CS \\
-    orjson & \texttt{ijl/orjson} & 31.1 & monitor & 0.61 & CS \\
-    colorama & \texttt{tartley/colorama} & 27.8 & monitor & 0.54 & CS \\
-    pyshortcuts & \texttt{newville/pyshortcuts} & 25.0 & monitor & 0.75 & CS \\
-    werkzeug & \texttt{pallets/werkzeug} & 24.3 & monitor & 0.76 & CS \\
-    certifi & \texttt{certifi/python-certifi} & 23.5 & monitor & 0.57 & CS \\
-    platformdirs & \texttt{tox-dev/platformdirs} & 22.6 & monitor & 0.77 & CS \\
-    pathspec & \texttt{cpburnz/python-pathspec} & 16.6 & monitor & 0.83 & CS \\
-    kivy & \texttt{kivy/kivy} & 15.0 & monitor & 0.85 & CS \\
-    websockets & \texttt{python-websockets/websockets} & 10.3 & monitor & 0.90 & CS \\
-    flask & \texttt{pallets/flask} & 9.5 & monitor & 0.91 & FH \\
-    flask-cors & \texttt{corydolphin/flask-cors} & 8.9 & monitor & 0.91 & CS \\
-    typing-extensions & \texttt{python/typing\_extensions} & 5.8 & monitor & 0.95 & CS \\
-    bokeh & \texttt{bokeh/bokeh} & 5.3 & monitor & 0.71 & CS \\
-    flask-caching & \texttt{pallets-eco/flask-caching} & 5.0 & monitor & 0.95 & CS \\
-    mistune & \texttt{lepture/mistune} & 4.2 & monitor & 0.96 & CS \\
-    psutil & \texttt{giampaolo/psutil} & 3.4 & monitor & 0.72 & CS \\
-    cython & \texttt{cython/cython} & 2.6 & monitor & 0.98 & CS \\
+    flask-compress & \texttt{colour-science/flask-compress} & 48.5 & monitor & 0.45 & 13 & CS \\
+    pony & \texttt{ponyorm/pony} & 42.8 & monitor & 0.59 & 1 & CS \\
+    flask-limiter & \texttt{alisaifee/flask-limiter} & 41.9 & monitor & 0.58 & 18 & CS \\
+    kivymd & \texttt{kivymd/KivyMD} & 41.8 & monitor & 0.47 & 15 & CS \\
+    waitress & \texttt{Pylons/waitress} & 41.3 & monitor & 0.59 & 30 & CS \\
+    schema & \texttt{keleshev/schema} & 37.3 & monitor & 0.78 & 23 & CS \\
+    pyyaml & \texttt{yaml/pyyaml} & 35.4 & monitor & 0.77 & 43 & CS \\
+    orjson & \texttt{ijl/orjson} & 31.1 & monitor & 0.61 & 27 & CS \\
+    colorama & \texttt{tartley/colorama} & 27.8 & monitor & 0.54 & 30 & CS \\
+    pyshortcuts & \texttt{newville/pyshortcuts} & 25.0 & monitor & 0.75 & 11 & CS \\
+    werkzeug & \texttt{pallets/werkzeug} & 24.3 & monitor & 0.76 & 58 & CS \\
+    certifi & \texttt{certifi/python-certifi} & 23.5 & monitor & 0.57 & 59 & CS \\
+    platformdirs & \texttt{tox-dev/platformdirs} & 22.6 & monitor & 0.77 & --- & CS \\
+    pathspec & \texttt{cpburnz/python-pathspec} & 16.6 & monitor & 0.83 & --- & CS \\
+    kivy & \texttt{kivy/kivy} & 15.0 & monitor & 0.85 & 36 & CS \\
+    websockets & \texttt{python-websockets/websockets} & 10.3 & monitor & 0.90 & 52 & CS \\
+    flask & \texttt{pallets/flask} & 9.5 & monitor & 0.91 & 77 & FH \\
+    flask-cors & \texttt{corydolphin/flask-cors} & 8.9 & monitor & 0.91 & 46 & CS \\
+    typing-extensions & \texttt{python/typing\_extensions} & 5.8 & monitor & 0.95 & 99 & CS \\
+    bokeh & \texttt{bokeh/bokeh} & 5.3 & monitor & 0.71 & 65 & CS \\
+    flask-caching & \texttt{pallets-eco/flask-caching} & 5.0 & monitor & 0.95 & 49 & CS \\
+    mistune & \texttt{lepture/mistune} & 4.2 & monitor & 0.96 & 43 & CS \\
+    psutil & \texttt{giampaolo/psutil} & 3.4 & monitor & 0.72 & 47 & CS \\
+    cython & \texttt{cython/cython} & 2.6 & monitor & 0.98 & 31 & CS \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\section{Supplementary Evaluation Tables}
+\clearpage
+\section{Per-Subgroup Metrics of the Slice Evaluation}
 \label{appendix:eval-tables}
 
-This section collects the detailed evaluation tables whose findings are reported and interpreted in Chapter~\ref{chap:evaluation}. Table~\ref{tab:slice-metrics} gives the full per-subgroup slice evaluation of the deployed \texttt{xgboost\sdash full\sdash history} model (Section~\ref{sec:results-slices}), and Table~\ref{tab:bot-ablation-crosstest} gives the cross-test of the human-actor filter (Section~\ref{sec:results-bot-ablation}).
+This section gives the full per-subgroup breakdown of \texttt{xgboost\sdash full\sdash history} whose three findings are interpreted in Section~\ref{sec:results-slices}.
 
 \begin{table}[htbp]
   \centering
   \caption{Held-out ROC-AUC and Brier score of \texttt{xgboost-full-history}
-  within subgroups of the test slice. ``Inactive rate'' is the positive rate in
+  within subgroups of the test set. ``Inactive rate'' is the positive rate in
   the subgroup.}
   \label{tab:slice-metrics}
   \begin{tabular}{llrrr}
@@ -712,11 +824,31 @@ This section collects the detailed evaluation tables whose findings are reported
   \end{tabular}
 \end{table}
 
+\section{Ablation: The Human-Actor Filter}
+\label{appendix:bot-ablation}
+
+Commit- and contributor-based features and the inactivity label are computed from
+human actors only; automated (bot) accounts are excluded
+(Section~\ref{sec:method-feature-engineering}). Because this design choice could
+plausibly be omitted, it was tested by rebuilding the full 5{,}000-repository
+dataset with the filter disabled through a single build flag, with every other
+setting identical, yielding 50{,}000 snapshots that align one-to-one with the
+filtered build. The headline outcome is summarized in
+Section~\ref{sec:results-label-sensitivity}: the filter earns its place on
+construct-validity grounds rather than on discrimination. Three effects were
+measured.
+
+\paragraph{Label corruption.} Disabling the filter flips 357 of 50{,}000 labelled snapshots (\(0.71\%\)) from inactive to active, and \emph{none} in the opposite direction. The effect is strictly one-directional: a bot commit or merge inside the future window can satisfy the two-of-four maintenance rule, so an otherwise dormant repository is relabelled as maintained, whereas bots never make an active repository look inactive. Omitting the filter would therefore bias the target by systematically \emph{masking} inactivity, which is the error direction that matters most for a risk signal. That asymmetry is invisible to a headline metric computed on the corrupted data, which is why the filter is retained despite the small predictive effect below.
+
+\paragraph{Feature inflation.} On the observation-time side, bots inflate the activity features substantially: with the filter disabled, \texttt{commits\_365d} changes on 7{,}858 of 50{,}000 snapshots (\(15.7\%\)) by a mean of \(+938\) commits, though the median change is only \(+80\), so the mean is driven by a small number of heavily automated repositories. \texttt{commits\_90d} rises by a mean of \(+388\) and \texttt{contributors\_365d} by \(+1.4\) distinct contributors, while pull-request \emph{count} features are unaffected because they are not actor-filtered. A small number of bot-driven repositories would thus dominate the activity signal.
+
+\paragraph{Predictive effect.} A naive comparison, in which each model is scored against the labels of the dataset it was trained on, would show bots to be nearly harmless --- but it is misleading, because the unfiltered model is then scored against a partially corrupted target. A cleaner test trains on the bot-contaminated \emph{features} while evaluating against the clean, human-filtered \emph{labels} (Table~\ref{tab:bot-ablation-crosstest}): the contaminated features are consistently worse across all four families, though by a small margin (ROC-AUC falls by \(0.0006\)--\(0.0011\); Brier rises by up to \(0.0010\)).
+
 \begin{table}[htbp]
   \centering
   \caption{Cross-test of the human-actor filter: training on bot-contaminated
   features versus clean features, both evaluated against the identical clean
-  (human-filtered) label on the held-out slice. A lower ROC-AUC or higher Brier
+  (human-filtered) label on the test set. A lower ROC-AUC or higher Brier
   for the contaminated features means the filter helps.}
   \label{tab:bot-ablation-crosstest}
   \small
@@ -734,12 +866,3 @@ This section collects the detailed evaluation tables whose findings are reported
     \bottomrule
   \end{tabular}
 \end{table}
-
-\label{appendix:bot-ablation}
-This section expands the ablation summarized in Section~\ref{sec:results-bot-ablation}. The full 5{,}000-repository dataset was rebuilt with the human-actor filter disabled through a single build flag, with every other setting identical, yielding 50{,}000 snapshots that align one-to-one with the filtered build. Three effects are examined.
-
-\paragraph{Label corruption.} Disabling the filter flips 357 of 50{,}000 labelled snapshots (\(0.71\%\)) from inactive to active, and \emph{none} in the opposite direction. The effect is strictly one-directional: a bot commit or merge inside the future window can satisfy the two-of-four maintenance rule, so an otherwise dormant repository is relabelled as maintained, whereas bots never make an active repository look inactive. Omitting the filter would therefore bias the target by systematically \emph{masking} inactivity, which is the error direction that matters most for a risk signal.
-
-\paragraph{Feature inflation.} On the observation-time side, bots inflate the activity features substantially: with the filter disabled, \texttt{commits\_365d} changes on 7{,}858 of 50{,}000 snapshots (\(15.7\%\)) by a mean of \(+938\) commits, though the median change is only \(+80\), so the mean is driven by a small number of heavily automated repositories. \texttt{commits\_90d} rises by a mean of \(+388\) and \texttt{contributors\_365d} by \(+1.4\) distinct contributors, while pull-request \emph{count} features are unaffected because they are not actor-filtered. A small number of bot-driven repositories would thus dominate the activity signal.
-
-\paragraph{Predictive effect.} A naive comparison, in which each model is scored against the labels of the dataset it was trained on, would show bots to be nearly harmless --- but it is misleading, because the unfiltered model is then scored against a partially corrupted target. A cleaner test trains on the bot-contaminated \emph{features} while evaluating against the clean, human-filtered \emph{labels} (Table~\ref{tab:bot-ablation-crosstest}): the contaminated features are consistently worse across all four families, though by a small margin (ROC-AUC falls by \(0.0006\)--\(0.0011\); Brier rises by up to \(0.0010\)).

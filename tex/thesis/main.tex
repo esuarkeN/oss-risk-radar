@@ -68,13 +68,14 @@
 \cleardoublepage
 \pagenumbering{Roman}
 
+% Order of the back matter follows Anforderungen §3.2.2.b: bibliography, KI-Verzeichnis,
+% appendix, declaration of authorship.
 \printbibliography
+\input{backmatter/ai-usage}
+
 \appendix
 \input{appendix/appendix-a}
 
-% Backmatter: the AI declaration precedes the declaration of authorship, which the
-% latter references, and the signed declaration closes the document.
-\input{backmatter/ai-usage}
 \input{backmatter/declaration}
 
 \end{document}

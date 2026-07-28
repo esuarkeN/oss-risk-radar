@@ -1,40 +1,28 @@
 \chapter{Results and Discussion}
 \label{chap:evaluation}
 
-This chapter reports and interprets the empirical results of the trained
-artifacts: predictive performance against non-learned baselines, calibration
-behaviour, feature attribution and error analysis, and an ablation of the
-human-actor filter.
-
-The central result is stated up front, because it shapes how the rest of the
-chapter should be read. On the held-out slice as a whole, a single observable
-signal --- the number of days since the last human commit --- already ranks
-inactivity almost as well as a sixty-feature gradient-boosted model. The learned
-models are nevertheless worth their complexity, but not for the reason an
-aggregate metric would suggest: their advantage concentrates on the repositories
-that are still active at the observation time, which is precisely the population
-for which an early-warning signal is most decision-relevant.
+This chapter evaluates predictive performance, calibration, feature attribution,
+errors, and robustness to repository recurrence and the label definition.
+Aggregate performance is compared with the active-at-\(t\) subset to separate
+activity persistence from early-warning skill.
 
 \section{Predictive Performance}
 \label{sec:results-performance}
 
-Table~\ref{tab:model-comparison} reports held-out test metrics for the three
-learned model families in both feature regimes, together with two non-learned
-baselines. All learned models were trained on the same time-aware split
-(\(75/15/10\); \(n_\text{test}=5{,}000\) labelled observations, inactive base
-rate \(0.661\)) and calibrated on the validation slice with the same histogram
-calibrator, so the comparison isolates the effect of model family rather than
-data or calibration differences. The combined quality score summarizes ranking
-skill (ROC-AUC) and calibration (Brier) into a single comparison figure and is
-not intended as a standalone proof. All reported metrics are defined formally in
-Section~\ref{sec:method-metric-definitions}.
+Table~\ref{tab:model-comparison} gives held-out metrics for three learned
+families in both regimes and two non-learned baselines. All learned models use
+the same time-aware split (\(75/15/10\);
+\(n_\text{test}=5{,}000\), inactive base rate \(0.661\)) and validation-set
+histogram calibration. Differences therefore reflect model family. The combined
+quality score summarizes ROC-AUC and Brier for comparison; it is not standalone
+evidence. Appendix~\ref{sec:method-metric-definitions} defines the metrics.
 
 \begin{table}[ht]
   \centering
   \caption{Held-out test metrics by model family and feature regime, with the two
   trivial baselines. Higher is better for ROC-AUC, F1, and quality; lower is
   better for Brier and ECE. The best value within each regime is shown in bold.
-  The recency baseline is defined on the \(4{,}556\) test rows that have an
+  \(^{*}\)The recency baseline is defined on the \(4{,}556\) test rows that have an
   observable commit history; see the text for the like-for-like comparison.}
   \label{tab:model-comparison}
   \small
@@ -57,93 +45,73 @@ Section~\ref{sec:method-metric-definitions}.
   \end{tabular}
 \end{table}
 
-Among the learned models the ordering is stable across both regimes: the
-gradient-boosted trees (\texttt{xgboost\sdash full\sdash history}) achieve the strongest
-ranking and probabilistic accuracy (ROC-AUC \(0.958\), Brier \(0.078\)), ahead of
-the multilayer perceptron (\(0.956\) / \(0.081\)) and logistic regression
-(\(0.949\) / \(0.088\)). The neural network, included to test whether a
-higher-capacity non-linear model is warranted for this tabular space, does not
-improve on the trees on ranking or Brier in either regime while adding training
-cost and weaker interpretability --- its one advantage is the lowest calibration
-error --- consistent with the finding that tree-based models remain a strong
-default on moderate-sized tabular problems~\cite{grinsztajn2022trees}. Logistic
-regression is therefore retained for its transparent coefficient attribution and
-XGBoost as the deployed runtime scorer, while the neural network is reported as a
-tested-and-rejected alternative.
+The ordering is stable across regimes. The full-history XGBoost model has
+ROC-AUC \(0.958\) and Brier \(0.078\), followed by the neural network
+(\(0.956\) / \(0.081\)) and Logistic Regression
+(\(0.949\) / \(0.088\)). The neural network has the lowest calibration error but
+does not improve ranking or Brier over XGBoost. It also costs more to train and
+is less interpretable, consistent with evidence favoring trees on moderate
+tabular data \cite{grinsztajn2022trees}. Logistic Regression is retained for
+coefficient attribution, XGBoost for runtime scoring, and the neural network as
+a tested alternative.
 
-The cold-start regime is only marginally weaker for the non-linear models:
-\texttt{xgboost\sdash cold\sdash start} reaches ROC-AUC \(0.953\) against \(0.958\),
-despite using 17 rather than 60 features and lacking the commit-window features
-that dominate the full-history model's gain (Section~\ref{sec:results-attribution});
-only the linear model degrades appreciably (\(0.932\) against \(0.949\)). The
-regimes are closer than the feature counts suggest because the cold-start vector
-retains \texttt{last\_push\_age\_days}, a recency signal nearly as informative as
-the reconstructed commit history. This qualifies the expectation of
-Section~\ref{sec:method-prediction-regimes} that full history would be clearly
-superior --- for the deployed tree model it is, but only by \(0.005\) ROC-AUC ---
-yet that reading does not survive scrutiny:
-Section~\ref{sec:results-history-ablation} shows the aggregate gap to be an artifact
-of slice composition, the regimes separating by \(0.030\) ROC-AUC once the
-already-quiet majority is removed.
+Cold-start is only marginally weaker for the non-linear models.
+\texttt{xgboost\sdash cold\sdash start} reaches \(0.953\) against \(0.958\)
+with the smaller feature set. Logistic Regression falls from \(0.949\) to
+\(0.932\). The cold-start vector retains
+\texttt{last\_push\_age\_days}, a strong substitute for reconstructed commit
+history on this mixed test set, although it lacks the commit-window features
+that dominate full-history gain (Section~\ref{sec:results-attribution}). The
+XGBoost gap is \(0.005\) in aggregate but \(0.030\) after removing the
+already-quiet majority
+(Section~\ref{sec:results-history-ablation}).
 
 \subsection{Comparison Against Non-Learned Baselines}
 \label{sec:results-baselines}
 
-Because the inactivity label is itself activity-derived, a learned model is only
-worth reporting if it improves on a trivial rule built from a single observable
-signal (Section~\ref{sec:method-model-training}). Two such rules are evaluated on
-the same held-out slice: ranking by days since the last human commit, and ranking
-by negated annual commit volume.
+Since the label is activity-derived, single-signal rules show how much ranking
+skill is available without learning
+(Section~\ref{sec:method-model-training}). The baselines use days since the last
+human commit and negated annual commit volume.
 
-The result is unfavourable to the learned model, and it is the most important
-quantitative finding of this thesis. The recency rule attains ROC-AUC \(0.957\)
-and an F1 score of \(0.918\), which is not merely competitive with
-\texttt{xgboost\sdash full\sdash history} but nominally exceeds its F1 of
-\(0.916\). The comparison is not quite
-like-for-like: \texttt{days\_since\_last\_commit} is undefined for the \(444\)
-test rows whose repositories have no observable record before the observation date
-(Section~\ref{sec:method-undefined-features}), so the baseline is scored on
-\(4{,}556\) rows while the model is scored on all \(5{,}000\). Re-scoring the
-model on exactly those \(4{,}556\) rows raises it to ROC-AUC \(0.974\)
-against the baseline's \(0.957\). The model therefore does outrank the trivial
-rule, but by \(0.017\) ROC-AUC rather than by the wide margin that an aggregate
-comparison against a weaker baseline would suggest. The commit-volume rule is
-clearly worse in aggregate (\(0.897\)).
+On the aggregate rows, recency reaches ROC-AUC \(0.957\) and F1 \(0.918\);
+XGBoost reaches \(0.958\) and \(0.916\). This is not a like-for-like comparison.
+\texttt{days\_since\_last\_commit} is undefined for \(444\) rows without prior
+observed events (Section~\ref{sec:method-undefined-features}), so recency covers
+\(4{,}556\) rows and XGBoost all \(5{,}000\).
 
-Two conclusions follow. First, the aggregate held-out metric is a poor instrument
-for judging this artifact: most of the achievable ranking skill on a slice whose
-inactive base rate is \(0.661\) is already contained in one recency signal, and a
-sixty-feature model recovers only a modest increment on top of it. Reporting the
-headline ROC-AUC alone would overstate what the learned model contributes.
-Second, this is exactly the situation the active-at-\(t\) evaluation was designed
-to expose (Section~\ref{sec:method-evaluation-strategy}). Among repositories that
-are already quiet at \(t\), predicting continued inactivity is close to trivial,
-and both the model and the recency rule do it well; the aggregate metric is
-dominated by that easy majority. Restricting the comparison to the \(1{,}794\)
-repositories that are still active at the observation date reverses the verdict
-immediately: the model reaches ROC-AUC \(0.905\) against \(0.844\) for the best
-trivial rule, a margin of \(0.061\) rather than \(0.017\). The next section takes
-that subset as its subject.
+Re-scored on the \(4{,}556\) shared rows, XGBoost reaches \(0.974\) against
+\(0.957\), a margin of \(0.018\). Increments use unrounded metrics before
+rounding and may differ from subtractions of displayed values. F1 was \emph{not}
+recomputed on the shared rows and is not compared; no claim rests on the F1
+column of Table~\ref{tab:model-comparison}. Commit volume is weaker on the full
+test set (\(0.897\)) but is the stronger trivial rule on recency-defined rows
+(Section~\ref{sec:results-history-ablation}).
+
+At the inactive base rate of \(0.661\), recency already supplies most
+aggregate ranking skill. The sixty-feature model adds a modest increment
+\emph{on a test set where most repositories are
+already quiet}. On the
+\(1{,}794\) repositories still active at \(t\), XGBoost reaches \(0.905\)
+against \(0.844\) for the best trivial rule. This margin is \(0.061\), compared
+with \(0.016\) on the recency-defined rows
+(Section~\ref{sec:method-evaluation-strategy}).
 
 \subsection{Early Warning: Removing the Already-Inactive Repositories}
 \label{sec:results-history-ablation}
 
-The preceding comparison is compressed by an easy majority, so the natural next
-question --- and the one on which the practical value of the artifact rests --- is
-how the models behave once the repositories that had already fallen silent by
-\(t\) are removed. What remains is the population an early-warning signal is
-actually for: projects that still look healthy at the observation date, some of
-which decline over the following year. Their inactive rate is \(0.225\), against
-\(0.661\) in the test set as a whole.
+The active-at-\(t\) subset removes repositories already silent at the
+observation date. Its inactive rate is \(0.225\), compared with \(0.661\) for
+the full test set.
 
-Restricting to that subset also answers the feature-availability question posed in
-Section~\ref{sec:method-prediction-regimes}, since comparing the two
-gradient-boosted models isolates the contribution of the 43 reconstructed
-historical features: the cold-start model differs from the full-history model only
-by their absence. Table~\ref{tab:history-ablation} reports every arm on identical
-rows, on the whole recency-defined slice and on the active-at-\(t\) subset. Where
-the recency signal is undefined the row is dropped from \emph{all} arms rather
-than imputed for the models alone.
+Comparing the two XGBoost regimes isolates the 43 reconstructed historical
+features (Section~\ref{sec:method-prediction-regimes}).
+Table~\ref{tab:history-ablation} scores every arm on identical recency-defined
+and active-at-\(t\) rows. Rows without recency are dropped from \emph{all} arms. The
+trivial column selects commit volume, the stronger rule in both sets:
+\(0.958\) against \(0.957\) for recency-defined rows and \(0.844\) against
+\(0.792\) for active-at-\(t\). Section~\ref{sec:results-baselines} instead uses
+recency specifically, so its margin has a different comparator.
 
 \begin{table}[htbp]
   \centering
@@ -159,76 +127,114 @@ than imputed for the models alone.
   \end{tabular}
 \end{table}
 
-In aggregate, reconstructed history is worth \(0.005\) ROC-AUC, and the 17
-snapshot features are worth \(0.013\) over the single best trivial signal. Read
-alone, those numbers say the GH Archive pipeline was not worth building. On the
-active-at-\(t\) subset the comparison inverts: history is worth \(0.030\), six
-times its aggregate value, and the snapshot features \(0.083\). The ordering of
-the three feature sets --- one signal, seventeen, sixty --- is strictly monotone
-where early warning matters and almost flat where it does not.
+On recency-defined rows, history adds \(0.005\) ROC-AUC and the 17 snapshot
+features add \(0.011\) over the best single signal. On active-at-\(t\), the gains
+are \(0.030\) and \(0.031\); the historical gain is six times its aggregate
+value. The ordering from one to 17 to 60 features is nearly flat in aggregate and
+strictly monotone in the early-warning subset.
 
-Three separate comparisons therefore point the same way. The learned model beats
-the trivial rule by \(0.017\) in aggregate against \(0.061\) on active-at-\(t\);
-reconstructed history is worth \(0.005\) against \(0.030\); the snapshot feature
-set \(0.013\) against \(0.083\). Every aggregate figure is compressed by the same
-cause. A test set in which two thirds of repositories are already quiet rewards a
-predictor for restating the present, so any additional information --- more
-features, more history, a learned decision boundary --- becomes visible only once
-that easy majority is removed. The aggregate ROC-AUC of this dataset measures
-activity persistence more than predictive skill, and no design decision in this
-thesis should be judged against it.
+The learned model exceeds the best trivial rule by \(0.016\) on recency-defined
+rows and \(0.061\) on active-at-\(t\). The full test set is dominated by
+repositories already quiet at \(t\), so aggregate ROC-AUC largely measures
+activity persistence. Among repositories still active at \(t\), XGBoost reaches
+\(0.905\) against \(0.844\); the repository-clustered bootstrap also supports
+this margin (Section~\ref{sec:validity-conclusion}). The learned contribution is
+therefore concentrated
+\emph{among repositories that are active at the observation time}, while the
+aggregate advantage over a trivial rule remains
+small.\kiref{Claude Opus 5/4}
 
-This is the central empirical result of the thesis, and it is a split one. On the
-aggregate comparison the answer to the research question is negative: a
-sixty-feature calibrated model does not meaningfully outrank a rule that sorts
-repositories by their last commit date, and reporting the headline \(0.958\)
-without that comparison would overstate the contribution. On the population where
-an early warning could change a decision, the answer is positive: the model
-separates outcomes at \(0.905\) against \(0.844\), the margin holds under a
-repository-clustered bootstrap (Section~\ref{sec:validity-conclusion}), and the
-ordering of the three feature sets is strictly monotone. Both halves are reported,
-because reporting only the first would understate the artifact and reporting only
-the second would overstate it.
+\subsection{Precision-Recall Evaluation of the Early-Warning Subset}
+\label{sec:results-precision-recall}
+
+ROC-AUC measures pairwise ranking across both classes and is insensitive to class
+prevalence. Average precision summarizes the precision-recall curve for the
+positive class and uses the positive rate as its no-skill reference
+(Appendix~\ref{sec:method-metric-definitions}). It provides an additional view
+for active-at-\(t\), whose inactive rate is \(0.225\)
+\cite{saito2015precision}. Table~\ref{tab:average-precision} reports it for the
+same held-out predictions and row sets as Table~\ref{tab:history-ablation}, with
+percentile intervals from \(2{,}000\) bootstrap resamples.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Held-out average precision on identical row sets, with \(95\%\)
+  bootstrap intervals. The no-skill column is the positive rate, which a random
+  ranking attains.}
+  \label{tab:average-precision}
+  \small
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Subset & \(n\) & No skill & XGBoost & Commit volume & Recency \\
+    \midrule
+    Recency-defined & 4{,}556 & 0.669 & 0.986 & 0.977 & 0.979 \\
+    \multicolumn{2}{l}{\quad \emph{95\% interval}} & & [0.983, 0.989] & [0.973, 0.981] & [0.976, 0.982] \\
+    active@\(t\)    & 1{,}794 & 0.225 & 0.726 & 0.599 & 0.512 \\
+    \multicolumn{2}{l}{\quad \emph{95\% interval}} & & [0.679, 0.771] & [0.548, 0.649] & [0.464, 0.565] \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The split finding of Section~\ref{sec:results-baselines} is sharper under this
+metric than under ROC-AUC. On recency-defined rows, all three average-precision
+scores are high, and the model's margin over the better trivial rule --- recency
+under this metric, not commit volume as in Table~\ref{tab:history-ablation} --- is
+\(0.007\) \([0.005, 0.009]\). On active-at-\(t\), the margin is \(0.127\)
+\([0.096, 0.160]\) against commit volume, the better rule there, and \(0.213\)
+\([0.159, 0.264]\) against recency. All intervals exclude zero. Relative to the
+no-skill line of \(0.225\), the model reaches \(3.2\) times the random rate and
+the better trivial rule \(2.7\) times.
+
+The corresponding ROC-AUC margin is \(0.061\)
+(Table~\ref{tab:history-ablation}). Average precision supports the same conclusion
+and shows a larger separation between the model and the trivial rules. Because
+the principal comparison is summarized by the areas and bootstrap intervals, no
+precision-recall curve is included. The resulting loss of operating-point detail
+is discussed in Section~\ref{sec:validity-conclusion}. The analysis is reproduced
+by
+\texttt{scripts\sslash ml\sslash precision\su recall\su eval\sdot py}, which
+reruns the reported configuration and aborts if the re-scored predictions do not
+reproduce that run's held-out ROC-AUC
+(Appendix~\ref{appendix:code-availability}). The rerun reproduces the staged
+run's aggregate ROC-AUC of \(0.957852\), so
+Tables~\ref{tab:history-ablation} and~\ref{tab:average-precision} describe the
+same fitted model.\kiref{Claude Opus 5/12}
 
 \section{Calibration and Threshold Selection}
 \label{sec:results-calibration}
 
-Because the score is intended to be read as a probability rather than only as a
-ranking, calibration is evaluated alongside discrimination. Every model's raw
-outputs are mapped through a histogram calibrator fitted on the validation slice
-and never on the test slice, so the reported calibration reflects held-out
-behaviour. For the deployed \texttt{xgboost\sdash full\sdash history} model this yields a
-Brier score of \(0.078\), a log loss of \(0.246\), and an expected calibration
-error of \(0.035\) at the selected decision threshold of \(0.51\), where the
-operating point attains precision \(0.90\) and recall \(0.93\). Among the
-full-history models the neural network attains the lowest expected calibration
-error (\(0.028\)) and logistic regression the highest (\(0.047\)), so the ranking
-by calibration does not follow the ranking by discrimination.
+Calibration is evaluated because the score is presented as a probability. The
+histogram calibrator uses validation data, never test data. For
+\texttt{xgboost\sdash full\sdash history}, Brier is \(0.078\), log loss
+\(0.246\), and ECE \(0.035\). At the selected threshold of \(0.51\), precision
+is \(0.90\) and recall \(0.93\). The neural network has the lowest full-history
+ECE (\(0.028\)); Logistic Regression has the highest (\(0.047\)). Calibration
+and discrimination therefore order the models differently.
 
-The reliability of the calibrated probabilities is well behaved: the empirical
-inactivity rate rises monotonically across the ten calibration bins, from
-\(0.032\) in the lowest predicted-probability band to \(0.988\) in the highest, so
-higher scores do correspond to higher observed inactivity frequencies rather than
-only to a higher rank. Two caveats apply. First, the two extreme bands hold
-\(65.9\%\) of the validation mass, so mid-range probabilities are supported by
-comparatively few samples and are correspondingly less certain; the per-prediction
-evidence support surfaced by the demonstrator (Chapter~\ref{chap:demonstrator}) reflects
-exactly this bin-level support. Second, calibration is conditional on the sampled
-prevalence rather than a natural deployment prevalence
-(Section~\ref{sec:method-limitations}), so the absolute probabilities would
-require recalibration before being read as live population probabilities.
+Empirical inactivity increases monotonically across the ten calibration bins,
+from \(0.032\) in the lowest band to \(0.988\) in the highest. The two extreme
+bands contain \(65.9\%\) of validation predictions, leaving less support for
+mid-range probabilities. The demonstrator's per-prediction evidence measure
+reflects this bin support (Chapter~\ref{chap:demonstrator}). Calibration is also
+conditional on sampled prevalence; live population probabilities require
+recalibration (Section~\ref{sec:method-limitations}).
 
 \section{Feature Importance and Error Analysis}
 \label{sec:results-features}
 
+This section compares standardized Logistic Regression coefficients with
+XGBoost gain, then examines repository recurrence, subgroup performance, and
+errors.
+
 \subsection{Feature Attribution}
 \label{sec:results-attribution}
 
-Feature attribution is read from the logistic-regression model, which is retained
-precisely for its transparent coefficients (Section~\ref{sec:results-performance}).
-Because the inputs are standardized, the coefficient magnitudes are directly
-comparable, and their signs indicate the direction of the association with
-inactivity. Figure~\ref{fig:attribution} shows the leading coefficients.
+Logistic Regression provides transparent attribution for
+\texttt{xgboost\sdash full\sdash history}'s comparison model
+(Section~\ref{sec:results-performance}). Standardized inputs make coefficient
+magnitudes comparable, and signs indicate the \emph{direction} of association
+with inactivity.
+Figure~\ref{fig:attribution} shows the leading coefficients.\kiref{Claude Opus 5/5}
 
 \begin{figure}[htbp]
 \centering
@@ -246,7 +252,7 @@ inactivity. Figure~\ref{fig:attribution} shows the leading coefficients.
     {has\_issue\_activity\_365d}/-0.26/-3,
     {stars\_log1p}/0.25/-4,
     {days\_since\_last\_commit}/0.56/-5,
-    {days\_since\_last\_push}/0.56/-6}
+    {last\_push\_age\_days}/0.56/-6}
   {
     \fill[black!\ifdim\val pt<0pt 30\else 62\fi] (0,\row-0.24) rectangle (\val,\row+0.24);
     \node[anchor=east,font=\scriptsize\ttfamily] at (-1.20,\row) {\name};
@@ -257,159 +263,132 @@ inactivity. Figure~\ref{fig:attribution} shows the leading coefficients.
   \node[font=\footnotesize,anchor=west] at (0.06,0.75) {raises it};
 \end{tikzpicture}
 \caption[Standardized logistic-regression coefficients]{Standardized
-logistic-regression coefficients for the seven strongest features. Because the
-inputs are standardized the magnitudes are comparable; a negative coefficient
-means the feature is associated with a \emph{lower} probability of inactivity. The
-two shaded groups behave as intended --- sustained development lowers risk,
-staleness raises it --- while \texttt{open\_issues\_log1p} and
-\texttt{stars\_log1p} carry counter-intuitive signs discussed below.}
+logistic-regression coefficients for the seven strongest \emph{interpretable}
+features. Because the inputs are standardized the magnitudes are comparable; a
+negative coefficient means the feature is associated with a \emph{lower}
+probability of inactivity. The two shaded groups behave as intended --- sustained
+development lowers risk, staleness raises it --- while \texttt{open\_issues\_log1p}
+and \texttt{stars\_log1p} carry counter-intuitive signs discussed below.
+\texttt{package\_age\_days} is omitted although its coefficient (\(-0.26\)) would
+place it seventh by magnitude. Under the offline build, it takes one value per
+quarterly observation cohort (Appendix~\ref{sec:appendix-undefined-features}).
+It therefore encodes the observation date rather than any property of the
+repository and is not interpretable as a maintenance signal.}
 \label{fig:attribution}
 \end{figure}
 
-The picture is largely as the feature semantics intend
-(Appendix~\ref{appendix:feature-reference}): the breadth of sustained development
-is the strongest inactivity-lowering signal, followed by recent maintainer
-integration and the presence of any issue activity at all, while the two staleness
-measures are the strongest inactivity-raising ones.
+Sustained development is the strongest inactivity-lowering signal, followed by
+recent maintainer integration and any issue activity. The two staleness measures
+are the strongest inactivity-raising signals
+(Appendix~\ref{appendix:feature-reference}).
 
-Two coefficients resist that reading. A larger open-issue backlog is associated
-with \emph{lower} inactivity, and a larger star count with \emph{higher}
-inactivity. Both are plausibly confounded rather than causal: an open backlog
-presupposes a user base that files issues, and popularity is correlated with
-project age within the sampled frame. These coefficients are therefore used to
-explain \emph{direction} for a given repository, while ranking performance is
-carried by the gradient-boosted model.
+Two coefficients have counter-intuitive signs. Larger issue backlogs associate
+with \emph{lower} inactivity, while more stars associate with \emph{higher}
+inactivity. These
+associations may be confounded: a backlog implies users who file issues, and
+stars may proxy unobserved project characteristics because repository age is
+unavailable (Section~\ref{sec:method-offline-metadata}). The coefficients
+describe association, not causation; XGBoost provides ranking performance.
 
-These attributions are only interpretable because of the encoding correction of
-Section~\ref{sec:method-undefined-features}. While an undefined response latency was
-stored as zero, the responsiveness medians ranked among the strongest inactivity
-signals, inviting the reading that slow-responding projects fail; in fact a zero
-latency marked projects with \emph{no} issues or pull requests at all. After the
-correction those medians no longer appear among the leading coefficients, and the
-absence of activity is carried explicitly by \texttt{has\_issue\_activity\_365d} and
-\texttt{has\_pr\_activity\_365d}.
+Before the encoding correction in
+Section~\ref{sec:method-undefined-features}, zero response latency marked projects
+with no issues or pull requests. Responsiveness medians then appeared among the
+strongest signals with a misleading meaning. After correction, they leave the
+leading coefficients, and \texttt{has\_issue\_activity\_365d} and
+\texttt{has\_pr\_activity\_365d} carry the absence of activity explicitly.
 
-The gradient-boosted model exposes a complementary, non-linear view through its
-gain-based feature importances (normalized to sum to one over the \(42\) of \(60\)
-features that receive at least one split). Its ranking is dominated by recent
-commit volume: \texttt{commits\_365d} (\(0.42\)) and \texttt{commits\_90d}
-(\(0.20\)) together account for over three-fifths of the total gain, followed by
+XGBoost gain is normalized over the \(42\) of \(60\) features used in at least
+one split. \texttt{commits\_365d} (\(0.42\)) and
+\texttt{commits\_90d} (\(0.20\)) provide over three-fifths of total gain.
 \texttt{active\_commit\_months\_365d} (\(0.08\)) and
-\texttt{has\_recent\_pr\_merge\_flag} (\(0.07\)); \texttt{last\_push\_age\_days},
-\texttt{opened\_prs\_90d}, \texttt{days\_since\_last\_commit}, and
-\texttt{merged\_prs\_90d} contribute the next tier. The two views agree on the
-substantive story --- sustained recent development activity is the dominant signal
---- while differing in emphasis: the linear model leans on the breadth of active
-commit months, whereas the gradient-boosted model concentrates gain on the raw
-recent-commit-volume windows. That concentration also explains the aggregate near-parity of
-the cold-start model observed in Section~\ref{sec:results-performance}: the
-cold-start vector omits both commit windows, yet \texttt{last\_push\_age\_days}
-substitutes for them at little cost \emph{on a slice where most repositories are
-already quiet}. Where they are not, the substitution is a poorer one
-(Section~\ref{sec:results-history-ablation}).
+\texttt{has\_recent\_pr\_merge\_flag} (\(0.07\)) follow;
+\texttt{last\_push\_age\_days}, \texttt{opened\_prs\_90d},
+\texttt{days\_since\_last\_commit}, and \texttt{merged\_prs\_90d} form the next
+tier.
+
+Both models emphasize recent sustained development. The linear model emphasizes
+active commit months, while XGBoost concentrates gain on commit-volume windows.
+Cold-start omits these windows, but \texttt{last\_push\_age\_days} substitutes
+for them on the already-quiet majority. The substitution is weaker on
+active-at-\(t\) (Section~\ref{sec:results-history-ablation}).
 
 \subsection{Robustness to Repository Recurrence}
 \label{sec:results-robustness}
 
-Under the repository-disjoint split (Section~\ref{sec:impl-grouped-split}), where
-every snapshot of a repository is confined to one partition, held-out ROC-AUC
-decreases from \(0.958\) to \(0.950\) and the Brier score rises from \(0.078\) to
-\(0.079\). The small gap bounds the optimism attributable to a repository
-appearing in both training and test slices and indicates that the discrimination
-generalizes to unseen repositories rather than resting on repository
-memorization. This check matters more than it did previously: because the labelled
-dataset now spans ten equally sized quarterly cohorts, the chronological test
-slice consists entirely of the final observation date, so every test repository
-also appears in training at an earlier date.
+With every repository confined to one partition, the
+\texttt{xgboost\sdash full\sdash history} model is retrained,
+recalibrated, and rethresholded on that partitioning
+(Appendix~\ref{sec:impl-grouped-split}). ROC-AUC falls from \(0.958\) to
+\(0.950\) and Brier rises from \(0.078\) to \(0.079\). The small change bounds
+optimism from repository recurrence and indicates discrimination on repositories
+held out from the same foundation frame, not transfer to open-source
+repositories in general (Section~\ref{sec:method-data-sources}). This check is
+necessary because ten equal quarterly cohorts make the chronological test set the
+final date, while every test repository also appears earlier in training.
+Section~\ref{sec:validity-internal} treats this as an internal-validity threat.
 
 \subsection{Slice Evaluation}
 \label{sec:results-slices}
 
-A single aggregate metric can average a strong subgroup with a weak one. The
-held-out predictions of the deployed \texttt{xgboost\sdash full\sdash history} model are
-therefore re-scored within subgroups that vary in ways relevant to deployment; the
-full per-subgroup table is given in Appendix~\ref{appendix:eval-tables}
-(Table~\ref{tab:slice-metrics}). Three findings follow.
+The \texttt{xgboost\sdash full\sdash history} predictions are re-scored by
+subgroup to identify variation hidden by the aggregate.
+Appendix~\ref{appendix:eval-tables}
+(Table~\ref{tab:slice-metrics}) gives the full results.
 
-First, and most importantly for the activity-persistence threat
-(Section~\ref{sec:validity-internal}), the model separates outcomes well
-\emph{among repositories that are active at the observation time}: on the
-active-at-\(t\) subset (\(n=1{,}794\), inactive rate only \(0.225\)) it attains
-ROC-AUC \(0.905\) (\(95\%\) repository-clustered bootstrap CI \([0.889, 0.921]\);
-because every active-at-\(t\) snapshot in the test slice belongs to a distinct
-repository, the clustered interval coincides with an ordinary row bootstrap here).
-On this same subset the recency baseline reaches only \(0.792\) and the
-commit-volume baseline \(0.844\). The learned model therefore holds a margin of
-\(0.061\) over the best trivial rule (\(95\%\) bootstrap CI \([0.046, 0.078]\),
-which excludes zero) exactly where early-warning skill matters, against a margin
-of \(0.017\) in aggregate (Section~\ref{sec:results-baselines}). This is the central justification for the
-artifact: its value is not that it ranks a mixed population better than a recency
-rule, but that it anticipates decline in repositories that still look healthy.
-The operating point on this subset is nevertheless conservative --- recall
-\(0.49\) at precision \(0.74\) --- so the model flags fewer than half of the
-repositories that will fall quiet, and the score is better used as a ranking for
-triage than as an automatic decision.
+On active-at-\(t\) (\(n=1{,}794\), inactive rate \(0.225\)), XGBoost reaches
+\(0.905\) ROC-AUC with a \(95\%\) repository-clustered bootstrap CI of
+\([0.889, 0.921]\). Each snapshot in this test subset belongs to a distinct
+repository, so the interval equals an ordinary row bootstrap. Recency reaches
+\(0.792\) and commit volume \(0.844\). The \(0.061\) margin over the best rule
+has a \(95\%\) CI of \([0.046, 0.078]\), excluding zero, compared with \(0.016\)
+on recency-defined rows (Section~\ref{sec:results-baselines}). At the selected
+operating point, recall is \(0.49\) and precision \(0.74\). The model therefore
+ranks early decline but flags fewer than half of the repositories that later fall
+quiet.
 
-Second, the aggregate ROC-AUC masks a much weaker low-popularity subgroup, ranked
-at only \(0.846\) against \(0.972\) and \(0.964\) for high- and medium-popularity
-repositories (Table~\ref{tab:slice-metrics}); these projects deserve more caution
-and are exactly where the per-prediction evidence support should be low, though ``low
-popularity'' is relative to a seed frame that already requires at least 100 stars.
-Third, repositories with reconstructable history are ranked no higher than
-cold-start-like ones (\(0.921\) against \(0.929\)), but that ordering is confounded
-by the far higher inactive rate of the cold-start-like subgroup (\(0.924\) against
-\(0.350\)) and should not be read as evidence that history is unhelpful; it
-reinforces only that the two regimes are closer in skill than their feature counts
-suggest (Section~\ref{sec:results-performance}).
+Low-popularity repositories reach \(0.846\), compared with \(0.972\) and
+\(0.964\) for high and medium popularity (Table~\ref{tab:slice-metrics}). They
+require more caution, although ``low'' is relative to a seed requiring at least
+100 stars. Per-prediction evidence support should surface this weakness.
+Repositories with reconstructable history reach \(0.921\), compared with
+\(0.929\) for cold-start-like rows. The latter subgroup has a much higher
+inactive rate (\(0.924\) against \(0.350\)), so this does not show that history
+is unhelpful. It only confirms that aggregate regime performance is close
+(Section~\ref{sec:results-performance}).
 
 \subsection{Error Analysis}
 \label{sec:results-error-analysis}
 
-The quantitative results identify two residual
-weaknesses. The dominant one is low-visibility repositories with sparse public
-signals, which the evidence-support layer is intended to flag rather than hide, although
-whether low evidence support reliably coincides with larger prediction error is asserted
-by construction and not separately validated here. The
-second is recall on the active-at-\(t\) subset: the model ranks impending decline
-well but, at the F1-selected threshold, commits to flagging only about half of it.
-Both weaknesses argue for using the score as a prioritization signal rather than as
-a gate.
+Two weaknesses remain. Low-visibility repositories provide sparse public
+signals. Evidence support flags this condition, but its relationship with
+prediction error has not been validated separately. On active-at-\(t\), the
+F1-selected threshold also detects only about half of later inactivity. The score
+should therefore rank manual review, not gate decisions; it provides \emph{no}
+automatic acceptance rule.
 
 \section{Robustness to the Label Definition}
 \label{sec:results-label-sensitivity}
 
-Because the two-of-four maintenance rule and its thresholds are heuristic
-(Section~\ref{sec:method-definitions}) and the label fixes class prevalence, the
-full evaluation was repeated under a stricter three-of-four and a more permissive
-one-of-four variant, re-labeling all \(50{,}000\) snapshots from the same
-future-window signals and re-training the full-history model on each; the primary
-two-of-four run is reproduced exactly by this harness. Across the variants the
-held-out inactive rate moves from \(0.581\) to \(0.746\), yet the model's ROC-AUC
-stays within \(0.958\)--\(0.961\) and its ordering against the recency baseline is
-stable --- near-parity under the permissive and primary rules and a clear advantage
-under the strict one (Appendix~\ref{appendix:label-sensitivity}). The central
-finding is therefore not an artifact of the specific threshold choice; a systematic
-sweep over each individual cut-off is left to future work.
+The evaluation repeats the heuristic two-of-four rule with permissive one-of-four
+and strict three-of-four variants (Section~\ref{sec:method-definitions}). The
+harness re-labels all \(50{,}000\) snapshots, retrains full-history XGBoost, and
+exactly reproduces the primary run. The inactive rate ranges from \(0.581\) to
+\(0.746\), while full-test ROC-AUC remains between \(0.958\) and \(0.961\).
 
-\section{Ablation: The Human-Actor Filter}
-\label{sec:results-bot-ablation}
+On identical recency-defined rows, the margin over the stronger trivial rule is
+\(0.010\), \(0.016\), and \(0.023\) as the rule tightens
+(Section~\ref{sec:results-baselines};
+Appendix~\ref{appendix:label-sensitivity}). The learned margin therefore widens
+with the stricter rule, and the threshold choice does not produce the central
+ranking result. A systematic sweep over each cut-off remains future
+work.\kiref{Claude Opus 5/9}
 
-Commit- and contributor-based features and the inactivity label are computed from
-human actors only; automated (bot) accounts are excluded
-(Section~\ref{sec:method-feature-engineering}). Because this design choice could
-plausibly be omitted, it was tested by rebuilding the full 5{,}000-repository
-dataset with the filter disabled through a single build flag, every other setting
-identical, and comparing both builds against the same clean labels.
-
-The outcome is that the filter earns its place on construct-validity grounds
-rather than on discrimination. Its predictive cost when omitted is minor --- every
-model family loses only \(0.0006\)--\(0.0011\) ROC-AUC --- but omitting it corrupts
-the label in one direction only: \(357\) of \(50{,}000\) snapshots (\(0.71\%\))
-flip from inactive to active and none the other way, because a bot commit or merge
-inside the future window can satisfy the maintenance rule and mask an otherwise
-dormant repository. Bots can make a dead project look maintained; they cannot make
-a live one look dead. That asymmetry is invisible to a headline metric computed on
-the corrupted data, and it runs in the direction that matters most for a risk
-signal, so the filter is retained. The three measured effects --- label
-corruption, feature inflation, and the cross-tested predictive cost --- are
-reported in full in Appendix~\ref{appendix:bot-ablation}.
+The human-actor filter applies to commit and contributor features and to the
+label. Disabling it changes ROC-AUC by only
+\(0.0006\)--\(0.0011\) across model families
+(Section~\ref{sec:method-feature-engineering}). It changes the label in one
+direction: \(357\) of \(50{,}000\) snapshots switch from inactive to active,
+with none switching back. Bots can make a dormant project appear maintained but
+cannot make an active one appear inactive. The filter is therefore justified by
+construct validity, not predictive accuracy
+(Appendix~\ref{appendix:bot-ablation}).\kiref{Claude Opus 5/4}

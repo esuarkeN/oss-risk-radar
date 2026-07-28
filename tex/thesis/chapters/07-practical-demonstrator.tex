@@ -1,86 +1,107 @@
 \chapter{Practical Demonstrator}
 \label{chap:demonstrator}
 
-Chapter~\ref{chap:evaluation} evaluates the model on a held-out slice drawn from
-the same seed distribution it was trained on. This chapter asks a different and
-harder question: what does the model do when applied to repositories it was never
-sampled to see? Answering it serves the demonstration phase of the Design Science
-Research process \cite{hevner2004design,peffers2007design}, but its scientific
-value here is as an error analysis. An out-of-distribution application exposes
-failure modes that a held-out slice cannot, because the held-out slice inherits
-the seed's composition and therefore its blind spots.
+This chapter applies OSS Risk Radar to repositories outside the foundation seed.
+It serves the Design Science Research demonstration phase and provides an
+out-of-distribution error analysis
+\cite{hevner2004design,peffers2007design}. The application can expose failure
+modes not visible in a test set drawn from the seed distribution.
 
-The input is the dependency set of a real project. The outputs below come from the
-same \texttt{xgboost\sdash full\sdash history} model (feature set
-\texttt{feature\sdash set\sdash v4\sdash full\sdash history}) whose metrics
-Chapter~\ref{chap:evaluation} reports, not from a separately configured system;
-the staging gate of Section~\ref{sec:impl-deployment} is what makes that
-identity checkable rather than merely asserted. All figures are real
-outputs and reflect the public repository state on \texttt{2026-07-09}, the date
-of the analysis run.
+The input is a real project's dependency set. Scores come from the promoted
+artifact bundle (Section~\ref{sec:impl-deployment}). For a shared dataset hash
+and regime, the backend scores each staged model evaluated in
+Chapter~\ref{chap:evaluation} and averages the outputs into an
+\emph{ensemble profile} (Appendix~\ref{sec:impl-backend}). Every reported score
+is the mean of two models; their spread becomes the model-agreement factor.
+
+Chapter~\ref{chap:evaluation} evaluates individual artifacts, not this ensemble.
+Comparison with its strongest member,
+\texttt{xgboost\sdash full\sdash history}, remains future work
+(Chapter~\ref{chap:conclusion}). Furthermore, 29 of 30 repositories use the
+weaker cold-start regime. This coverage limitation motivates the cache-expansion
+work in Chapter~\ref{chap:conclusion}. The chapter therefore analyzes the deployed
+configuration rather than measuring predictive accuracy again. Outputs reflect
+public repository state on \texttt{2026-07-09}.
 
 \section{Example Repository Set}
 \label{sec:demo-mapping}
 
-Consistent with the unit of analysis fixed in Section~\ref{sec:impl-architecture},
-each repository is scored independently and the dependency inventory is taken as an
-external input produced by software-composition-analysis tooling
-\cite{ortAnalyzer}.
+Each repository is scored \emph{individually}, and
+software-composition-analysis tooling supplies the external inventory
+\cite{ortAnalyzer} (Section~\ref{sec:impl-architecture}).
 
-For this demonstration the input is the set of dependency repositories of
-\texttt{ArchipelagoMW\sslash Archipelago}, a large and actively developed open-source
-multi-world game randomizer. Its declared Python dependencies correspond to 30
-source repositories, ranging from widely used infrastructure libraries (for
-example \texttt{flask}, \texttt{jinja2}, \texttt{werkzeug}) to smaller, more
-specialized packages. To be precise about what is and is not being done here: the
-resolution of that dependency list is not part of the artifact, and no dependency
-graph is computed. The list is taken as given from the project's own declared
-dependencies, and each of the 30 repositories is then scored \emph{individually},
-exactly as any single submitted repository would be. What the demonstrator adds is
-the ordering of those thirty independent scores into one ranked view; nothing in
-it models relationships between the dependencies. This project was chosen because that mixture is expected to
-produce a non-trivial triage view rather than a uniformly low-risk one.
+The example is \texttt{ArchipelagoMW\sslash Archipelago}, a large, active
+open-source multi-world game randomizer. Its declared Python dependencies map to
+30 source repositories, from \texttt{flask}, \texttt{jinja2}, and
+\texttt{werkzeug} to smaller packages. Dependency resolution and graph
+construction are outside the artifact. Each declared repository is scored
+independently, and the demonstrator orders the 30 scores without modeling
+relationships between dependencies.\kiref{Claude Opus 5/4} This mixture was
+chosen to avoid a uniformly low-risk example.
 
-Each repository is scored through the same analysis workflow, which enriches
-live repository metadata and applies the staged model ensemble. The two prediction
-regimes of Section~\ref{sec:method-prediction-regimes} appear directly in this
-run: one repository (\texttt{flask}) is present in the staged repository feature
-cache and is therefore scored in the richer full-history regime, while the
-remaining 29 are absent from the foundation cache and fall back to the cold-start
-regime. This distribution is itself an honest illustration of the cold-start
-coverage limitation highlighted in Chapter~\ref{chap:conclusion}: an arbitrary
-project's dependency repositories are mostly outside the precomputed foundation
-seed. The aggregate held-out gap between the two regimes is small, but
-Section~\ref{sec:results-history-ablation} shows that this understates the cost of
-scoring without reconstructed history: on repositories still active at the
-observation time --- which is what most of the thirty are --- the full-history
-model outranks the cold-start one by \(0.030\) ROC-AUC. Twenty-nine of these
-thirty scores are therefore drawn from the weaker of the two regimes, on precisely
-the population where the difference is largest. A second caveat compounds it: the
-cold-start metrics are measured on seed-distribution repositories while the model
-is applied here to arbitrary submissions.
+The workflow enriches live metadata and applies the staged ensemble. Only
+\texttt{flask} is present in the feature cache and receives full-history scoring;
+the other 29 repositories use cold-start
+(Section~\ref{sec:method-prediction-regimes}). This shows the coverage limit for
+arbitrary submissions. Chapter~\ref{chap:evaluation} shows that on
+active-at-\(t\) repositories, full-history exceeds
+cold-start by \(0.030\) ROC-AUC
+(Section~\ref{sec:results-history-ablation}), and most example repositories are
+active. Cold-start metrics also come from the seed distribution, while this
+example contains arbitrary submissions.
 
 \section{Risk Ranking Output and Interpretation Guidance}
 \label{sec:demo-ranking}
 
-The scoring service produces, for each repository, the inactivity-risk score
-(0--100), the discrete action level (\texttt{monitor}, \texttt{review}, or
-\texttt{replace\_candidate}), an evidence-support value combining signal
-completeness, in-distribution fit, and calibration support
-(Appendix~\ref{sec:impl-scoring-service}), the prediction regime, and --- as a
-separate field that no part of the inactivity model reads --- the security-posture
-score derived from the repository's OpenSSF Scorecard record
-(Section~\ref{sec:method-research-design}). Of the 30 scored
-repositories, the risk buckets are two critical, three high, eight medium, and 17
-low; by action level, two repositories are raised to
-\texttt{replace\_candidate}, four to \texttt{review}, and the remaining 24 to
-\texttt{monitor}. The ranking therefore concentrates analyst attention on six of
-thirty repositories rather than diluting it across the whole set.
-Table~\ref{tab:demo-ranking} shows the flagged repositories together with the
-full-history item for contrast; the complete 30-repository ranking is given in
-Appendix~\ref{appendix:demo-full}. Every one of the 30 scores is distinct, which
-reflects the interpolated calibration mapping of
-Section~\ref{sec:impl-models} rather than the flat per-bin lookup it replaced.
+Each result contains an inactivity-risk score (0--100), an action level
+(\texttt{monitor}, \texttt{review}, or \texttt{replace\_candidate}), prediction
+regime, and evidence support. Evidence support combines signal completeness,
+in-distribution fit, and calibration support
+(Appendix~\ref{sec:impl-scoring-service}). A separate field contains the
+OpenSSF-derived security-posture score, which the inactivity model does not read
+(Section~\ref{sec:method-research-design}).
+Figure~\ref{fig:demo-distribution} shows risk buckets and action levels. They use
+separate thresholds on the same score. The review cut is \(\geq 50\), below the
+\(\geq 60\) high-risk cut, so one medium-risk repository is raised for review.
+Six of 30 repositories exceed \texttt{monitor}. Table~\ref{tab:demo-ranking}
+lists these repositories and the full-history item; Appendix~\ref{appendix:demo-full}
+gives all 30. Every score is distinct because
+Section~\ref{sec:impl-models} replaces flat bin lookup with interpolation.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=0.40cm,y=0.58cm]
+  % --- panel A: risk bucket ---
+  \node[font=\footnotesize\itshape,anchor=west] at (0,1.05) {risk bucket};
+  \draw[black!45] (0,0.45) -- (0,-3.45);
+  \foreach \lab/\val/\row/\sh in {%
+    critical/2/0/70, high/3/-1/52, medium/8/-2/34, low/17/-3/16}
+  {
+    \fill[black!\sh] (0,\row-0.28) rectangle (\val,\row+0.28);
+    \node[anchor=east,font=\scriptsize] at (-0.55,\row) {\lab};
+    \node[anchor=west,font=\scriptsize] at (\val+0.55,\row) {\val};
+  }
+  % --- panel B: action level ---
+  \node[font=\footnotesize\itshape,anchor=west] at (0,-4.30) {action level};
+  \draw[black!45] (0,-4.90) -- (0,-7.75);
+  \foreach \lab/\val/\row/\sh in {%
+    {replace\_candidate}/2/-5.3/70, review/4/-6.3/45, monitor/24/-7.3/16}
+  {
+    \fill[black!\sh] (0,\row-0.28) rectangle (\val,\row+0.28);
+    \node[anchor=east,font=\scriptsize\ttfamily] at (-0.55,\row) {\lab};
+    \node[anchor=west,font=\scriptsize] at (\val+0.55,\row) {\val};
+  }
+\end{tikzpicture}
+\caption[Risk-bucket and action-level distribution of the demonstrator run]{Risk
+buckets and action levels of the 30 dependency repositories of
+\texttt{ArchipelagoMW/Archipelago}. Each panel totals 30, and darker bars mark the
+more urgent categories. The two classifications are separate thresholds on the same
+inactivity-risk score, which is why the six repositories raised above
+\texttt{monitor} do not coincide with the five in the two highest risk buckets.
+The review cut (\(\geq 50\)) sits below the high-risk cut (\(\geq 60\)), so one
+medium-risk repository is also raised for review.}
+\label{fig:demo-distribution}
+\end{figure}
 
 \begin{table}[htbp]
   \centering
@@ -88,86 +109,98 @@ Section~\ref{sec:impl-models} rather than the flat per-bin lookup it replaced.
   \caption{Flagged dependency repositories of \texttt{ArchipelagoMW/Archipelago}
   (the two \texttt{replace\_candidate} items and the four \texttt{review} items),
   with the single full-history repository shown for contrast. Risk is the 0--100
-  inactivity-risk score; ``Supp.'' is the per-prediction evidence support; ``Regime'' is
-  full-history (FH) or cold-start (CS). The complete 30-repository ranking is in
-  Appendix~\ref{appendix:demo-full}.}
+  inactivity-risk score, and ``Supp.'' is the per-prediction evidence support.
+  \texttt{Sec.} is the 0--100 security-posture score derived from the repository's
+  OpenSSF Scorecard record; no part of the inactivity model reads it
+  (Section~\ref{sec:method-research-design}). It is shown as --- where no Scorecard
+  record was available. ``Regime'' is full-history (FH) or cold-start (CS). The
+  complete 30-repository ranking is in Appendix~\ref{appendix:demo-full}.}
   \label{tab:demo-ranking}
   \setlength{\tabcolsep}{4pt}
-  \begin{tabular}{llrlrl}
+  \begin{tabular}{llrlrrl}
     \toprule
-    Package & Source repository & Risk & Action & Supp. & Regime \\
+    Package & Source repository & Risk & Action & Supp. & Sec. & Regime \\
     \midrule
-    bsdiff4      & \texttt{ilanschnell/bsdiff4}       & 92.1 & \texttt{replace\_candidate} & 0.69 & CS \\
-    setproctitle & \texttt{dvarrazzo/py-setproctitle} & 80.4 & \texttt{replace\_candidate} & 0.61 & CS \\
+    bsdiff4      & \texttt{ilanschnell/bsdiff4}       & 92.1 & \texttt{replace\_candidate} & 0.69 & 6 & CS \\
+    setproctitle & \texttt{dvarrazzo/py-setproctitle} & 80.4 & \texttt{replace\_candidate} & 0.61 & 11 & CS \\
     \midrule
-    jinja2       & \texttt{pallets/jinja}             & 77.1 & review  & 0.77 & CS \\
-    cymem        & \texttt{explosion/cymem}           & 74.9 & review  & 0.75 & CS \\
-    markupsafe   & \texttt{pallets/markupsafe}        & 74.2 & review  & 0.75 & CS \\
-    pymem        & \texttt{srounet/Pymem}             & 54.3 & review  & 0.47 & CS \\
+    jinja2       & \texttt{pallets/jinja}             & 77.1 & review  & 0.77 & 58 & CS \\
+    cymem        & \texttt{explosion/cymem}           & 74.9 & review  & 0.75 & 24 & CS \\
+    markupsafe   & \texttt{pallets/markupsafe}        & 74.2 & review  & 0.75 & 54 & CS \\
+    pymem        & \texttt{srounet/Pymem}             & 54.3 & review  & 0.47 & --- & CS \\
     \midrule
-    flask        & \texttt{pallets/flask}             &  9.5 & monitor & 0.91 & FH \\
+    flask        & \texttt{pallets/flask}             &  9.5 & monitor & 0.91 & 77 & FH \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\paragraph{The highest-ranked repository.} The item the ranking elevates most
-strongly is \texttt{bsdiff4} (\texttt{ilanschnell\sslash bsdiff4}), a small binary-diff
-library, with a risk score of \(92.1\). The score reflects a genuinely quiet
-maintenance profile --- a low-popularity, single-maintainer repository with no
-detected release cadence --- which is exactly the kind of dependency a supply-chain
-reviewer would want surfaced, and its moderate evidence support of \(0.69\) and cold-start
-caveats present the flag as a prompt for manual review rather than a definitive
-judgement (the underlying explanation factors are given in
-Appendix~\ref{appendix:demo-full}).
+\paragraph{Comparison of inactivity and security posture.} Inactivity and security posture are
+computed separately and shown without a combined score. \texttt{bsdiff4} has
+inactivity risk \(92.1\) and posture \(6\); \texttt{flask} has risk \(9.5\) and
+posture \(77\). In the middle, \texttt{jinja2} and \texttt{markupsafe} receive
+risks \(77.1\) and \(74.2\), but posture scores \(58\) and \(54\). They are
+mature Pallets projects with branch protection and review requirements whose
+maintenance has slowed. \texttt{cymem} combines risk \(74.9\) with posture
+\(24\). The two columns distinguish quieter, well-governed projects from one
+that is both quiet and weakly governed.
 
-\paragraph{Two instructive false positives.} The ranking also raises
-\texttt{jinja2} (\(77.1\)) and \texttt{markupsafe} (\(74.2\)) to \texttt{review}.
-Both are Pallets projects: widely used, professionally maintained, and in no
-meaningful sense at risk of abandonment. Neither elevation can be blamed on missing
-data --- both were scored with \(100\%\) signal completeness --- so these are
-genuine model errors rather than artifacts of imputation, and they are reported
-here rather than omitted. The explanation is the failure mode that
-Section~\ref{sec:background-metric-pitfalls} anticipates: a mature, feature-complete
-library that has reached a stable API exhibits precisely the observable profile of
-a project winding down --- infrequent commits, long gaps between releases, a small
-active contributor set --- because low activity and low \emph{need} for activity are
-indistinguishable in public metadata. The model was trained on a label that defines
-inactivity as the absence of observable maintenance signals
-(Section~\ref{sec:method-definitions}), so it is behaving exactly as specified;
-what it cannot express is that for \texttt{jinja2} the absence of churn is a sign of
-maturity. This is the strongest practical argument in this thesis for treating the
-score as a prioritization signal rather than a verdict, and for the human review
-step that the action levels are designed to trigger.
+This presentation provides no combination rule or fitted weighting, and whether
+the two columns improve analyst decisions remains to be tested in the user study
+proposed in Chapter~\ref{chap:conclusion}.
 
-\paragraph{A low-risk repository for contrast.} At the opposite end,
-\texttt{flask} (\texttt{pallets/flask}) receives a risk score of \(9.5\) with an
-evidence support of \(0.91\). It is the one repository scored in the full-history regime,
-with complete signal coverage and no imputation, and its two ensemble members agree
-closely (\(5.4\%\) and \(13.5\%\) inactivity risk). That \texttt{flask} is ranked
-low while its sibling projects \texttt{jinja2} and \texttt{markupsafe} are flagged
-is instructive in itself: the three are maintained by the same organization under
-the same release practices, and the difference in their scores tracks the
-availability of reconstructed history rather than any difference in maintenance.
-Three sibling projects, one scored with history and two without, and the two
-without are the ones flagged. That is why the evidence-support value is part of
-the triage output rather than the risk score alone: it is what tells the analyst
-that the difference between \(9.5\) and \(77.1\) here reflects how much was known
-about each repository, not how differently they are maintained.
+\paragraph{Highest-ranked repository.} \texttt{bsdiff4}
+(\texttt{ilanschnell\sslash bsdiff4}) is a small binary-diff library with risk
+\(92.1\). It has low popularity, one maintainer, and no detected release cadence.
+The cold-start score has evidence support \(0.69\). These caveats make the
+repository a candidate for manual review, not a judgement of abandonment
+(Appendix~\ref{appendix:demo-full}).
 
-Interpretation guidance follows from the rest of the thesis. The score is a
-prioritization signal, not a trust or security verdict: a low score does not
-certify a repository as secure, and an elevated score indicates thin public
-maintenance signals rather than a known defect. Two conditions should make a
-reader trust a given score less. The first is low evidence support, or many
-imputed signals, both of which mean the score rests on incomplete input. The
-second applies to cold-start scores specifically: they are produced from the
-reduced feature set, and their probabilities are calibrated against this
-dataset's inflated inactive rate of \(0.661\) rather than against the far lower
-rate of a real dependency population (Section~\ref{sec:method-limitations}). A
-cold-start score is therefore dependable as a \emph{ranking} but overstates the
-absolute probability of inactivity, and would need recalibration against the
-target population before being read as one. Used this way, the ranked view converts
-a flat list of 30 repositories into six candidates for review, of which at least
-two --- on the evidence above --- a human reviewer would quickly clear. That is a
-useful reduction of analyst effort, and an honest statement of the artifact's
-precision at this operating point.
+\paragraph{Construct-validity case: Jinja2 and MarkupSafe.}
+\texttt{jinja2} (\texttt{pallets/jinja}, \(77.1\)) and
+\texttt{markupsafe} (\texttt{pallets/markupsafe}, \(74.2\)) are widely used
+Pallets projects, making their \texttt{review} status initially appear erroneous.
+At the run date, their last pushes were \texttt{2025-06-14} and
+\texttt{2025-09-27}. The inactivity label measures the absence of public
+maintenance signals (Section~\ref{sec:method-definitions}), so these scores match
+the target. No twelve-month outcome is yet available to test them because their
+windows do not close until 2027. Both have \(100\%\) signal completeness,
+excluding imputation as the cause.
+
+A stable, feature-complete library can resemble a project in decline: both show
+infrequent commits, long release gaps, and few active contributors. Public
+metadata cannot distinguish low activity from low \emph{need} for activity
+(Section~\ref{sec:background-metric-pitfalls}). The author's inspection found no
+maintenance concern requiring action in either case, although reviewer decisions
+were not tested. The scores are consistent with the operational label but not
+with this manual assessment. They illustrate the construct-validity threat and
+the need for human review
+(Section~\ref{sec:validity-construct}).\kiref{Claude Opus 5/8}
+
+\paragraph{Low-risk comparison.}
+\texttt{flask} (\texttt{pallets/flask}) receives risk \(9.5\) with evidence
+support \(0.91\). As the only full-history repository, it has complete coverage
+and no imputation; its ensemble members predict \(5.4\%\) and \(13.5\%\)
+inactivity risk.
+
+The difference from \texttt{jinja2} and \texttt{markupsafe} is not caused by
+regime alone. \texttt{flask} was last pushed on \texttt{2026-06-10}, one month
+before the run, while the other gaps were thirteen and nine months. Regime and
+activity are confounded, so this example does not isolate the value of history;
+Section~\ref{sec:results-history-ablation} does. Evidence support states how much
+repository information was available beyond the risk score.\kiref{Claude Opus 5/8}
+
+The score is intended to rank repositories for review; it does not certify
+security or identify a known defect. Low evidence support and imputation reduce
+confidence. The cold-start model uses fewer features and is calibrated against
+the sampled inactive rate of \(0.661\), which exceeds that of a real dependency
+population (Section~\ref{sec:method-limitations}). Its absolute probabilities are
+therefore overstated until recalibrated for the target population, although the
+ranking remains useful for triage.
+
+The ranking raises six of the 30 repositories above the monitor level, with
+\texttt{flask} as the full-history reference. Manual inspection found no
+maintenance concern for the two
+\texttt{review} items \texttt{jinja2} and \texttt{markupsafe}, showing why
+review remains necessary. Whether the ordering improves analyst throughput or
+decision quality requires a controlled comparison with unranked triage
+(Chapter~\ref{chap:conclusion}).
