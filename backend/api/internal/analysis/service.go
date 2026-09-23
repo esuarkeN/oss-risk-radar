@@ -145,6 +145,65 @@ func (s *Service) CreateOrReuseAnalysis(ctx context.Context, submission Analysis
 	return analysisRecord, jobRecord, false, nil
 }
 
+// MaxBatchAnalysisSize caps a single CreateBatchAnalyses call. The worker
+// behind every one of these is the SAME sequential loop (workerLoop /
+// processNextJob) that serves single-repository submissions — batching only
+// collapses the HTTP round trip, not the scoring throughput. An unbounded
+// batch would let one caller queue an unbounded backlog in one request; this
+// number is deliberately the same order of magnitude as a single dependency
+// portal's per-tick page size, not a throughput promise.
+const MaxBatchAnalysisSize = 100
+
+// CreateBatchAnalyses enqueues one analysis per repository URL through the
+// same CreateOrReuseAnalysis path single submissions use — so a repository
+// already analyzed with current model results is reused, not re-scored, the
+// same as it would be one at a time. Never fails the whole batch for one bad
+// entry: an empty or duplicate URL becomes an error on ITS OWN result entry,
+// and every other URL is still submitted. The only whole-batch failure is the
+// size cap, which is deliberately loud rather than silently truncating a
+// caller's list.
+func (s *Service) CreateBatchAnalyses(ctx context.Context, request CreateBatchAnalysisRequest) (CreateBatchAnalysisResponse, error) {
+	if len(request.RepositoryURLs) == 0 {
+		return CreateBatchAnalysisResponse{}, errors.New("repositoryUrls must not be empty")
+	}
+	if len(request.RepositoryURLs) > MaxBatchAnalysisSize {
+		return CreateBatchAnalysisResponse{}, fmt.Errorf("batch exceeds the maximum of %d repository URLs", MaxBatchAnalysisSize)
+	}
+
+	results := make([]BatchAnalysisResult, 0, len(request.RepositoryURLs))
+	for _, repositoryURL := range request.RepositoryURLs {
+		submission := AnalysisSubmission{
+			Kind:          SubmissionRepositoryURL,
+			RepositoryURL: repositoryURL,
+			ModelName:     request.ModelName,
+		}
+
+		var (
+			analysisRecord AnalysisRecord
+			jobRecord      JobRecord
+			reused         bool
+			err            error
+		)
+		if request.Force {
+			analysisRecord, jobRecord, err = s.CreateAnalysis(ctx, submission)
+		} else {
+			analysisRecord, jobRecord, reused, err = s.CreateOrReuseAnalysis(ctx, submission)
+		}
+		if err != nil {
+			results = append(results, BatchAnalysisResult{RepositoryURL: repositoryURL, Error: err.Error()})
+			continue
+		}
+		results = append(results, BatchAnalysisResult{
+			RepositoryURL:          repositoryURL,
+			Analysis:               &analysisRecord,
+			Job:                    &jobRecord,
+			ReusedExistingAnalysis: reused,
+		})
+	}
+
+	return CreateBatchAnalysisResponse{Results: results}, nil
+}
+
 func (s *Service) CreateAnalysis(ctx context.Context, submission AnalysisSubmission) (AnalysisRecord, JobRecord, error) {
 	if err := validateSubmission(submission); err != nil {
 		return AnalysisRecord{}, JobRecord{}, err
@@ -346,6 +405,32 @@ func (s *Service) reusedJobForAnalysis(ctx context.Context, existing AnalysisRec
 
 func (s *Service) GetAnalysis(ctx context.Context, id string) (AnalysisRecord, error) {
 	return s.store.GetAnalysis(ctx, id)
+}
+
+// GetBatchAnalyses reads back many analyses in one call — the polling
+// counterpart of CreateBatchAnalyses. An unknown or since-removed ID gets its
+// own Error entry rather than failing the lookup for every other ID in the
+// same request: a caller polling fifty submitted analyses must be able to
+// tell "this one is gone" apart from "the whole request failed".
+func (s *Service) GetBatchAnalyses(ctx context.Context, request GetBatchAnalysesRequest) (GetBatchAnalysesResponse, error) {
+	if len(request.AnalysisIDs) == 0 {
+		return GetBatchAnalysesResponse{}, errors.New("analysisIds must not be empty")
+	}
+	if len(request.AnalysisIDs) > MaxBatchAnalysisSize {
+		return GetBatchAnalysesResponse{}, fmt.Errorf("batch exceeds the maximum of %d analysis ids", MaxBatchAnalysisSize)
+	}
+
+	results := make([]BatchAnalysisStatus, 0, len(request.AnalysisIDs))
+	for _, id := range request.AnalysisIDs {
+		analysisRecord, err := s.store.GetAnalysis(ctx, id)
+		if err != nil {
+			results = append(results, BatchAnalysisStatus{AnalysisID: id, Error: err.Error()})
+			continue
+		}
+		results = append(results, BatchAnalysisStatus{AnalysisID: id, Analysis: &analysisRecord})
+	}
+
+	return GetBatchAnalysesResponse{Results: results}, nil
 }
 
 func (s *Service) GetDependencies(ctx context.Context, analysisID string) ([]DependencyRecord, error) {

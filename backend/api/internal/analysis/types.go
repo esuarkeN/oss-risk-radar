@@ -285,6 +285,78 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// ── BATCH REPOSITORY SUBMISSION ─────────────────────────────────────────────
+//
+// One HTTP round trip per repository does not survive an external caller that
+// holds hundreds of packages (the dependency-portal case): the caller would
+// have to fire one POST per repository, and this service's worker is a single
+// sequential loop (Service.workerLoop) with no concurrency — a caller that
+// floods CreateAnalysis with hundreds of individual requests only grows the
+// job queue without any of them completing faster. This type is the batch
+// counterpart of AnalysisSubmission: it accepts many repository URLs in one
+// request and enqueues one analysis per URL through the SAME
+// CreateOrReuseAnalysis path (so an already-analyzed repository is still
+// reused, not re-scored), and returns immediately with job references rather
+// than waiting for any of them to complete.
+//
+// Deliberately narrower than AnalysisSubmission: this endpoint exists for the
+// one shape an external inventory actually has — a list of repository URLs —
+// not for demo profiles or uploads, which stay single-submission concepts.
+type CreateBatchAnalysisRequest struct {
+	RepositoryURLs []string `json:"repositoryUrls"`
+	// Same meaning as CreateAnalysisRequest.Force: skip analysis reuse and
+	// always enqueue a fresh job.
+	Force bool `json:"force,omitempty"`
+	// Same meaning as AnalysisSubmission.ModelName: which staged model
+	// artifact to score with. Applied to every URL in the batch.
+	ModelName string `json:"modelName,omitempty"`
+}
+
+// One request's answer for one URL. Never a bulk failure: a malformed or
+// duplicate URL must not take the rest of the batch down with it, so every
+// entry gets its own outcome and the caller can retry only the ones that need
+// it.
+type BatchAnalysisResult struct {
+	RepositoryURL          string          `json:"repositoryUrl"`
+	Analysis               *AnalysisRecord `json:"analysis,omitempty"`
+	Job                    *JobRecord      `json:"job,omitempty"`
+	ReusedExistingAnalysis bool            `json:"reusedExistingAnalysis,omitempty"`
+	// Set instead of Analysis/Job when this single URL could not be
+	// submitted (e.g. empty string, submission validation failure). The rest
+	// of the batch is unaffected.
+	Error string `json:"error,omitempty"`
+}
+
+type CreateBatchAnalysisResponse struct {
+	Results []BatchAnalysisResult `json:"results"`
+}
+
+// ── BATCH STATUS LOOKUP ─────────────────────────────────────────────────────
+//
+// The other half of the round-trip problem: without this, reading back N
+// submitted analyses costs N more requests, which is the same problem the
+// batch submission solves, just on the polling side. IDs rather than a time
+// window or a "give me everything since X" cursor: the caller (the portal's
+// queue worker) already knows exactly which analysis IDs it submitted and
+// wants to hear only about those.
+type GetBatchAnalysesRequest struct {
+	AnalysisIDs []string `json:"analysisIds"`
+}
+
+// One entry per requested ID, in the SAME shape as BatchAnalysisResult's
+// error handling: an ID that does not exist gets its own Error rather than
+// failing the whole lookup, because a caller polling fifty IDs must be able
+// to tell "this one was cleaned up" apart from "the whole request failed".
+type BatchAnalysisStatus struct {
+	AnalysisID string          `json:"analysisId"`
+	Analysis   *AnalysisRecord `json:"analysis,omitempty"`
+	Error      string          `json:"error,omitempty"`
+}
+
+type GetBatchAnalysesResponse struct {
+	Results []BatchAnalysisStatus `json:"results"`
+}
+
 func NormalizeRepositoryURL(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

@@ -62,6 +62,46 @@ func (h *Handler) GetAnalysis(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, analysis.GetAnalysisResponse{Analysis: analysisRecord})
 }
 
+// CreateBatchAnalyses submits many repository URLs in one request. Unlike
+// CreateAnalysis, a per-entry problem (an empty URL, a submission the service
+// rejects) never turns into an HTTP error for the whole call — it is
+// visible only on that entry's BatchAnalysisResult.Error, so the caller does
+// not have to resubmit URLs that were accepted alongside one that was not.
+// The request itself is rejected only for a validation problem that applies
+// to the WHOLE call: an empty list or exceeding MaxBatchAnalysisSize.
+func (h *Handler) CreateBatchAnalyses(w http.ResponseWriter, r *http.Request) {
+	var request analysis.CreateBatchAnalysisRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid batch analysis request payload")
+		return
+	}
+
+	response, err := h.service.CreateBatchAnalyses(r.Context(), request)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+// GetBatchAnalyses is the polling counterpart of CreateBatchAnalyses: it reads
+// back many analyses in one request instead of costing the caller one request
+// per analysis ID. Same per-entry error handling as the submission side.
+func (h *Handler) GetBatchAnalyses(w http.ResponseWriter, r *http.Request) {
+	var request analysis.GetBatchAnalysesRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid batch status request payload")
+		return
+	}
+
+	response, err := h.service.GetBatchAnalyses(r.Context(), request)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (h *Handler) GetDependencies(w http.ResponseWriter, r *http.Request) {
 	items, err := h.service.GetDependencies(r.Context(), r.PathValue("analysisId"))
 	if err != nil {
