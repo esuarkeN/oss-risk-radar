@@ -73,7 +73,7 @@ paths:
                 value:
                   submission:
                     kind: demo
-                    artifactName: 'Demo: Node Web Application'
+                    artifactName: "Demo: Node Web Application"
                     demoProfile: node-web
                     includeTransitiveDependencies: true
               repo:
@@ -96,6 +96,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateAnalysisResponse"
+  /api/v1/analyses/batch:
+    post:
+      operationId: createBatchAnalyses
+      summary: Submit many repository URLs in one request
+      description: >-
+        Enqueues one analysis per repository URL through the same
+        create-or-reuse path as a single POST /api/v1/analyses submission —
+        an already-analyzed repository with current model results is reused,
+        not re-scored. Every URL gets its own result entry with its own
+        outcome; a problem with one URL never fails the rest of the batch.
+        The batch worker behind this is still the single sequential job
+        queue, so this endpoint collapses the HTTP round trip, not the
+        scoring throughput.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBatchAnalysisRequest"
+      responses:
+        "200":
+          description: One result per submitted repository URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateBatchAnalysisResponse"
+        "400":
+          description: The whole batch was rejected (empty list, or over the size cap)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/analyses/batch/status:
+    post:
+      operationId: getBatchAnalyses
+      summary: Read back many analyses in one request
+      description: >-
+        The polling counterpart of createBatchAnalyses: reads back many
+        analyses by id in one call instead of costing the caller one request
+        per analysis id. An id that does not resolve gets its own error entry
+        rather than failing the whole lookup.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetBatchAnalysesRequest"
+      responses:
+        "200":
+          description: One status entry per requested analysis id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetBatchAnalysesResponse"
+        "400":
+          description: The whole batch was rejected (empty list, or over the size cap)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/analyses/{analysisId}:
     get:
       operationId: getAnalysis
@@ -335,7 +395,8 @@ components:
           $ref: "#/components/schemas/Analysis"
     Analysis:
       type: object
-      required: [id, status, createdAt, updatedAt, submission, summary, dependencies]
+      required:
+        [id, status, createdAt, updatedAt, submission, summary, dependencies]
       properties:
         id:
           type: string
@@ -370,7 +431,16 @@ components:
           type: string
     AnalysisSummary:
       type: object
-      required: [dependencyCount, highRiskCount, mappedRepositoryCount, scoreAvailabilityCount, riskDistribution, ecosystemBreakdown, scoringMethods]
+      required:
+        [
+          dependencyCount,
+          highRiskCount,
+          mappedRepositoryCount,
+          scoreAvailabilityCount,
+          riskDistribution,
+          ecosystemBreakdown,
+          scoringMethods,
+        ]
       properties:
         dependencyCount:
           type: integer
@@ -439,7 +509,17 @@ components:
           type: string
     Dependency:
       type: object
-      required: [id, analysisId, packageName, packageVersion, ecosystem, direct, dependencyPath, rawSignalsAvailable]
+      required:
+        [
+          id,
+          analysisId,
+          packageName,
+          packageVersion,
+          ecosystem,
+          direct,
+          dependencyPath,
+          rawSignalsAvailable,
+        ]
       properties:
         id: { type: string }
         analysisId: { type: string }
@@ -471,7 +551,17 @@ components:
         parsedFromUploadId: { type: string }
     RepositorySnapshot:
       type: object
-      required: [fullName, url, defaultBranch, archived, stars, forks, openIssues, lastPushAt]
+      required:
+        [
+          fullName,
+          url,
+          defaultBranch,
+          archived,
+          stars,
+          forks,
+          openIssues,
+          lastPushAt,
+        ]
       properties:
         fullName: { type: string }
         url: { type: string, format: uri }
@@ -490,7 +580,19 @@ components:
         staleIssueShare: { type: number }
     RiskProfile:
       type: object
-      required: [inactivityRiskScore, maintenanceOutlook12mScore, securityPostureScore, evidenceSupport, riskBucket, actionLevel, caveats, missingSignals, explanationFactors, evidence]
+      required:
+        [
+          inactivityRiskScore,
+          maintenanceOutlook12mScore,
+          securityPostureScore,
+          evidenceSupport,
+          riskBucket,
+          actionLevel,
+          caveats,
+          missingSignals,
+          explanationFactors,
+          evidence,
+        ]
       properties:
         inactivityRiskScore: { type: number }
         maintenanceOutlook12mScore: { type: number }
@@ -582,7 +684,8 @@ components:
           additionalProperties: true
     TrainingEffectsResponse:
       type: object
-      required: [effects, labeledSnapshots, activeCount, inactiveCount, datasetHash]
+      required:
+        [effects, labeledSnapshots, activeCount, inactiveCount, datasetHash]
       properties:
         effects:
           type: array
@@ -655,3 +758,74 @@ components:
         run:
           type: object
           additionalProperties: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    CreateBatchAnalysisRequest:
+      type: object
+      required: [repositoryUrls]
+      properties:
+        repositoryUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+          maxItems: 100
+        force:
+          type: boolean
+          default: false
+        modelName:
+          type: string
+    BatchAnalysisResult:
+      type: object
+      required: [repositoryUrl]
+      properties:
+        repositoryUrl:
+          type: string
+          format: uri
+        analysis:
+          $ref: "#/components/schemas/Analysis"
+        job:
+          $ref: "#/components/schemas/Job"
+        reusedExistingAnalysis:
+          type: boolean
+        error:
+          type: string
+    CreateBatchAnalysisResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchAnalysisResult"
+    GetBatchAnalysesRequest:
+      type: object
+      required: [analysisIds]
+      properties:
+        analysisIds:
+          type: array
+          items:
+            type: string
+          maxItems: 100
+    BatchAnalysisStatus:
+      type: object
+      required: [analysisId]
+      properties:
+        analysisId:
+          type: string
+        analysis:
+          $ref: "#/components/schemas/Analysis"
+        error:
+          type: string
+    GetBatchAnalysesResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/BatchAnalysisStatus"

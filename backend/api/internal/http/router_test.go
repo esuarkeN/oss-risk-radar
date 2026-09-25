@@ -114,6 +114,77 @@ func TestCreateAnalysisEndpoint(t *testing.T) {
 	t.Fatalf("analysis did not complete in time")
 }
 
+func TestCreateAndGetBatchAnalysesEndpoints(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	service := analysis.NewServiceWithOptions(analysis.ServiceOptions{
+		MethodologyVersion: "model-v1",
+		Store:              storage.NewMemoryStore(),
+		Scorer:             fakeRouterScorer{},
+		UploadDir:          t.TempDir(),
+		WorkerPollInterval: 10 * time.Millisecond,
+		RetryDelay:         10 * time.Millisecond,
+	})
+	service.Start(ctx)
+	router := NewRouter(config.Config{ServiceName: "oss-risk-radar-api", AllowedOrigin: "http://localhost:3000"}, slog.Default(), service)
+
+	batchRequest := httptest.NewRequest(http.MethodPost, "/api/v1/analyses/batch", strings.NewReader(
+		`{"repositoryUrls":["https://github.com/vercel/next.js","https://github.com/golang/go"]}`,
+	))
+	batchRequest.Header.Set("Content-Type", "application/json")
+	batchResponse := httptest.NewRecorder()
+	router.ServeHTTP(batchResponse, batchRequest)
+
+	if batchResponse.Code != http.StatusOK {
+		body, _ := io.ReadAll(batchResponse.Body)
+		t.Fatalf("expected 200 from batch submit, got %d: %s", batchResponse.Code, string(body))
+	}
+
+	var batchPayload analysis.CreateBatchAnalysisResponse
+	if err := json.NewDecoder(batchResponse.Body).Decode(&batchPayload); err != nil {
+		t.Fatalf("failed to decode batch response: %v", err)
+	}
+	if len(batchPayload.Results) != 2 {
+		t.Fatalf("expected 2 batch results, got %d", len(batchPayload.Results))
+	}
+
+	analysisIDs := make([]string, 0, len(batchPayload.Results))
+	for _, result := range batchPayload.Results {
+		if result.Error != "" || result.Analysis == nil {
+			t.Fatalf("unexpected per-entry failure for %s: %s", result.RepositoryURL, result.Error)
+		}
+		analysisIDs = append(analysisIDs, result.Analysis.ID)
+	}
+
+	statusRequestBody, err := json.Marshal(analysis.GetBatchAnalysesRequest{AnalysisIDs: analysisIDs})
+	if err != nil {
+		t.Fatalf("failed to encode batch status request: %v", err)
+	}
+	statusRequest := httptest.NewRequest(http.MethodPost, "/api/v1/analyses/batch/status", strings.NewReader(string(statusRequestBody)))
+	statusRequest.Header.Set("Content-Type", "application/json")
+	statusResponse := httptest.NewRecorder()
+	router.ServeHTTP(statusResponse, statusRequest)
+
+	if statusResponse.Code != http.StatusOK {
+		body, _ := io.ReadAll(statusResponse.Body)
+		t.Fatalf("expected 200 from batch status, got %d: %s", statusResponse.Code, string(body))
+	}
+
+	var statusPayload analysis.GetBatchAnalysesResponse
+	if err := json.NewDecoder(statusResponse.Body).Decode(&statusPayload); err != nil {
+		t.Fatalf("failed to decode batch status response: %v", err)
+	}
+	if len(statusPayload.Results) != 2 {
+		t.Fatalf("expected 2 batch status results, got %d", len(statusPayload.Results))
+	}
+	for _, result := range statusPayload.Results {
+		if result.Error != "" || result.Analysis == nil {
+			t.Fatalf("unexpected per-entry status failure for %s: %s", result.AnalysisID, result.Error)
+		}
+	}
+}
+
 func writeRouterModelArtifactBundle(t *testing.T, runsDir string) {
 	t.Helper()
 	cachedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
